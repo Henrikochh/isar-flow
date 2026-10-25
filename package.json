@@ -1,0 +1,37 @@
+{
+  "name": "isar-flow-monorepo",
+  "private": true,
+  "description": "Isar Flow — AI agents and YAML workflows for VS Code",
+  "license": "MIT",
+  "workspaces": [
+    "packages/core",
+    "packages/webview-ui",
+    "packages/extension"
+  ],
+  "scripts": {
+    "build": "npm run build -w @isar-flow/webview-ui && npm run build -w isar-flow",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "npm run build && npm run test:integration -w isar-flow",
+    "test:visual": "npm run visual -w @isar-flow/webview-ui",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "package": "npm run build && npm run package -w isar-flow"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.5",
+    "@vitest/coverage-v8": "^5.0.5",
+    "eslint": "^10.13.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.0",
+    "vitest": "^5.0.5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}
