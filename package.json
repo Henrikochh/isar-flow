@@ -1,6 +1,7 @@
 {
   "name": "isar-flow-monorepo",
   "private": true,
+  "type": "module",
   "description": "Isar Flow — AI agents and YAML workflows for VS Code",
   "license": "MIT",
   "workspaces": [
