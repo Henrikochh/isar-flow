@@ -49,7 +49,9 @@ export interface RunManagerUi {
   readText(uri: vscode.Uri): Thenable<string>;
   /** An `isarFlow.*` setting (key without the prefix). */
   setting<T>(key: string, fallback: T, scope?: vscode.Uri): T;
-  /** Absolute path of the workspace folder the workflow belongs to. */
+  /** Absolute path of the workspace folder that contains the workflow; undefined outside all folders. */
+  workspaceFolder(uri: vscode.Uri): string | undefined;
+  /** Folder console commands run in: the workflow's folder, else the first folder, else the file's folder. */
   workspaceRoot(uri: vscode.Uri): string;
   promptInputs(workflow: Workflow): Promise<Record<string, unknown> | undefined>;
   /** Modal used to confirm console commands; resolves to the chosen button. */
@@ -65,6 +67,11 @@ export interface RunManagerOptions {
   commandApprovals?: CommandApprovals;
   /** Process environment visible as `env.*`; defaults to process.env. */
   env?: Record<string, string | undefined>;
+  /**
+   * Context file reader for one workspace folder, so multi-root workspaces read `context.files` from the
+   * workflow's own folder. Defaults to deps.readContextFiles.
+   */
+  readContextFilesIn?: (workspaceRoot: string) => RunManagerDeps['readContextFiles'];
   now?: () => number;
 }
 
@@ -73,6 +80,8 @@ export interface WorkflowRunManager extends RunManager {
   readonly approvals: RunApprovalBroker;
   /** Resolves with the final view once the run has ended (from history for runs that already ended). */
   whenFinished(runId: string): Promise<RunView | undefined>;
+  /** Stops all runs like dispose() and resolves once the stopped runs are saved to the history. */
+  shutdown(): Promise<void>;
 }
 
 interface LiveRun extends ActiveRun {
@@ -91,6 +100,7 @@ const vscodeUi: RunManagerUi = {
   readText: (uri) => vscode.workspace.openTextDocument(uri).then((doc) => doc.getText()),
   setting: <T>(key: string, fallback: T, scope?: vscode.Uri) =>
     vscode.workspace.getConfiguration('isarFlow', scope).get<T>(key, fallback),
+  workspaceFolder: (uri) => vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath,
   workspaceRoot: (uri) =>
     vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath ??
     vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
@@ -240,6 +250,8 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     const workflowUri = uri.toString();
     const runId = newRunId();
     const workspaceRoot = ui.workspaceRoot(uri);
+    // Agents only see workspace folders: a workflow outside all folders gets the default (first) folder.
+    const folder = ui.workspaceFolder(uri);
     const tokenBudget = ui.setting('maxTokensPerRun', 0, uri);
     const configuredShell = ui.setting<string>('defaultShell', 'auto', uri);
     const defaultShell = SHELLS.find((s) => s === configuredShell) ?? 'auto';
@@ -250,8 +262,8 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
       runCommand: deps.runCommand,
       terminal: deps.terminalFor(workflow.name),
       models: deps.models,
-      toolHost: deps.tools(runId),
-      readContextFiles: deps.readContextFiles,
+      toolHost: deps.tools(runId, folder),
+      readContextFiles: (folder && options.readContextFilesIn?.(folder)) || deps.readContextFiles,
       approve: (req, signal) =>
         approvals.request({ runId, stepId: req.stepId, message: req.message, workflowUri }, signal),
       now,
@@ -377,6 +389,12 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
 
     async whenFinished(runId) {
       return completions.get(runId) ?? history.get(runId) ?? history.getAsync(runId);
+    },
+
+    async shutdown() {
+      const pending = [...completions.values()];
+      this.dispose();
+      await Promise.allSettled(pending);
     },
 
     dispose() {

@@ -5,6 +5,11 @@
   "version": "0.1.0",
   "publisher": "isarflow",
   "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0b2622",
+    "theme": "dark"
+  },
   "private": true,
   "engines": {
     "vscode": "^1.95.0"
@@ -340,7 +345,7 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc -p tsconfig.json",
     "test:integration": "npm run build && node ./test/integration/runTests.mjs",
-    "package": "vsce package --no-dependencies"
+    "package": "vsce package --no-dependencies --allow-missing-repository"
   },
   "devDependencies": {
     "@isar-flow/core": "*",

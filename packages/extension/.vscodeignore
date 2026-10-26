@@ -5,6 +5,7 @@
 !package.json
 !dist/extension.js
 !media/*.svg
+!media/icon.png
 !media/webview/*.js
 !media/webview/*.css
 !media/webview/assets/**

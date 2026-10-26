@@ -10,13 +10,32 @@ const MAX_LISTED_COMMANDS = 15;
 export const RUN_BUTTON = 'Run';
 export const RUN_AND_REMEMBER_BUTTON = 'Run and remember';
 
-/** The raw `run` strings of all console blocks, nested ones included, in document order. */
+/**
+ * The commands of all console blocks, nested ones included, in document order: the raw `run` string, plus a
+ * line with the shell, folder and environment when the block sets them, because they change what runs
+ * (NODE_OPTIONS, PATH …). The workflow's own environment comes first. A remembered approval therefore no
+ * longer applies once any of these change.
+ */
 export function consoleCommandsOf(workflow: Workflow): string[] {
   const commands: string[] = [];
   walkSteps(workflow.steps ?? [], ({ step }) => {
-    if (step.type === 'console' && typeof step.run === 'string') commands.push(step.run);
+    if (step.type !== 'console' || typeof step.run !== 'string') return;
+    const setup: string[] = [];
+    if (step.shell) setup.push(`shell: ${step.shell}`);
+    if (step.cwd) setup.push(`folder: ${step.cwd}`);
+    const env = envText(step.env);
+    if (env) setup.push(`environment: ${env}`);
+    commands.push(setup.length > 0 ? `${step.run.replace(/\r?\n$/, '')}\n(${setup.join(', ')})` : step.run);
   });
+  const shared = envText(workflow.env);
+  if (shared && commands.length > 0) commands.unshift(`(environment of all commands: ${shared})`);
   return commands;
+}
+
+function envText(env: Record<string, string> | undefined): string {
+  return Object.entries(env ?? {})
+    .map(([name, value]) => `${name}=${String(value)}`)
+    .join(', ');
 }
 
 /** sha256 (hex) of the command list; line endings are normalized so a checkout on another OS hashes the same. */

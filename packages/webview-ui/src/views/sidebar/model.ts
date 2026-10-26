@@ -7,10 +7,9 @@ import {
   stepChildren,
   TOOL_INFO,
   workflowTemplate,
+  type ActiveRunSummary,
   type AgentSummary,
   type ProviderSummary,
-  type RunRecordSummary,
-  type SidebarState,
   type SidebarToHost,
   type Step,
   type StepType,
@@ -20,17 +19,7 @@ import {
 } from '@isar-flow/core';
 import { post } from '../../vscode';
 
-export type AgentStarter = 'blank' | 'coder' | 'reviewer';
-
-/**
- * The protocol's createAgent has no starter yet; it is sent as an extra field so a host that knows it can
- * use the matching agent template, and the starter also pre-fills the name.
- */
-export type CreateAgentMessage = Extract<SidebarToHost, { type: 'createAgent' }> & {
-  starter?: Exclude<AgentStarter, 'blank'>;
-};
-
-export function send(message: SidebarToHost | CreateAgentMessage): void {
+export function send(message: SidebarToHost): void {
   post(message);
 }
 
@@ -114,25 +103,20 @@ export function slugOf(name: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-export interface WorkflowRunState {
-  running: boolean;
-  /** Needed to stop the run; unknown while the host has not reported the run record yet. */
-  runId?: string;
-  startedAt?: number;
+/** The workflow's run in progress, if any; the newest one when the host reports several. */
+export function activeRunOf(workflow: WorkflowSummary, activeRuns: readonly ActiveRunSummary[]): ActiveRunSummary | undefined {
+  let newest: ActiveRunSummary | undefined;
+  for (const run of activeRuns) {
+    if (run?.workflowUri !== workflow.uri) continue;
+    if (!newest || run.startedAt > newest.startedAt) newest = run;
+  }
+  return newest;
 }
 
-/**
- * Whether a workflow has an active run. `activeRuns` may list workflow URIs or run ids, so both are matched,
- * and run records with status `running` count too.
- */
-export function workflowRunState(workflow: WorkflowSummary, state: Pick<SidebarState, 'activeRuns' | 'recentRuns'>): WorkflowRunState {
-  const active = new Set(state.activeRuns ?? []);
-  const records = [...(state.recentRuns ?? []), ...(workflow.lastRun ? [workflow.lastRun] : [])].filter(
-    (run): run is RunRecordSummary => Boolean(run) && run.workflowUri === workflow.uri,
-  );
-  const record = records.find((run) => active.has(run.runId)) ?? records.find((run) => run.status === 'running');
-  const running = active.has(workflow.uri) || record !== undefined;
-  return running ? { running, runId: record?.runId, startedAt: record?.startedAt } : { running: false };
+/** Time a run has been going, in whole seconds so a ticking counter stays calm: "8 s", "3 m 4 s". */
+export function formatElapsed(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  return seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)} m ${seconds % 60} s`;
 }
 
 export function providerCountText(provider: ProviderSummary): string {

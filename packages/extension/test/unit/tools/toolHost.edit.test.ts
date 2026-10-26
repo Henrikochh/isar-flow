@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createHarness, type Harness } from './harness';
@@ -78,6 +79,37 @@ describe('writeFile', () => {
     expect(result.isError).toBe(true);
     expect(fs.existsSync(path.join(h.root, '.git', 'config'))).toBe(false);
   });
+
+  it('refuses to write into .git through a link inside the workspace', async () => {
+    fs.mkdirSync(path.join(h.root, '.git'));
+    // 'junction' works without admin rights on Windows and is a plain symlink elsewhere.
+    fs.symlinkSync(path.join(h.root, '.git'), path.join(h.root, 'gitlink'), 'junction');
+    const write = await h.call('writeFile', { path: 'gitlink/config', content: 'x' });
+    expect(write.isError).toBe(true);
+    expect(write.content).toMatch(/inside \.git/);
+    h.write('.git/HEAD', 'ref: refs/heads/main\n');
+    const edit = await h.call('editFile', { path: 'gitlink/HEAD', oldText: 'main', newText: 'evil' });
+    expect(edit.isError).toBe(true);
+    expect(fs.readdirSync(path.join(h.root, '.git'))).toEqual(['HEAD']);
+    expect(h.read('.git/HEAD')).toBe('ref: refs/heads/main\n');
+  });
+
+  it.runIf(process.platform === 'win32')('refuses the 8.3 short name of .git', async () => {
+    fs.mkdirSync(path.join(h.root, '.git'));
+    // Short names are on by default on system drives; skip the check where the volume has them off.
+    if (!fs.existsSync(path.join(h.root, 'GIT~1'))) return;
+    const result = await h.call('writeFile', { path: 'GIT~1/config', content: 'x' });
+    expect(result.isError).toBe(true);
+    expect(fs.existsSync(path.join(h.root, '.git', 'config'))).toBe(false);
+  });
+
+  it('refuses .git with trailing dots or spaces, which Windows drops', async () => {
+    for (const input of ['.git./config', '.GIT ./hooks/pre-commit']) {
+      const result = await h.call('writeFile', { path: input, content: 'x' });
+      expect(result.isError, input).toBe(true);
+      expect(result.content).toMatch(/inside \.git/);
+    }
+  });
 });
 
 describe('edit permissions', () => {
@@ -130,6 +162,31 @@ describe('edit permissions', () => {
     await h.call('editFile', { path: 'one.txt', oldText: '1', newText: '11' }, { edits: 'ask' });
     expect(h.prompts.map((p) => p.tool)).toEqual(['writeFile', 'editFile']);
     expect(h.read('two.txt')).toBe('2');
+  });
+
+  it('checks the path again after asking, so a link made meanwhile cannot lead outside or into .git', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'isar-outside-'));
+    fs.mkdirSync(path.join(h.root, '.git'));
+    try {
+      // 'junction' works without admin rights on Windows and is a plain symlink elsewhere.
+      h.prompt = async () => {
+        fs.symlinkSync(outside, path.join(h.root, 'late'), 'junction');
+        return 'allow';
+      };
+      const escaped = await h.call('writeFile', { path: 'late/x.txt', content: 'x' }, { edits: 'ask' });
+      expect(escaped.isError).toBe(true);
+      expect(fs.existsSync(path.join(outside, 'x.txt'))).toBe(false);
+
+      h.prompt = async () => {
+        fs.symlinkSync(path.join(h.root, '.git'), path.join(h.root, 'gitlate'), 'junction');
+        return 'allow';
+      };
+      const git = await h.call('writeFile', { path: 'gitlate/config', content: 'x' }, { edits: 'ask' });
+      expect(git.isError).toBe(true);
+      expect(fs.readdirSync(path.join(h.root, '.git'))).toEqual([]);
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it('asks when no permission is configured', async () => {

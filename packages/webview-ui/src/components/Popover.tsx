@@ -36,6 +36,21 @@ interface Position {
 const GAP = 6;
 const MARGIN = 8;
 
+const TAB_STOPS = 'input, textarea, select, button, [href], [tabindex]';
+
+/** True when Tab (or Shift+Tab) from the focused element would move focus out of the panel. */
+function leavesPanel(panel: HTMLElement, backwards: boolean): boolean {
+  const stops = Array.from(panel.querySelectorAll<HTMLElement>(TAB_STOPS)).filter(
+    (el) => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled,
+  );
+  const edge = backwards ? stops[0] : stops[stops.length - 1];
+  return (
+    stops.length === 0 ||
+    document.activeElement === edge ||
+    !stops.includes(document.activeElement as HTMLElement)
+  );
+}
+
 function computePosition(anchor: DOMRect, panel: HTMLElement, placement: PopoverPlacement): Position {
   const width = panel.offsetWidth;
   const height = panel.scrollHeight;
@@ -143,6 +158,11 @@ export function Popover({
         if (event.key === 'Escape') {
           event.preventDefault();
           event.stopPropagation();
+          onClose();
+          anchorRef.current?.focus();
+        } else if (event.key === 'Tab' && leavesPanel(event.currentTarget, event.shiftKey)) {
+          // The panel sits at the end of the page. Focusing the anchor without preventing the default lets the
+          // browser continue the tab order from there instead of from the top of the page.
           onClose();
           anchorRef.current?.focus();
         }

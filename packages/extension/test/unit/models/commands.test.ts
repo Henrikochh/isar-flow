@@ -51,6 +51,13 @@ describe('registerModelCommands', () => {
 
     await handlers.get('isarFlow.removeProvider')?.({ providerId: 'litellm' });
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining('litellm'), expect.any(String), 'Remove');
+    expect(settings.save).not.toHaveBeenCalled();
+
+    // The sidebar confirms inline and says so in a second argument.
+    confirm.mockClear();
+    await handlers.get('isarFlow.removeProvider')?.('litellm', { confirmed: true });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(settings.save).toHaveBeenCalledWith([]);
 
     disposable.dispose();
     expect(disposed).toEqual(ids);
@@ -100,6 +107,24 @@ describe('vscodeProviderSettings', () => {
     expect(store.entries()).toEqual([{ id: 'w' }]);
     await store.save([{ id: 'w2' }]);
     expect(update).toHaveBeenCalledWith('providers', [{ id: 'w2' }], vscode.ConfigurationTarget.Workspace);
+  });
+
+  it('uses the user settings in Restricted Mode, where workspace endpoints are ignored', async () => {
+    const workspace = vscode.workspace as { isTrusted: boolean };
+    workspace.isTrusted = false;
+    try {
+      const update = fakeConfig({ workspaceValue: [{ id: 'w' }], globalValue: [{ id: 'g' }] });
+      const store = vscodeProviderSettings();
+      expect(store.entries()).toEqual([{ id: 'g' }]);
+      await store.save([{ id: 'g' }, { id: 'new' }]);
+      expect(update).toHaveBeenCalledWith(
+        'providers',
+        [{ id: 'g' }, { id: 'new' }],
+        vscode.ConfigurationTarget.Global,
+      );
+    } finally {
+      workspace.isTrusted = true;
+    }
   });
 
   it('treats a missing or malformed value as no entries', () => {

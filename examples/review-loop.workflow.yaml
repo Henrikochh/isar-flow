@@ -1,0 +1,56 @@
+# Implements a task, then tests and reviews it until the tests pass and the reviewer approves.
+# Needs the agents "coder" and "reviewer" in .isarflow/agents/ (see examples/agents).
+# Replace "npm test" with your test command.
+version: 1
+name: Review until approved
+description: Implement a task, then test and review it until approved (at most 5 rounds).
+inputs:
+  task: { type: string, description: What should be implemented?, required: true, multiline: true }
+steps:
+  - id: implement
+    type: agent
+    agent: coder
+    prompt: |
+      Implement the following task in this repository:
+      ${{ inputs.task }}
+
+  - id: review_loop
+    type: loop
+    # Checked after each round: the loop ends when both rules are true.
+    until:
+      all:
+        - { value: '${{ steps.tests.exitCode }}', op: eq, to: 0 }
+        - { value: '${{ steps.review.json.approved }}', op: isTrue }
+    maxIterations: 5 # the run fails if this is not enough
+    steps:
+      - id: tests
+        type: console
+        run: npm test
+        continueOnError: true # a failing test run is information for the reviewer, not the end of the run
+        timeout: 600
+
+      - id: review
+        type: agent
+        agent: reviewer
+        prompt: |
+          Review the changes made for this task:
+          ${{ inputs.task }}
+
+          The tests exited with code ${{ steps.tests.exitCode }}. Last lines of their output:
+          ${{ tail(steps.tests.output, 80) }}
+        output:
+          format: json
+          schema: { approved: boolean, issues: 'string[]' }
+
+      - id: needs_fix
+        type: if
+        condition: '${{ !steps.review.json.approved || steps.tests.exitCode != 0 }}'
+        then:
+          - id: fix
+            type: agent
+            agent: coder
+            prompt: |
+              Fix the problems found in this round.
+              Reviewer issues: ${{ toJSON(steps.review.json.issues) }}
+              Test exit code: ${{ steps.tests.exitCode }}. Last lines of the test output:
+              ${{ tail(steps.tests.output, 80) }}

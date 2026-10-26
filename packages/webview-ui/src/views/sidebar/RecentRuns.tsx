@@ -1,37 +1,79 @@
-import type { RunRecordSummary } from '@isar-flow/core';
+import type { ActiveRunSummary, RunRecordSummary } from '@isar-flow/core';
 import { Section, StatusGlyph } from '../../components';
 import { formatDuration, formatRelativeTime } from '../../hooks';
-import { send, uniqueKeys } from './model';
+import { formatElapsed, send, uniqueKeys } from './model';
 
 const MAX_RUNS = 10;
 
-/** Latest runs as a short stretch of river: each run's status sits on the stream like a stone. */
-export function RecentRuns({ runs, now }: { runs: readonly RunRecordSummary[]; now: number }) {
+function RunName({ name }: { name: string }) {
+  const label = name || 'Unnamed workflow';
+  return (
+    <span className="sb-run__name" title={label}>
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Latest runs as a short stretch of river: each run's status sits on the stream like a stone. Runs in progress
+ * come first, then the finished ones, newest first.
+ */
+export function RecentRuns({
+  active,
+  runs,
+  now,
+}: {
+  active: readonly ActiveRunSummary[];
+  runs: readonly RunRecordSummary[];
+  now: number;
+}) {
+  const running = [...active].sort((a, b) => b.startedAt - a.startedAt);
   const shown = runs.slice(0, MAX_RUNS);
-  const keys = uniqueKeys(shown, (run) => run.runId);
+  const keys = uniqueKeys([...running, ...shown], (run) => run.runId);
   return (
     <Section title="Recent runs">
-      {shown.length === 0 ? (
+      {running.length + shown.length === 0 ? (
         <p className="sb-note">Runs appear here after you start a workflow.</p>
       ) : (
         <ol className="sb-runs" aria-label="Recent runs">
-          {shown.map((run, index) => (
+          {running.map((run, index) => (
             <li key={keys[index]} className="sb-run">
               <button
                 type="button"
                 className="sb-run__main"
-                title={run.error || undefined}
+                onClick={() => send({ type: 'openRun', runId: run.runId, workflowUri: run.workflowUri })}
+              >
+                <span className="sb-run__stone">
+                  <StatusGlyph status="running" />
+                </span>
+                <RunName name={run.workflowName} />
+                <span className="sb-run__meta">
+                  <span className="sb-meta-running">Running</span>
+                  <span className="sb-meta-elapsed">{formatElapsed(now - run.startedAt)}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+          {shown.map((run, index) => (
+            <li key={keys[running.length + index]} className="sb-run">
+              <button
+                type="button"
+                className="sb-run__main"
                 onClick={() => send({ type: 'openRun', runId: run.runId, workflowUri: run.workflowUri })}
               >
                 <span className="sb-run__stone">
                   <StatusGlyph status={run.status} />
                 </span>
-                <span className="sb-run__name">{run.workflowName || 'Unnamed workflow'}</span>
+                <RunName name={run.workflowName} />
                 <span className="sb-run__meta">
-                  {run.status === 'running' ? <span>Running</span> : run.durationMs !== undefined ? <span>{formatDuration(run.durationMs)}</span> : null}
+                  {run.durationMs !== undefined ? <span>{formatDuration(run.durationMs)}</span> : null}
                   <span>{formatRelativeTime(run.startedAt, now)}</span>
                 </span>
-                {run.error ? <span className="sb-run__error">{run.error}</span> : null}
+                {run.error ? (
+                  <span className="sb-run__error" title={run.error}>
+                    {run.error}
+                  </span>
+                ) : null}
               </button>
             </li>
           ))}

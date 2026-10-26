@@ -91,11 +91,12 @@ async function main() {
   // Started from a VS Code terminal or task, these make Code.exe act as Node or talk to that window.
   for (const name of ['ELECTRON_RUN_AS_NODE', 'VSCODE_IPC_HOOK_CLI']) delete process.env[name];
 
-  // Each launch gets its own profile. The fixture workspace turns off command confirmation in its
-  // .vscode/settings.json; without a folder, the user settings do it.
+  // Each launch gets its own profile. Command confirmation is turned off in the user settings because
+  // isarFlow.confirmCommands is application-scoped: a workspace cannot turn it off.
+  const noConfirm = { 'isarFlow.confirmCommands': false };
   const launches = [
-    { name: 'fixture workspace', suite: 'suite', folder: workspace, settings: {} },
-    { name: 'window without a folder', suite: 'no-folder', settings: { 'isarFlow.confirmCommands': false } },
+    { name: 'fixture workspace', suite: 'suite', folder: workspace, settings: noConfirm },
+    { name: 'window without a folder', suite: 'no-folder', settings: noConfirm },
   ];
   const failures = [];
   for (const launch of launches) {

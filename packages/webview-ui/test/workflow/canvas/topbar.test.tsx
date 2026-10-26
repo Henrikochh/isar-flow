@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { fireEvent, screen, within } from '@testing-library/react';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { reduceRunEvent, type RunEvent, type RunView } from '@isar-flow/core';
 import { RECENT_RUNS } from '../../../harness/fixtures';
 import { runBlocker } from '../../../src/views/workflow/topbar/TopBar';
@@ -10,7 +10,6 @@ vi.mock('../../../src/views/workflow/inspector/Inspector', () => ({
 }));
 
 beforeAll(stubLayout);
-afterEach(cleanup);
 
 describe('runBlocker', () => {
   it('explains why the workflow cannot run', () => {

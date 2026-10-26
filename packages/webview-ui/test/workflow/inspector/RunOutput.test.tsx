@@ -1,10 +1,9 @@
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import type { RunView } from '@isar-flow/core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { docFor, posted, REVIEW_LOOP, renderInspector, resetPosted } from './helpers';
 
 beforeEach(resetPosted);
-afterEach(cleanup);
 
 function makeRun(overrides: Partial<RunView> = {}): RunView {
   return {

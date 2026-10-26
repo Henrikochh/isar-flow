@@ -42,6 +42,12 @@ export function InlineText({ value, onCommit, label, placeholder, className, req
       aria-invalid={invalid || undefined}
       aria-describedby={describedBy}
       spellCheck={false}
+      // A tooltip only when the text is cut off, so short names do not get a redundant one.
+      onMouseEnter={(event) => {
+        const input = event.currentTarget;
+        if (input.scrollWidth > input.clientWidth) input.title = input.value;
+        else input.removeAttribute('title');
+      }}
       onFocus={() => {
         original.current = value;
         committed.current = value;

@@ -15,6 +15,7 @@ function fakeHistory() {
     onDidChange: changed.event,
     list: (uri?: string) => runs.filter((r) => uri === undefined || r.workflowUri === uri),
     get: () => undefined,
+    getAsync: async () => undefined,
     save: async () => undefined,
   };
   return { history, runs, changed };
@@ -146,10 +147,24 @@ describe('workflow store', () => {
 
     const review = await workflows.create('Review until approved', 'review-loop');
     expect(review.path).toBe('/ws/.isarflow/workflows/review-until-approved-2.workflow.yaml');
-    expect(ensure).toHaveBeenCalledWith(['coder', 'reviewer']);
+    expect(ensure).toHaveBeenCalledWith(['coder', 'reviewer'], expect.objectContaining({ path: '/ws' }));
     await workflows.create('', 'test-fix');
     expect(ws.fs.files.has('/ws/.isarflow/workflows/workflow.workflow.yaml')).toBe(true);
     expect(ensure).toHaveBeenCalledTimes(2);
+  });
+
+  it('creates workflows and their starter agents in the given workspace folder', async () => {
+    const ws = installFakeWorkspace(['/ws', '/two']);
+    const { agents, ensure } = fakeAgents();
+    const workflows = await open(undefined, agents);
+
+    const uri = await workflows.create('Loop', 'review-loop', vscode.Uri.file('/two'));
+    expect(uri.path).toBe('/two/.isarflow/workflows/loop.workflow.yaml');
+    expect(ws.fs.files.has(uri.path)).toBe(true);
+    expect(ensure).toHaveBeenCalledWith(['coder', 'reviewer'], expect.objectContaining({ path: '/two' }));
+
+    const fallback = await workflows.create('Other', 'blank', vscode.Uri.file('/elsewhere'));
+    expect(fallback.path).toBe('/ws/.isarflow/workflows/other.workflow.yaml');
   });
 
   it('asks to open a folder when there is none', async () => {

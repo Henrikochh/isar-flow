@@ -18,7 +18,7 @@
 .ag-column {
   max-width: 704px;
   margin: 0 auto;
-  padding: 28px 32px 72px;
+  padding: 32px 32px 64px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -38,8 +38,8 @@
 .ag-header {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
-  padding-bottom: 22px;
+  gap: 16px;
+  padding-bottom: 24px;
   border-bottom: 1px solid var(--if-border);
 }
 
@@ -153,8 +153,8 @@
 .ag-form {
   display: flex;
   flex-direction: column;
-  gap: 40px;
-  padding-top: 4px;
+  gap: 32px;
+  padding-top: 8px;
 }
 
 .ag-section-count {
@@ -262,7 +262,7 @@
 .ag-tool-groups {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   margin: 0 -8px;
 }
 
@@ -273,16 +273,20 @@
 }
 
 .ag-tool-group__header {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  padding: 0 8px 6px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 8px;
+  padding: 0 8px 4px;
   font-size: var(--if-text-s);
+  line-height: 18px;
 }
 
+/* Same 16 px column as the checkboxes below, so icons and boxes share one edge. */
 .ag-tool-group__icon.codicon {
+  justify-self: center;
   font-size: 14px;
+  line-height: 18px;
 }
 
 .ag-risk-read {
@@ -298,6 +302,7 @@
 }
 
 .ag-tool-group__title {
+  margin-right: 4px;
   font-weight: 600;
 }
 
@@ -399,9 +404,22 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   min-width: 0;
   padding: 6px 8px;
+  border: 0;
   border-radius: var(--if-radius-m);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ag-used-by__item:hover {
+  background: var(--if-hover);
+}
+.ag-used-by__item:focus-visible {
+  outline-offset: -1px;
 }
 
 .ag-used-by__tile {
@@ -417,6 +435,11 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--if-isar) 30%, transparent);
 }
 
+body.vscode-high-contrast .ag-used-by__tile,
+body.vscode-high-contrast-light .ag-used-by__tile {
+  box-shadow: inset 0 0 0 1px var(--if-isar);
+}
+
 .ag-used-by__icon.codicon {
   font-size: 13px;
 }
@@ -428,6 +451,19 @@
   white-space: nowrap;
   font-family: var(--if-font-code);
   font-size: var(--if-text-s);
+}
+
+/* Shown on hover and focus, so the list reads quietly until a row is pointed at. */
+.ag-used-by__open.codicon {
+  flex: none;
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--if-muted);
+  opacity: 0;
+}
+.ag-used-by__item:hover .ag-used-by__open,
+.ag-used-by__item:focus-visible .ag-used-by__open {
+  opacity: 1;
 }
 
 .ag-used-by__empty {
@@ -484,12 +520,17 @@
   align-items: center;
   gap: 5px;
   min-width: 0;
-  max-width: 55%;
+  max-width: 60%;
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+
+/* text-overflow needs a block of its own: on the flex row the name would be cut without an ellipsis. */
+.ag-tryit__model-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--if-text-s);
-  color: var(--if-muted);
 }
 
 .ag-tryit__model-icon.codicon {
@@ -505,7 +546,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 12px;
   padding: 24px 32px;
   text-align: center;
 }
@@ -519,7 +560,7 @@
 .ag-tryit__source {
   width: 2px;
   height: 64px;
-  margin-bottom: -6px;
+  margin-bottom: -12px;
   border-radius: 2px;
   background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--if-isar) 55%, transparent));
 }
@@ -530,8 +571,8 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 16px 16px 20px;
+  gap: 16px;
+  padding: 16px 16px 24px;
 }
 
 .ag-user {

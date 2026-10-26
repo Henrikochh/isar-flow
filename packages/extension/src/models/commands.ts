@@ -24,10 +24,10 @@ export function registerModelCommands(
     ui: vscodeCommandUi(),
     ...overrides,
   });
-  const register = (id: string, handler: (providerId?: string) => Promise<void>) =>
-    vscode.commands.registerCommand(id, async (arg?: unknown) => {
+  const register = (id: string, handler: (providerId?: string, options?: unknown) => Promise<void>) =>
+    vscode.commands.registerCommand(id, async (arg?: unknown, options?: unknown) => {
       try {
-        await handler(providerIdArg(arg));
+        await handler(providerIdArg(arg), options);
       } catch (error) {
         void vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
       }
@@ -35,7 +35,10 @@ export function registerModelCommands(
   return vscode.Disposable.from(
     register('isarFlow.addProvider', () => commands.addProvider()),
     register('isarFlow.editProvider', (id) => commands.editProvider(id)),
-    register('isarFlow.removeProvider', (id) => commands.removeProvider(id)),
+    // The sidebar confirms inline and passes { confirmed: true }; the command palette asks in a dialog.
+    register('isarFlow.removeProvider', (id, options) =>
+      commands.removeProvider(id, { confirmed: isRecord(options) && options.confirmed === true }),
+    ),
     register('isarFlow.setProviderKey', (id) => commands.setProviderKey(id)),
     register('isarFlow.testProvider', (id) => commands.testProvider(id)),
     register('isarFlow.refreshModels', () => commands.refreshModels()),
@@ -49,14 +52,15 @@ export function providerIdArg(arg: unknown): string | undefined {
 }
 
 /**
- * Edits `isarFlow.providers` where it is defined: in the workspace settings when the workspace sets it
+ * Edits `isarFlow.providers` where it is defined: in the workspace settings when a trusted workspace sets it
  * (that value wins), otherwise in the user settings.
  */
 export function vscodeProviderSettings(): ProviderSettingsStore {
   const scope = () => {
     const config = vscode.workspace.getConfiguration('isarFlow');
     const inspected = config.inspect<unknown>('providers');
-    const inWorkspace = inspected?.workspaceValue !== undefined;
+    // In Restricted Mode the registry ignores workspace endpoints, so edits there would have no effect.
+    const inWorkspace = vscode.workspace.isTrusted && inspected?.workspaceValue !== undefined;
     return {
       config,
       value: inWorkspace ? inspected?.workspaceValue : inspected?.globalValue,

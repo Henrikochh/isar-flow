@@ -84,12 +84,12 @@ export function buildAgentIndex(records: AgentRecord[]): AgentIndex {
 }
 
 export interface AgentDirs {
-  /** `.isarflow/agents` of every workspace folder, as `<scheme>:<path>` keys. */
+  /** `.isarflow/agents` of every workspace folder, as `<scheme>://<authority><path>` keys (see uriKey). */
   workspace: string[];
   user: string;
 }
 
-/** Scope and id of an agent file given as `<scheme>:<path>` key; undefined for files outside the agent folders. */
+/** Scope and id of an agent file given as uriKey; undefined for files outside the agent folders. */
 export function classifyAgentPath(
   path: string,
   dirs: AgentDirs,

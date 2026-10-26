@@ -77,22 +77,37 @@ export type WorkflowTemplateId = 'blank' | 'review-loop' | 'test-fix';
 
 export type SidebarTab = 'agents' | 'workflows';
 
+/** A run that is in progress right now. */
+export interface ActiveRunSummary {
+  runId: string;
+  workflowUri: string;
+  workflowName: string;
+  startedAt: number;
+}
+
 export interface SidebarState {
   hasWorkspace: boolean;
   trusted: boolean;
   agents: AgentSummary[];
   workflows: WorkflowSummary[];
   catalog: ModelCatalog;
+  /** Finished runs, newest first. Running runs are listed in `activeRuns`. */
   recentRuns: RunRecordSummary[];
-  activeRuns: string[];
+  activeRuns: ActiveRunSummary[];
   tab: SidebarTab;
 }
 
+export type AgentStarter = 'blank' | 'coder' | 'reviewer';
+
+/**
+ * Destructive sidebar actions (deleteAgent, removeProvider) are confirmed inline in the webview,
+ * so the host performs them without a second confirmation dialog.
+ */
 export type SidebarToHost =
   | { type: 'ready' }
   | { type: 'setTab'; tab: SidebarTab }
   | { type: 'openAgent'; uri: string }
-  | { type: 'createAgent'; name: string; scope: AgentScope }
+  | { type: 'createAgent'; name: string; scope: AgentScope; starter?: AgentStarter }
   | { type: 'deleteAgent'; uri: string }
   | { type: 'openWorkflow'; uri: string }
   | { type: 'createWorkflow'; name: string; template: WorkflowTemplateId }
@@ -186,7 +201,9 @@ export type AgentEditorToHost =
   | { type: 'cancelTryIt' }
   | { type: 'openYaml' }
   | { type: 'refreshModels' }
-  | { type: 'addProvider' };
+  | { type: 'addProvider' }
+  /** Opens a workflow from the "Used by" list; `path` is one of AgentDocumentState.usedBy. */
+  | { type: 'openWorkflow'; path: string };
 
 export type HostToAgentEditor =
   | { type: 'document'; doc: AgentDocumentState }

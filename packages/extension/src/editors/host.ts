@@ -19,6 +19,10 @@ export interface EditorDocument {
 /** Window and workspace functions the panels need; injected so the panels can be unit-tested. */
 export interface EditorUi {
   isTrusted(): boolean;
+  /** Open workspace folders, in order. */
+  workspaceFolders(): readonly vscode.Uri[];
+  /** The workspace folder that contains `uri`; undefined for files outside all folders (e.g. user agents). */
+  workspaceFolderOf(uri: vscode.Uri): vscode.Uri | undefined;
   executeCommand(command: string, ...args: unknown[]): Promise<unknown>;
   writeClipboard(text: string): Promise<void>;
   /** Shows an information message with one action; resolves true when the user picked it. */

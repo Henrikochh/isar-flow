@@ -12,6 +12,7 @@ import type {
   RunRecordSummary,
   RunView,
   ToolHost,
+  WorkflowSummary,
 } from '@isar-flow/core';
 import type { ActiveRun, AgentRecord, Services } from '../../../src/contracts';
 import type { EditorDocument, EditorUi } from '../../../src/editors/host';
@@ -61,9 +62,12 @@ export function fakeServices() {
     definitions: {} as Record<string, AgentDefinition>,
     identity: undefined as { id: string; scope: AgentScope } | undefined,
     usersOfAgent: {} as Record<string, string[]>,
+    workflows: [] as WorkflowSummary[],
     catalog: CATALOG,
     history: [] as RunRecordSummary[],
     views: {} as Record<string, RunView>,
+    /** Saved runs that are not cached: only getAsync finds them. */
+    stored: {} as Record<string, RunView>,
     active: [] as ActiveRun[],
     toolHost: { execute: async () => ({ content: '' }) } as ToolHost,
   };
@@ -86,7 +90,7 @@ export function fakeServices() {
     },
     workflows: {
       onDidChange: emitters.workflows.event,
-      list: () => [],
+      list: () => state.workflows,
       create: vi.fn(async () => vscode.Uri.file('/w/new.workflow.yaml')),
       usersOfAgent: (id: string) => state.usersOfAgent[id] ?? [],
       dispose: vi.fn(),
@@ -107,6 +111,7 @@ export function fakeServices() {
         onDidChange: emitters.history.event,
         list: vi.fn(() => state.history),
         get: (runId: string) => state.views[runId],
+        getAsync: vi.fn(async (runId: string) => state.views[runId] ?? state.stored[runId]),
         save: vi.fn(async () => undefined),
       },
       approvals: {
@@ -206,9 +211,12 @@ export function fakeUi(overrides: Partial<EditorUi> = {}) {
     clipboard: [] as string[],
     errors: [] as string[],
     confirmations: [] as string[],
+    folders: [vscode.Uri.file('/w')],
   };
   const api: EditorUi = {
     isTrusted: () => ui.trusted,
+    workspaceFolders: () => ui.folders,
+    workspaceFolderOf: (uri) => ui.folders.find((folder) => uri.path.startsWith(`${folder.path}/`)),
     executeCommand: async (...args: unknown[]) => {
       ui.commands.push(args);
       return undefined;

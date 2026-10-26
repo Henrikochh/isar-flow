@@ -4,15 +4,12 @@ import type { AgentStore, Services, WorkflowStore } from '../contracts';
 import { AGENT_EDITOR, WORKFLOW_EDITOR } from '../sidebar/sidebarMessages';
 import type { AgentKind } from '../store/agentIndex';
 import { errorMessage } from '../store/files';
+import { AGENT_FOLDER_PROMPT, type FolderUi, pickWorkspaceFolder, WORKFLOW_FOLDER_PROMPT } from './folders';
 
 /** The VS Code UI used by the create flows (injected for tests). */
-export interface CreateUi {
+export interface CreateUi extends FolderUi {
   hasWorkspace(): boolean;
   showInputBox(options: vscode.InputBoxOptions): Thenable<string | undefined>;
-  showQuickPick<T extends vscode.QuickPickItem>(
-    items: T[],
-    options: vscode.QuickPickOptions,
-  ): Thenable<T | undefined>;
   executeCommand(command: string, ...args: unknown[]): Thenable<unknown>;
 }
 
@@ -66,7 +63,9 @@ export async function newWorkflowFlow(
   if (name === undefined) return undefined;
   const picked = await ui.showQuickPick(TEMPLATE_ITEMS, { title, placeHolder: 'Start from' });
   if (!picked) return undefined;
-  const uri = await workflows.create(name.trim(), picked.template);
+  const folder = await pickWorkspaceFolder(ui, WORKFLOW_FOLDER_PROMPT, title);
+  if (folder === 'dismissed') return undefined;
+  const uri = await workflows.create(name.trim(), picked.template, folder);
   await ui.executeCommand('vscode.openWith', uri, WORKFLOW_EDITOR);
   return uri;
 }
@@ -85,6 +84,7 @@ export async function newAgentFlow(ui: CreateUi, agents: AgentStore): Promise<vs
   const start = await ui.showQuickPick(STARTER_ITEMS, { title, placeHolder: 'Start from' });
   if (!start) return undefined;
   let scope: AgentScope = 'user';
+  let folder: vscode.Uri | undefined;
   if (ui.hasWorkspace()) {
     const picked = await ui.showQuickPick(SCOPE_ITEMS, {
       title,
@@ -93,7 +93,12 @@ export async function newAgentFlow(ui: CreateUi, agents: AgentStore): Promise<vs
     if (!picked) return undefined;
     scope = picked.scope;
   }
-  const uri = await agents.create(name.trim(), scope, start.starter);
+  if (scope === 'workspace') {
+    const choice = await pickWorkspaceFolder(ui, AGENT_FOLDER_PROMPT, title);
+    if (choice === 'dismissed') return undefined;
+    folder = choice;
+  }
+  const uri = await agents.create(name.trim(), scope, start.starter, folder ? { folder } : {});
   await ui.executeCommand('vscode.openWith', uri, AGENT_EDITOR);
   return uri;
 }
@@ -101,6 +106,7 @@ export async function newAgentFlow(ui: CreateUi, agents: AgentStore): Promise<vs
 export function registerCreateCommands(services: Services): vscode.Disposable {
   const ui: CreateUi = {
     hasWorkspace: () => (vscode.workspace.workspaceFolders?.length ?? 0) > 0,
+    workspaceFolders: () => vscode.workspace.workspaceFolders ?? [],
     showInputBox: (options) => vscode.window.showInputBox(options),
     showQuickPick: (items, options) => vscode.window.showQuickPick(items, options),
     executeCommand: (command, ...args) => vscode.commands.executeCommand(command, ...args),

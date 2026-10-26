@@ -1,6 +1,6 @@
 import './agent.css';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { AgentDocumentState, AgentEditorToHost, HostToAgentEditor, ModelCatalog } from '@isar-flow/core';
+import type { AgentEditorToHost, HostToAgentEditor, ModelCatalog } from '@isar-flow/core';
 import { Spinner } from '../../components';
 import { post, useHostMessages } from '../../vscode';
 import { AgentHeader } from './AgentHeader';
@@ -12,6 +12,7 @@ import { PermissionsSection } from './PermissionsSection';
 import { ToolsSection } from './ToolsSection';
 import { TryItPanel } from './TryItPanel';
 import { UsedBySection } from './UsedBySection';
+import { useAgentDocument } from './useAgentDocument';
 import { useTryIt } from './useTryIt';
 
 const send = (message: AgentEditorToHost) => post(message);
@@ -19,7 +20,7 @@ const send = (message: AgentEditorToHost) => post(message);
 const LOADING_CATALOG: ModelCatalog = { models: [], providers: [], loading: true };
 
 export function AgentApp() {
-  const [doc, setDoc] = useState<AgentDocumentState | null>(null);
+  const { doc, receive, applyLocally, revert } = useAgentDocument();
   const [catalog, setCatalog] = useState<ModelCatalog>(LOADING_CATALOG);
   const [updateError, setUpdateError] = useState<string>();
   const tryIt = useTryIt();
@@ -27,7 +28,7 @@ export function AgentApp() {
   useHostMessages<HostToAgentEditor>((message) => {
     switch (message.type) {
       case 'document':
-        setDoc(message.doc);
+        receive(message.doc);
         break;
       case 'catalog':
         setCatalog(message.catalog);
@@ -37,6 +38,7 @@ export function AgentApp() {
         break;
       case 'updateFailed':
         setUpdateError(message.error);
+        revert();
         break;
     }
   });
@@ -45,13 +47,18 @@ export function AgentApp() {
     send({ type: 'ready' });
   }, []);
 
-  const update = useCallback<UpdateAgent>((set, unset) => {
-    setUpdateError(undefined);
-    send(unset?.length ? { type: 'update', set, unset } : { type: 'update', set });
-  }, []);
+  const update = useCallback<UpdateAgent>(
+    (set, unset) => {
+      setUpdateError(undefined);
+      send(unset?.length ? { type: 'update', set, unset } : { type: 'update', set });
+      applyLocally(set, unset);
+    },
+    [applyLocally],
+  );
   const openYaml = useCallback(() => send({ type: 'openYaml' }), []);
   const refreshModels = useCallback(() => send({ type: 'refreshModels' }), []);
   const addProvider = useCallback(() => send({ type: 'addProvider' }), []);
+  const openWorkflow = useCallback((path: string) => send({ type: 'openWorkflow', path }), []);
 
   const form = useMemo(() => readAgentForm(doc?.agent ?? null), [doc]);
   const issues = useMemo(() => fieldIssues(doc?.diagnostics ?? []), [doc]);
@@ -103,7 +110,7 @@ export function AgentApp() {
               <InstructionsSection value={form.systemPrompt} error={issues.message('systemPrompt').error} update={update} />
               <ToolsSection tools={form.tools} error={issues.message('tools').error} update={update} />
               <PermissionsSection form={form} issues={issues} update={update} />
-              <UsedBySection id={doc.id} usedBy={doc.usedBy} />
+              <UsedBySection id={doc.id} usedBy={doc.usedBy} onOpen={openWorkflow} />
             </div>
           ) : null}
         </div>

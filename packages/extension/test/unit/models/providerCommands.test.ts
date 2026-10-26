@@ -344,6 +344,25 @@ describe('remove model endpoint', () => {
     expect(secrets.values.size).toBe(1);
   });
 
+  it('removes without asking again when the caller already confirmed', async () => {
+    const { ui, settings, secrets, commands } = setup([{ id: 'a', baseUrl: 'http://a' }]);
+    secrets.values.set('isarFlow.provider.a.apiKey', 'k');
+    ui.confirmAnswer = false;
+    await commands.removeProvider('a', { confirmed: true });
+    expect(ui.confirms).toEqual([]);
+    expect(settings.stored).toEqual([]);
+    expect(secrets.values.size).toBe(0);
+  });
+
+  it('still asks when the endpoint is picked here, even if the caller confirmed', async () => {
+    const { ui, settings, commands } = setup([{ id: 'a', baseUrl: 'http://a' }]);
+    ui.picks.push(byLabel('a'));
+    ui.confirmAnswer = false;
+    await commands.removeProvider(undefined, { confirmed: true });
+    expect(ui.confirms).toHaveLength(1);
+    expect(settings.saves).toBe(0);
+  });
+
   it('says so when the endpoint does not exist', async () => {
     const { ui, settings, commands } = setup([{ id: 'a', baseUrl: 'http://a' }]);
     await commands.removeProvider('zzz');

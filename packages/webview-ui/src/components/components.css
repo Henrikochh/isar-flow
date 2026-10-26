@@ -464,6 +464,17 @@ body.vscode-high-contrast-light .if-segmented__item[aria-checked='true'],
 body.vscode-high-contrast-light .if-segmented__item[aria-selected='true'] {
   box-shadow: inset 0 0 0 1px var(--vscode-contrastActiveBorder, var(--if-focus));
 }
+/* Light: on a white track the raised segment barely shows, so the track is tinted and the choice sits on it in white. */
+body.vscode-light .if-segmented {
+  background: color-mix(in srgb, var(--if-fg) 6%, var(--if-input-bg));
+}
+body.vscode-light .if-segmented__item[aria-checked='true'],
+body.vscode-light .if-segmented__item[aria-selected='true'] {
+  background: var(--if-input-bg);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--if-fg) 12%, transparent),
+    0 1px 2px var(--if-shadow);
+}
 
 /* ---------- Chip ---------- */
 .if-chip {
@@ -508,6 +519,21 @@ body.vscode-high-contrast-light .if-segmented__item[aria-selected='true'] {
 }
 .if-chip--code {
   font-family: var(--if-font-code);
+}
+/* High contrast: every chip is outlined; toned chips in their own color, so meaning never rests on a fill. */
+body.vscode-high-contrast .if-chip,
+body.vscode-high-contrast-light .if-chip {
+  border: 1px solid var(--if-border);
+}
+body.vscode-high-contrast .if-chip--isar,
+body.vscode-high-contrast .if-chip--success,
+body.vscode-high-contrast .if-chip--warning,
+body.vscode-high-contrast .if-chip--error,
+body.vscode-high-contrast-light .if-chip--isar,
+body.vscode-high-contrast-light .if-chip--success,
+body.vscode-high-contrast-light .if-chip--warning,
+body.vscode-high-contrast-light .if-chip--error {
+  border-color: currentColor;
 }
 
 /* ---------- Stone (block type / agent tile) ---------- */
@@ -583,6 +609,10 @@ body.vscode-high-contrast-light .if-stone {
 }
 .if-banner--success {
   --tone: var(--if-almgruen);
+}
+body.vscode-high-contrast .if-banner,
+body.vscode-high-contrast-light .if-banner {
+  --tone-border: var(--tone);
 }
 .if-banner__body {
   flex: 1;

@@ -27,7 +27,8 @@ function ModelSummary({ refText, catalog, note }: { refText: string; catalog: Mo
   const info = catalog.models.find((m) => m.ref === refText);
   return (
     <span className="ag-model-summary">
-      {refText ? <span className="ag-model-summary__ref">{refText}</span> : null}
+      {/* The picker shows a listed model by its name; an unlisted one already appears there as its reference. */}
+      {info ? <span className="ag-model-summary__ref">{refText}</span> : null}
       {info?.capabilities.tools ? <Chip tone="outline">Tools</Chip> : null}
       {info?.capabilities.jsonSchema ? <Chip tone="outline">JSON</Chip> : null}
       {note ? (

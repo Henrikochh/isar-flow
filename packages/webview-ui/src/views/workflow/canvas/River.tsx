@@ -70,8 +70,19 @@ function InsertButton({ list, index }: { list: ListInfo; index: number }) {
   );
 }
 
-function Line({ state, lead }: { state: FlowState; lead?: boolean }) {
-  return <span className={cx('wf-line', `wf-line--${state}`, lead && 'wf-line--lead')} aria-hidden="true" />;
+/** A piece of river. `part` marks the pieces around the placeholder of an empty list; `open` while dragging. */
+function Line({ state, part, open }: { state: FlowState; part?: 'lead' | 'tail'; open?: boolean }) {
+  return (
+    <span
+      className={cx(
+        'wf-line',
+        `wf-line--${state}`,
+        part && `wf-line--${part}`,
+        part && open && `wf-line--${part}-open`,
+      )}
+      aria-hidden="true"
+    />
+  );
 }
 
 /** River piece between two blocks. While dragging it opens into a drop slot. */
@@ -116,7 +127,7 @@ function EmptyLane({ list, state, grow }: { list: ListModel; state: FlowState; g
   const canInsert = editable && list.info.targetable;
   return (
     <div className={cx('wf-empty-lane', grow && 'wf-empty-lane--grow')}>
-      <Line state={state} lead />
+      <Line state={state} part="lead" open={slot.allowed} />
       <div
         ref={slot.setNodeRef}
         className="wf-empty-lane__target"
@@ -145,7 +156,7 @@ function EmptyLane({ list, state, grow }: { list: ListModel; state: FlowState; g
           <span className="wf-placeholder">Empty</span>
         )}
       </div>
-      <Line state={state} />
+      <Line state={state} part="tail" open={slot.allowed} />
       <BlockPicker
         open={open}
         anchorRef={ref}

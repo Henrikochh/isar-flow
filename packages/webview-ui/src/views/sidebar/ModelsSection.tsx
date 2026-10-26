@@ -71,12 +71,18 @@ function ProviderRow({ provider }: { provider: ProviderSummary }) {
         <span className={`sb-dot sb-dot--${status}`} role="img" aria-label={PROVIDER_STATUS_LABELS[status]} />
         <span className="sb-row__body">
           <span className="sb-provider__line">
-            <span className="sb-provider__label">{label}</span>
+            <span className="sb-provider__label" title={label}>
+              {label}
+            </span>
             <span className={editable ? 'sb-provider__count sb-provider__count--yields' : 'sb-provider__count'}>
               {providerCountText(provider)}
             </span>
           </span>
-          {status === 'error' && provider.error ? <span className="sb-provider__error">{provider.error}</span> : null}
+          {status === 'error' && provider.error ? (
+            <span className="sb-provider__error" title={provider.error}>
+              {provider.error}
+            </span>
+          ) : null}
         </span>
       </button>
       {editable ? (

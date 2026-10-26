@@ -1,6 +1,8 @@
 import { type KeyboardEvent, type RefObject, useEffect, useRef } from 'react';
+import type { InsertTarget } from '@isar-flow/core';
 import { useEditor } from '../editorContext';
 import { useWorkflowActions, useWorkflowState } from '../store';
+import type { BlockMenuActions } from './BlockMenu';
 import { moveWithinList, selectionAfterDelete } from './ops';
 
 const FOCUSABLE = 'input, textarea, select, button:not(:disabled), [tabindex]:not([tabindex="-1"])';
@@ -21,12 +23,14 @@ export function focusInspector(): boolean {
 
 /**
  * Canvas shortcuts: arrows move the selection in document order, Delete/Backspace deletes, Ctrl/Cmd+D
- * duplicates, Alt+Up/Down moves the block within its list, Enter focuses the inspector, Escape clears.
+ * duplicates, Alt+Up/Down moves the block within its list, Shift+F10 (or the menu key) opens the block menu,
+ * Enter focuses the inspector, Escape clears. The block actions are shared with the block menu, so focus
+ * follows the block after an edit either way.
  */
-export function useCanvasKeyboard(rootRef: RefObject<HTMLElement | null>) {
+export function useCanvasKeyboard(rootRef: RefObject<HTMLElement | null>, openMenu: (stepId: string) => void) {
   const { model, editable, edit } = useEditor();
   const { selection } = useWorkflowState();
-  const { select, applyOps } = useWorkflowActions();
+  const { select, applyOps, openYaml } = useWorkflowActions();
   /** Set when an edit re-renders the selected card, so focus follows it once the new document arrives. */
   const refocus = useRef(false);
 
@@ -39,7 +43,25 @@ export function useCanvasKeyboard(rootRef: RefObject<HTMLElement | null>) {
     // Runs when the model changes after an edit.
   }, [model]);
 
-  return (event: KeyboardEvent<HTMLElement>) => {
+  const blockActions: BlockMenuActions = {
+    duplicate: (stepId) => {
+      refocus.current = true;
+      applyOps([{ op: 'duplicateStep', stepId }]);
+    },
+    remove: (stepId) => {
+      const next = selectionAfterDelete(model, stepId);
+      refocus.current = true;
+      edit({ ops: [{ op: 'deleteStep', stepId }] });
+      select(next);
+    },
+    move: (stepId, target: InsertTarget) => {
+      refocus.current = true;
+      edit({ ops: [{ op: 'moveStep', stepId, target }], select: stepId });
+    },
+    openYaml,
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
     if (target !== rootRef.current && !target.hasAttribute('data-wf-card')) return;
     const entry = selection ? model.byId.get(selection) : undefined;
@@ -58,6 +80,12 @@ export function useCanvasKeyboard(rootRef: RefObject<HTMLElement | null>) {
       focusCard(order[next]);
     };
 
+    if ((event.shiftKey && event.key === 'F10') || event.key === 'ContextMenu') {
+      if (!entry?.id || !editable) return;
+      event.preventDefault();
+      openMenu(entry.id);
+      return;
+    }
     if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
       event.preventDefault();
       if (!entry || !editable) return;
@@ -83,15 +111,11 @@ export function useCanvasKeyboard(rootRef: RefObject<HTMLElement | null>) {
         go(-1);
         return;
       case 'Delete':
-      case 'Backspace': {
+      case 'Backspace':
         if (!entry?.id || !editable) return;
         event.preventDefault();
-        const next = selectionAfterDelete(model, entry.id);
-        refocus.current = true;
-        edit({ ops: [{ op: 'deleteStep', stepId: entry.id }] });
-        select(next);
+        blockActions.remove(entry.id);
         return;
-      }
       case 'Enter':
         if (!entry) return;
         event.preventDefault();
@@ -106,9 +130,10 @@ export function useCanvasKeyboard(rootRef: RefObject<HTMLElement | null>) {
       default:
         if (mod && event.key.toLowerCase() === 'd' && entry?.id && editable) {
           event.preventDefault();
-          refocus.current = true;
-          applyOps([{ op: 'duplicateStep', stepId: entry.id }]);
+          blockActions.duplicate(entry.id);
         }
     }
   };
+
+  return { onKeyDown, blockActions };
 }

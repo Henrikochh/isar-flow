@@ -1,7 +1,17 @@
 import { Section } from '../../components';
 
-export function UsedBySection({ id, usedBy }: { id: string; usedBy: string[] }) {
+export function UsedBySection({
+  id,
+  usedBy: paths,
+  onOpen,
+}: {
+  id: string;
+  usedBy: string[];
+  onOpen: (path: string) => void;
+}) {
   const reference = `agent: ${id}`;
+  // Workspace folders can hold workflows at the same relative path; the host opens one of them per path.
+  const usedBy = [...new Set(paths)];
   return (
     <Section
       title="Used by"
@@ -10,13 +20,20 @@ export function UsedBySection({ id, usedBy }: { id: string; usedBy: string[] }) 
       {usedBy.length ? (
         <ul className="ag-used-by">
           {usedBy.map((path) => (
-            <li key={path} className="ag-used-by__item">
-              <span className="ag-used-by__tile" aria-hidden="true">
-                <i className="codicon codicon-pulse ag-used-by__icon" />
-              </span>
-              <span className="ag-used-by__path" title={path}>
-                {path}
-              </span>
+            <li key={path}>
+              <button
+                type="button"
+                className="ag-used-by__item"
+                aria-label={`Open workflow ${path}`}
+                title={path}
+                onClick={() => onOpen(path)}
+              >
+                <span className="ag-used-by__tile" aria-hidden="true">
+                  <i className="codicon codicon-pulse ag-used-by__icon" />
+                </span>
+                <span className="ag-used-by__path">{path}</span>
+                <i className="codicon codicon-go-to-file ag-used-by__open" aria-hidden="true" />
+              </button>
             </li>
           ))}
         </ul>

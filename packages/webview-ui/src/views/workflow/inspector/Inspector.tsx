@@ -29,7 +29,8 @@ export function Inspector() {
   const actions = useWorkflowActions();
   const workflow = doc?.workflow ?? null;
 
-  // A rename selects the new id at once; until the document confirms it, keep showing the block by its old id.
+  // A rename selects the new id at once. When the edit cannot be applied, keep showing the block by its old id
+  // and select it again once the host reports the failure.
   const [rename, setRename] = useState<PendingRename | null>(null);
   const alias = useRef<PendingRename | null>(null);
   let block = findBlock(workflow, selection);

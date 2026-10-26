@@ -71,6 +71,12 @@
 }
 
 body.vscode-light {
+  /* Light Modern's errorForeground (#f85149) is 3.4:1 on white; error messages need 4.5:1. */
+  --if-error: color-mix(
+    in srgb,
+    var(--vscode-errorForeground, #a1260d) 65%,
+    var(--vscode-foreground, #3b3b3b)
+  );
   --if-isar: #0b7f72;
   --if-kies: #6b665b;
   --if-enzian: #3550c4;

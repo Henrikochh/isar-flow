@@ -1,9 +1,8 @@
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { docFor, posted, REVIEW_LOOP, renderInspector, resetPosted, sentOps } from './helpers';
 
 beforeEach(resetPosted);
-afterEach(cleanup);
 
 describe('Inspector without a selection', () => {
   it('shows the workflow settings and commits the name on blur', () => {
@@ -91,8 +90,9 @@ describe('Inspector with a block selected', () => {
     fireEvent.keyDown(id, { key: 'Enter' });
     fireEvent.blur(id);
     expect(sentOps()).toEqual([{ op: 'renameStep', stepId: 'implement', newId: 'build' }]);
-    // Until the host confirms, the block stays on screen under its old id.
-    expect(screen.getByLabelText('Block name')).toHaveAttribute('placeholder', 'implement');
+    // The rename shows at once; the block stays selected under its new id.
+    expect(screen.getByLabelText('Block name')).toHaveAttribute('placeholder', 'build');
+    expect(screen.getByLabelText('Id')).toHaveValue('build');
   });
 
   it('runs the header actions', () => {
@@ -107,6 +107,59 @@ describe('Inspector with a block selected', () => {
     ]);
     // Deleting clears the selection, so the workflow settings come back.
     expect(screen.getByLabelText('Name')).toBeInTheDocument();
+  });
+
+  it('moves the block to the end of another list from the header', () => {
+    renderInspector({ selection: 'tests' });
+    const move = screen.getByRole('button', { name: 'Move to…' });
+    fireEvent.click(move);
+    const menu = screen.getByRole('menu', { name: 'Move to' });
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Top levelEnd of the workflow',
+      'review_loopEnd of the loop',
+      'needs_fixEnd of Then',
+      'needs_fixEnd of Else',
+    ]);
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Top level/ }));
+    expect(sentOps()).toEqual([
+      { op: 'moveStep', stepId: 'tests', target: { parentId: null, slot: 'steps', index: 2 } },
+    ]);
+    expect(screen.queryByRole('menu', { name: 'Move to' })).not.toBeInTheDocument();
+    expect(move).toHaveFocus();
+  });
+
+  it('keeps what is typed when a pause commits it, also a space the YAML drops', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      renderInspector({ selection: 'implement' });
+      const name = screen.getByLabelText('Block name');
+      fireEvent.focus(name);
+      fireEvent.change(name, { target: { value: 'Build ' } });
+      act(() => vi.advanceTimersByTime(400));
+      expect(sentOps()).toEqual([{ op: 'updateStep', stepId: 'implement', set: { name: 'Build' } }]);
+      expect(name).toHaveValue('Build ');
+      fireEvent.change(name, { target: { value: 'Build it' } });
+      fireEvent.blur(name);
+      expect(sentOps().at(-1)).toEqual({ op: 'updateStep', stepId: 'implement', set: { name: 'Build it' } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a typed space in list rows when a pause commits them, and shows the saved text on blur', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      renderInspector();
+      const description = screen.getByLabelText('Description of task');
+      fireEvent.change(description, { target: { value: 'What should ' } });
+      act(() => vi.advanceTimersByTime(400));
+      expect(sentOps()).toHaveLength(1);
+      expect(description).toHaveValue('What should ');
+      fireEvent.blur(description);
+      expect(description).toHaveValue('What should');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('commits the task on blur and keeps typing local before that', () => {
@@ -233,8 +286,28 @@ describe('Inspector with a block selected', () => {
     renderInspector({ selection: 'review_loop' });
     fireEvent.click(screen.getByRole('radio', { name: 'Fixed times' }));
     expect(sentOps()).toEqual([
-      { op: 'updateStep', stepId: 'review_loop', set: { onMaxIterations: 'continue' }, unset: ['until', 'while'] },
+      { op: 'updateStep', stepId: 'review_loop', set: {}, unset: ['until', 'while', 'onMaxIterations'] },
     ]);
+  });
+
+  it('does not warn that a fixed loop fails, because it succeeds after its last iteration', () => {
+    const fixed = [
+      'version: 1',
+      'name: Fixed',
+      'steps:',
+      '  - id: three_times',
+      '    type: loop',
+      '    maxIterations: 3',
+      '    steps:',
+      '      - id: tests',
+      '        type: console',
+      '        run: npm test',
+      '',
+    ].join('\n');
+    renderInspector({ doc: docFor(fixed), selection: 'three_times' });
+    expect(screen.getByRole('radio', { name: 'Fixed times' })).toBeChecked();
+    expect(screen.queryByText(/fails the run/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Fail the run' })).not.toBeInTheDocument();
   });
 
   it('shows diagnostics at their fields and the rest at the top', () => {

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { HostToSidebar, SidebarState, SidebarToHost } from '@isar-flow/core';
+import { pickWorkspaceFolder } from '../commands/folders';
 import type { Services } from '../contracts';
 import { debounce } from '../store/debounce';
 import { renderWebviewHtml, webviewOptions } from '../webview/html';
@@ -39,11 +40,17 @@ class SidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
       workflows,
       runs,
       executeCommand: (command, ...args) => vscode.commands.executeCommand(command, ...args),
-      confirm: async (message, action, detail) =>
-        (await vscode.window.showWarningMessage(message, { modal: true, detail }, action)) === action,
       setTab: (tab) => context.workspaceState.update(SIDEBAR_TAB_KEY, tab),
       pushState: push,
       schedulePush: () => pushSoon.trigger(),
+      pickFolder: (placeHolder) =>
+        pickWorkspaceFolder(
+          {
+            workspaceFolders: () => vscode.workspace.workspaceFolders ?? [],
+            showQuickPick: (items, options) => vscode.window.showQuickPick(items, options),
+          },
+          placeHolder,
+        ),
     });
     const messenger = new Messenger<SidebarToHost, HostToSidebar>(view.webview, handler, output);
     const changed = () => pushSoon.trigger();

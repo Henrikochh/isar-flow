@@ -83,8 +83,10 @@
   outline: 1px solid var(--if-focus);
   outline-offset: -1px;
 }
+/* Wrapped parts of a long line hang 2 characters in, so they read as one line. */
 .wf-log-line {
-  padding: 0 10px 0 8px;
+  padding: 0 10px 0 calc(8px + 2ch);
+  text-indent: -2ch;
   border-left: 2px solid transparent;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

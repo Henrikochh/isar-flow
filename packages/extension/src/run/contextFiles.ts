@@ -1,4 +1,5 @@
-import type { RunManagerDeps } from '../contracts';
+import type { RunManagerDeps, WorkspaceAdapter } from '../contracts';
+import { resolveInWorkspaceReal, WorkspacePathError } from '../tools/pathGuard';
 import { errorMessage } from './format';
 
 export const CONTEXT_LIMITS = {
@@ -89,6 +90,31 @@ export function createContextFileReader(
     }
     return files;
   };
+}
+
+/**
+ * The context file reader for one workspace folder. File searches may follow links, so every file is read
+ * only when its real path stays inside the folder: a link in the repository must not attach private files.
+ */
+export function createWorkspaceContextReader(
+  root: string,
+  files: Pick<WorkspaceAdapter, 'findFiles' | 'readFile' | 'realPath'>,
+): RunManagerDeps['readContextFiles'] {
+  return createContextFileReader(
+    (glob, max) => files.findFiles(glob, max),
+    async (relPath) => {
+      let absPath: string;
+      try {
+        absPath = await resolveInWorkspaceReal(root, relPath, (p) => files.realPath(p));
+      } catch (error) {
+        if (!(error instanceof WorkspacePathError)) throw error;
+        throw new Error('it is outside the workspace folder (through a symbolic link or junction)', {
+          cause: error,
+        });
+      }
+      return files.readFile(absPath);
+    },
+  );
 }
 
 function notAttached(skipped: number, moreMatched: boolean): string {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentSummary } from '@isar-flow/core';
-import { RECENT_RUNS, WORKFLOWS } from '../../harness/fixtures';
-import { agentLabel, agentReach, fileBaseName, fitPath, slugOf, templateOutline, uniqueKeys, workflowRunState } from '../../src/views/sidebar/model';
+import type { ActiveRunSummary, AgentSummary } from '@isar-flow/core';
+import { WORKFLOWS } from '../../harness/fixtures';
+import { activeRunOf, agentLabel, agentReach, fileBaseName, fitPath, slugOf, templateOutline, uniqueKeys } from '../../src/views/sidebar/model';
 import { parseViewState } from '../../src/views/sidebar/viewState';
 
 describe('sidebar model helpers', () => {
@@ -40,14 +40,12 @@ describe('sidebar model helpers', () => {
     expect(slugOf('  Docs Writer! ')).toBe('docs-writer');
   });
 
-  it('finds the active run of a workflow by uri, run id or running record', () => {
-    const [review] = WORKFLOWS;
-    const live = { ...RECENT_RUNS[0], runId: 'run-live', status: 'running' as const };
-    expect(workflowRunState(review, { activeRuns: [], recentRuns: RECENT_RUNS })).toEqual({ running: false });
-    expect(workflowRunState(review, { activeRuns: [review.uri], recentRuns: RECENT_RUNS })).toEqual({ running: true, runId: undefined, startedAt: undefined });
-    expect(workflowRunState(review, { activeRuns: [review.uri], recentRuns: [live, ...RECENT_RUNS] }).runId).toBe('run-live');
-    expect(workflowRunState(review, { activeRuns: ['run-live'], recentRuns: [live] }).running).toBe(true);
-    expect(workflowRunState(WORKFLOWS[1], { activeRuns: [review.uri], recentRuns: [live] }).running).toBe(false);
+  it('finds the newest active run of a workflow by its uri', () => {
+    const [review, testFix] = WORKFLOWS;
+    const active = (runId: string, workflowUri: string, startedAt: number): ActiveRunSummary => ({ runId, workflowUri, workflowName: 'Any', startedAt });
+    expect(activeRunOf(review, [])).toBeUndefined();
+    expect(activeRunOf(review, [active('run-8', testFix.uri, 1)])).toBeUndefined();
+    expect(activeRunOf(review, [active('run-8', review.uri, 1), active('run-9', review.uri, 2), active('run-7', review.uri, 0)])?.runId).toBe('run-9');
   });
 
   it('outlines templates from the real template YAML', () => {

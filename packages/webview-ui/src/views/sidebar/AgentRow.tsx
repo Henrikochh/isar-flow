@@ -50,12 +50,20 @@ export function AgentRow({ agent }: { agent: AgentSummary }) {
         <AgentStone id={agent.id || label} name={label} />
         <span className="sb-row__body">
           <span className="sb-row__title">
-            <span className="sb-row__name">{label}</span>
+            <span className="sb-row__name" title={label}>
+              {label}
+            </span>
             {agent.valid === false ? (
               <i className="codicon codicon-warning sb-warn" role="img" aria-label="Has problems" title="This agent file has problems. Open it to fix them." />
             ) : null}
           </span>
-          {model ? <span className="sb-row__code">{model}</span> : <span className="sb-row__muted">No model set</span>}
+          {model ? (
+            <span className="sb-row__code" title={model}>
+              {model}
+            </span>
+          ) : (
+            <span className="sb-row__muted">No model set</span>
+          )}
           <span className="sb-row__chips">
             <Chip icon="tools" title={reach.tools ? undefined : 'This agent only answers; it cannot read or change files.'}>
               {reach.tools ? plural(reach.tools, 'tool') : 'No tools'}

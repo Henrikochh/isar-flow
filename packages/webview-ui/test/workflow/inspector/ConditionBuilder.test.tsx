@@ -1,9 +1,8 @@
-import { cleanup, fireEvent, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { fireEvent, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { docFor, posted, REVIEW_LOOP, renderInspector, resetPosted, sentOps } from './helpers';
 
 beforeEach(resetPosted);
-afterEach(cleanup);
 
 const EXIT = { value: '${{ steps.tests.exitCode }}', op: 'eq', to: 0 };
 const APPROVED = { value: '${{ steps.review.json.approved }}', op: 'isTrue' };
@@ -43,6 +42,20 @@ describe('ConditionBuilder rules', () => {
       { op: 'updateStep', stepId: 'review_loop', set: { until: { all: [{ ...EXIT, to: 2 }, APPROVED] } } },
       { op: 'updateStep', stepId: 'review_loop', set: { until: { all: [{ ...EXIT, to: 'flaky' }, APPROVED] } } },
     ]);
+  });
+
+  it('builds on its own change when the next one comes before the host answers', () => {
+    renderInspector({ selection: 'review_loop' });
+    const operand = screen.getByLabelText('Rule 1 compare with');
+    fireEvent.change(operand, { target: { value: '7' } });
+    fireEvent.blur(operand);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove rule 2' }));
+    expect(sentOps().at(-1)).toEqual({
+      op: 'updateStep',
+      stepId: 'review_loop',
+      set: { until: { ...EXIT, to: 7 } },
+    });
+    expect(screen.getByLabelText('Rule 1 compare with')).toHaveValue('7');
   });
 
   it('removes a rule and changes how rules combine', () => {
@@ -177,8 +190,9 @@ describe('ConditionBuilder expressions', () => {
   it('inserts bare expressions from the variable picker', () => {
     renderInspector({ selection: 'needs_fix' });
     const expression = screen.getByLabelText('Expression') as HTMLTextAreaElement;
-    fireEvent.change(expression, { target: { value: ' > 0' } });
-    expression.setSelectionRange(0, 0);
+    // The picked variable replaces the selected placeholder.
+    fireEvent.change(expression, { target: { value: 'x > 0' } });
+    expression.setSelectionRange(0, 1);
     fireEvent.blur(expression);
     fireEvent.click(screen.getByRole('button', { name: 'Insert variable' }));
     fireEvent.click(screen.getByText('loop.iteration'));

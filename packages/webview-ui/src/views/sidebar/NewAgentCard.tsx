@@ -1,7 +1,7 @@
 import { type FormEvent, type ReactNode, type Ref, useId, useState } from 'react';
-import type { AgentScope, AgentSummary } from '@isar-flow/core';
+import type { AgentScope, AgentStarter, AgentSummary } from '@isar-flow/core';
 import { Button, Field, SegmentedControl, TextInput, type SegmentOption } from '../../components';
-import { agentLabel, slugOf, type AgentStarter } from './model';
+import { agentLabel, slugOf } from './model';
 import type { AgentDraft } from './viewState';
 
 const STARTER_OPTIONS: SegmentOption<AgentStarter>[] = [

@@ -64,7 +64,11 @@ export interface ProviderCommandDeps {
 export interface ProviderCommands {
   addProvider(): Promise<void>;
   editProvider(providerId?: string): Promise<void>;
-  removeProvider(providerId?: string): Promise<void>;
+  /**
+   * `confirmed`: the caller already asked (the sidebar confirms inline). Honored only together with an id,
+   * so an endpoint picked here is always confirmed here.
+   */
+  removeProvider(providerId?: string, options?: { confirmed?: boolean }): Promise<void>;
   setProviderKey(providerId?: string): Promise<void>;
   testProvider(providerId?: string): Promise<void>;
   refreshModels(): Promise<void>;
@@ -383,15 +387,17 @@ export function createProviderCommands(deps: ProviderCommandDeps): ProviderComma
       }
     },
 
-    async removeProvider(providerId) {
+    async removeProvider(providerId, options = {}) {
       if (providerId === VSCODE_PROVIDER_ID) return explainVsCode();
       const entry = await pickEntry(providerId, 'Remove model endpoint');
       if (!entry) return;
-      const confirmed = await ui.confirm(
-        `Remove the model endpoint '${entry.label}'?`,
-        "Agents that use its models stop working until you add it again. Its API key is deleted from VS Code's secret storage.",
-        'Remove',
-      );
+      const confirmed =
+        (options.confirmed === true && providerId !== undefined) ||
+        (await ui.confirm(
+          `Remove the model endpoint '${entry.label}'?`,
+          "Agents that use its models stop working until you add it again. Its API key is deleted from VS Code's secret storage.",
+          'Remove',
+        ));
       if (!confirmed) return;
       await settings.save(settings.entries().filter((raw) => !isEntry(raw, entry.id)));
       await secrets.delete(apiKeySecret(entry.id));

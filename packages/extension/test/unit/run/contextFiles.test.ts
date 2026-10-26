@@ -1,5 +1,13 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { CONTEXT_LIMITS, createContextFileReader } from '../../../src/run/contextFiles';
+import {
+  CONTEXT_LIMITS,
+  createContextFileReader,
+  createWorkspaceContextReader,
+} from '../../../src/run/contextFiles';
+import { removeTempDir } from '../runner/fixtures';
 
 const signal = () => new AbortController().signal;
 
@@ -79,5 +87,33 @@ describe('createContextFileReader', () => {
     const find = vi.fn(async () => []);
     expect(await createContextFileReader(find, async () => '')([], signal())).toEqual([]);
     expect(find).not.toHaveBeenCalled();
+  });
+});
+
+describe('createWorkspaceContextReader', () => {
+  it('does not attach files that a link or junction leads to outside the folder', async () => {
+    const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'isar-context-')));
+    try {
+      const root = path.join(base, 'ws');
+      const outside = path.join(base, 'private');
+      fs.mkdirSync(root);
+      fs.mkdirSync(outside);
+      fs.writeFileSync(path.join(outside, 'id_rsa'), 'PRIVATE KEY');
+      fs.writeFileSync(path.join(root, 'notes.md'), 'notes');
+      // 'junction' works without admin rights on Windows and is a plain symlink elsewhere.
+      fs.symlinkSync(outside, path.join(root, 'docs'), 'junction');
+      const read = createWorkspaceContextReader(root, {
+        findFiles: async () => ['docs/id_rsa', 'notes.md'],
+        readFile: (absPath) => fs.promises.readFile(absPath, 'utf8'),
+        realPath: (absPath) => fs.promises.realpath(absPath),
+      });
+      const files = await read(['**/*'], signal());
+      expect(files[1]).toEqual({ path: 'notes.md', content: 'notes' });
+      expect(files[0].path).toBe('docs/id_rsa');
+      expect(files[0].content).not.toContain('PRIVATE KEY');
+      expect(files[0].content).toMatch(/outside the workspace folder/);
+    } finally {
+      removeTempDir(base);
+    }
   });
 });

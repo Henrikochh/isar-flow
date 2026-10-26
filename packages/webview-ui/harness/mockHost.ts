@@ -13,7 +13,9 @@ import {
   runWorkflow,
   validateWorkflow,
   workflowTemplate,
+  type ActiveRunSummary,
   type AgentDocumentState,
+  type AgentSummary,
   type AgentEditorToHost,
   type ApprovalResult,
   type EngineHost,
@@ -21,24 +23,31 @@ import {
   type HostToSidebar,
   type HostToWorkflowEditor,
   type RunEvent,
+  type RunRecordSummary,
   type RunView,
   type SidebarState,
   type SidebarToHost,
   type Workflow,
   type WorkflowDocumentState,
   type WorkflowEditorToHost,
+  type WorkflowSummary,
 } from '@isar-flow/core';
 import {
   AGENTS,
   ALL_BLOCKS_WORKFLOW_TEXT,
   CATALOG,
+  FIXTURE_NOW,
   LONG_TEXT_WORKFLOW_TEXT,
+  NESTED_WORKFLOW_TEXT,
   RECENT_RUNS,
   REVIEWER_AGENT_TEXT,
   WORKFLOWS,
 } from './fixtures';
 
 type Send<T> = (message: T) => void;
+
+/** The documents as the mock host holds them, for scripted checks (scripts/interactions.mjs). */
+export const probe: { workflowText?: () => string; agentText?: () => string } = {};
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -62,11 +71,19 @@ function scenarioWorkflowText(scenario: string): string {
     case 'long':
     case 'long-narrow':
       return LONG_TEXT_WORKFLOW_TEXT;
+    case 'nested':
+    case 'nested-narrow':
+      return NESTED_WORKFLOW_TEXT;
     case 'invalid':
       return review.replace('prompt:', 'promt:');
     case 'syntax':
       return review.replace('steps:\n', 'steps:\n   broken: [\n');
-    case 'approval': {
+    // Hand-written blocks often lack ids; nothing refers to these two, so only the ids are missing.
+    case 'noids':
+      return review.replace('  - id: implement\n    type: agent', '  - type: agent').replace('- id: fix\n            type: agent', '- type: agent');
+    // 'approval' shows a run waiting at the approval; 'approval-live' starts without a run.
+    case 'approval':
+    case 'approval-live': {
       const parsed = parseWorkflowText(review).workflow as Workflow;
       const result = applyWorkflowOps(review, [
         {
@@ -152,11 +169,23 @@ function harnessAgents() {
   return definitions;
 }
 
-async function collectEvents(workflow: Workflow, host: EngineHost, signal?: AbortSignal, onEvent?: (e: RunEvent) => void) {
-  let clock = Date.UTC(2026, 9, 26, 9, 26);
+interface CollectOptions {
+  runId?: string;
+  /** Start of the scripted clock (1.7 s per event). Runs with `onEvent` are live and use the real clock. */
+  startedAt?: number;
+  signal?: AbortSignal;
+  onEvent?: (event: RunEvent) => void;
+}
+
+async function collectEvents(
+  workflow: Workflow,
+  host: EngineHost,
+  { runId = 'run-live', startedAt = Date.UTC(2026, 9, 26, 9, 26), signal, onEvent }: CollectOptions = {},
+) {
+  let clock = startedAt;
   const events: RunEvent[] = [];
   const generator = runWorkflow(workflow, {
-    runId: 'run-live',
+    runId,
     inputs: { task: 'Add voucher codes to the checkout' },
     host,
     agents: harnessAgents(),
@@ -177,10 +206,37 @@ function viewOf(events: RunEvent[]): RunView | null {
   return events.reduce<RunView | null>((view, event) => reduceRunEvent(view, event), null);
 }
 
+/** A finished run as the host keeps it: the summary for the history list and the view to show it again. */
+interface PastRun {
+  summary: RunRecordSummary;
+  view: RunView;
+}
+
+function pastRun(view: RunView): PastRun {
+  const { runId, workflowName, status, startedAt, durationMs, error, usage } = view;
+  return { summary: { runId, workflowUri: WORKFLOW_URI, workflowName, status, startedAt, durationMs, error, usage }, view };
+}
+
+/** Runs of the review workflow from before the harness opened: a success minutes ago, a failure two days ago. */
+async function seedHistory(): Promise<PastRun[]> {
+  const workflow = parseWorkflowText(scenarioWorkflowText('default')).workflow;
+  if (!workflow) return [];
+  const success = await collectEvents(workflow, createFakeHost(), { runId: 'run-7', startedAt: FIXTURE_NOW - 4 * 60_000 });
+  const failure = await collectEvents(workflow, createFakeHost({ failTests: true }), {
+    runId: 'run-3',
+    startedAt: FIXTURE_NOW - 2 * 86_400_000,
+  });
+  return [viewOf(success), viewOf(failure)].filter((view): view is RunView => view !== null).map(pastRun);
+}
+
 export function workflowHost(scenario: string, send: Send<HostToWorkflowEditor>) {
   let text = scenarioWorkflowText(scenario);
+  probe.workflowText = () => text;
   let controller: AbortController | undefined;
   let liveView: RunView | null = null;
+  /** Finished runs, newest first; `selectRun` shows them again. */
+  let history: PastRun[] = [];
+  const sendHistory = () => send({ type: 'history', runs: history.map((run) => run.summary) });
   const pendingApprovals = new Map<string, (result: ApprovalResult) => void>();
 
   const doc = (source = text): WorkflowDocumentState => {
@@ -219,6 +275,10 @@ export function workflowHost(scenario: string, send: Send<HostToWorkflowEditor>)
         type: 'approvalRequest',
         prompt: { requestId: 'approval-1', runId: 'run-live', stepId: 'ship_it', message: 'Merge the reviewed changes into main?' },
       });
+    } else if (scenario === 'history') {
+      // A past failed run picked from the history: shown read-only, with its summary in the inspector.
+      const failed = history.find((run) => run.summary.status === 'failure');
+      if (failed) send({ type: 'run', run: failed.view, live: false });
     } else if (scenario === 'selected') {
       send({ type: 'focusStep', stepId: 'review' });
     } else if (scenario === 'condition') {
@@ -233,20 +293,30 @@ export function workflowHost(scenario: string, send: Send<HostToWorkflowEditor>)
     if (!workflow) return;
     controller = new AbortController();
     liveView = null;
+    const runId = `run-${Date.now().toString(36)}`;
     const host = createFakeHost({
       delayMs: 350,
       approval: (stepId, message) =>
         new Promise<ApprovalResult>((resolve) => {
           const requestId = `approval-${Math.random().toString(36).slice(2)}`;
           pendingApprovals.set(requestId, resolve);
-          send({ type: 'approvalRequest', prompt: { requestId, runId: 'run-live', stepId, message } });
+          send({ type: 'approvalRequest', prompt: { requestId, runId, stepId, message } });
         }),
     });
     void inputs;
-    await collectEvents(workflow, host, controller.signal, (event) => {
-      liveView = reduceRunEvent(liveView, event);
-      send({ type: 'runEvent', event });
+    await collectEvents(workflow, host, {
+      runId,
+      signal: controller.signal,
+      onEvent: (event) => {
+        liveView = reduceRunEvent(liveView, event);
+        send({ type: 'runEvent', event });
+      },
     });
+    const finished: RunView | null = liveView;
+    if (finished) {
+      history = [pastRun(finished), ...history];
+      sendHistory();
+    }
   };
 
   return (message: WorkflowEditorToHost) => {
@@ -257,8 +327,12 @@ export function workflowHost(scenario: string, send: Send<HostToWorkflowEditor>)
         send({ type: 'document', doc: doc() });
         send({ type: 'catalog', agents: AGENTS, catalog: CATALOG });
         send({ type: 'trust', trusted: scenario !== 'untrusted' });
-        send({ type: 'history', runs: RECENT_RUNS.filter((r) => r.workflowUri === WORKFLOW_URI) });
-        void prepareScenario().then(markReady);
+        void (async () => {
+          history = await seedHistory();
+          sendHistory();
+          await prepareScenario();
+          markReady();
+        })();
         break;
       case 'ops': {
         const result = applyWorkflowOps(text, message.ops);
@@ -281,9 +355,15 @@ export function workflowHost(scenario: string, send: Send<HostToWorkflowEditor>)
         send({ type: 'approvalResolved', requestId: message.requestId });
         break;
       }
-      case 'selectRun':
-        send({ type: 'run', run: message.runId ? null : liveView, live: message.runId === null });
+      case 'selectRun': {
+        if (message.runId === null) {
+          send({ type: 'run', run: liveView, live: true });
+          break;
+        }
+        const past = history.find((run) => run.summary.runId === message.runId);
+        send({ type: 'run', run: past?.view ?? null, live: false });
         break;
+      }
       default:
         console.info('[mock host] workflow message', message);
     }
@@ -291,6 +371,24 @@ export function workflowHost(scenario: string, send: Send<HostToWorkflowEditor>)
 }
 
 /* ---------------- sidebar ---------------- */
+
+/** Names, ids and paths at the edge of what people write, to check ellipses and wrapping (token "long"). */
+const LONG_AGENT: AgentSummary = {
+  id: 'security-and-dependency-upgrade-reviewer',
+  name: 'Security and dependency upgrade reviewer for payments',
+  model: 'litellm/anthropic.claude-sonnet-4-20250514-v1:0-eu-central-1',
+  tools: ['readFile', 'listFiles', 'searchText', 'gitDiff', 'runCommand'],
+  scope: 'user',
+  uri: 'file:///c%3A/Users/me/agents/security-and-dependency-upgrade-reviewer.agent.yaml',
+  valid: true,
+};
+const LONG_WORKFLOW: WorkflowSummary = {
+  uri: 'file:///c%3A/work/shop/.isarflow/workflows/nightly/upgrade-dependencies-and-fix-everything.workflow.yaml',
+  name: 'Upgrade all dependencies, run the full test matrix and fix what breaks',
+  relativePath: '.isarflow/workflows/nightly/upgrade-dependencies-and-fix-everything.workflow.yaml',
+  valid: true,
+  stepCount: 9,
+};
 
 /** Sidebar scenarios combine tokens, e.g. "narrow-workflows" or "wide-running". */
 const sidebarHas = (scenario: string, token: string) => scenario.split('-').includes(token);
@@ -305,11 +403,10 @@ export function sidebarViewState(scenario: string): unknown {
 export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
   const has = (token: string) => sidebarHas(scenario, token);
   const empty = has('empty');
-  const liveRun = (workflow: (typeof WORKFLOWS)[number], startedAt: number) => ({
+  const liveRun = (workflow: WorkflowSummary, startedAt: number): ActiveRunSummary => ({
     runId: `run-live-${startedAt}`,
     workflowUri: workflow.uri,
     workflowName: workflow.name,
-    status: 'running' as const,
     startedAt,
   });
   const running = has('running') ? liveRun(WORKFLOWS[0], Date.now() - 70_000) : undefined;
@@ -326,8 +423,10 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
             { id: 'translator', name: '', model: '', tools: [], scope: 'workspace', uri: 'file:///c%3A/work/shop/.isarflow/agents/translator.agent.yaml', valid: false },
             { ...AGENTS[1], scope: 'user', shadowed: true, uri: 'file:///c%3A/Users/me/agents/reviewer.agent.yaml' },
           ]
-        : [...AGENTS],
-    workflows: empty ? [] : messy ? [...WORKFLOWS, { uri: 'file:///c%3A/work/shop/broken.workflow.yaml', name: '', relativePath: 'broken.workflow.yaml', valid: false, stepCount: 0 }] : [...WORKFLOWS],
+        : has('long')
+          ? [LONG_AGENT, ...AGENTS]
+          : [...AGENTS],
+    workflows: empty ? [] : has('long') ? [LONG_WORKFLOW, ...WORKFLOWS] : messy ? [...WORKFLOWS, { uri: 'file:///c%3A/work/shop/broken.workflow.yaml', name: '', relativePath: 'broken.workflow.yaml', valid: false, stepCount: 0 }] : [...WORKFLOWS],
     catalog: messy
       ? {
           ...CATALOG,
@@ -339,16 +438,22 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
           ],
         }
       : CATALOG,
-    recentRuns: empty ? [] : running ? [running, ...RECENT_RUNS] : RECENT_RUNS,
-    activeRuns: running ? [running.workflowUri] : [],
+    recentRuns: empty
+      ? []
+      : has('long')
+        ? [{ ...RECENT_RUNS[1], runId: 'run-long', workflowUri: LONG_WORKFLOW.uri, workflowName: LONG_WORKFLOW.name }, ...RECENT_RUNS]
+        : RECENT_RUNS,
+    activeRuns: running ? [running] : [],
     tab: ['workflows', 'untrusted', 'running', 'newworkflow'].some(has) ? 'workflows' : 'agents',
   };
   const push = () => send({ type: 'state', state: { ...state } });
   const finishRun = (runId: string, status: 'success' | 'cancelled') => {
-    const run = state.recentRuns.find((r) => r.runId === runId);
-    if (!run || run.status !== 'running') return;
-    state.recentRuns = state.recentRuns.map((r) => (r.runId === runId ? { ...r, status, durationMs: Date.now() - r.startedAt } : r));
-    state.activeRuns = state.activeRuns.filter((uri) => uri !== run.workflowUri);
+    const run = state.activeRuns.find((r) => r.runId === runId);
+    if (!run) return;
+    const record: RunRecordSummary = { ...run, status, durationMs: Date.now() - run.startedAt };
+    state.activeRuns = state.activeRuns.filter((r) => r.runId !== runId);
+    state.recentRuns = [record, ...state.recentRuns];
+    state.workflows = state.workflows.map((w) => (w.uri === run.workflowUri ? { ...w, lastRun: record } : w));
     push();
   };
 
@@ -362,11 +467,24 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
         state.tab = message.tab;
         push();
         break;
-      case 'createAgent':
+      case 'createAgent': {
+        const id = message.name.toLowerCase().replace(/\W+/g, '-');
+        // Starters borrow the tools of the matching sample agent; blank agents only read.
+        const tools = AGENTS.find((a) => a.id === message.starter)?.tools ?? ['readFile', 'listFiles', 'searchText'];
         state.agents = [
           ...state.agents,
-          { id: message.name.toLowerCase().replace(/\W+/g, '-'), name: message.name, model: 'vscode/copilot/gpt-4.1', tools: [], scope: message.scope, uri: 'file:///new.agent.yaml', valid: true },
+          { id, name: message.name, model: 'vscode/copilot/gpt-4.1', tools, scope: message.scope, uri: `file:///${id}.agent.yaml`, valid: true },
         ];
+        push();
+        break;
+      }
+      // Confirmed inline by the webview, so the host acts without asking again.
+      case 'deleteAgent':
+        state.agents = state.agents.filter((a) => a.uri !== message.uri);
+        push();
+        break;
+      case 'removeProvider':
+        state.catalog = { ...state.catalog, providers: state.catalog.providers.filter((p) => p.id !== message.providerId) };
         push();
         break;
       case 'createWorkflow':
@@ -380,8 +498,7 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
         const workflow = state.workflows.find((w) => w.uri === message.uri);
         if (!workflow) break;
         const run = liveRun(workflow, Date.now());
-        state.activeRuns = [...state.activeRuns, message.uri];
-        state.recentRuns = [run, ...state.recentRuns];
+        state.activeRuns = [...state.activeRuns, run];
         push();
         setTimeout(() => finishRun(run.runId, 'success'), 4000);
         break;
@@ -411,8 +528,23 @@ export function agentHost(scenario: string, send: Send<HostToAgentEditor>) {
       ? newAgentText('Translator')
       : scenario === 'invalid'
         ? REVIEWER_AGENT_TEXT.replace('temperature: 0.2', 'temperature: 3').replace('edits: none', 'edits: sometimes')
-        : REVIEWER_AGENT_TEXT;
-  const id = scenario === 'new' ? 'translator' : 'reviewer';
+        : scenario === 'noperms'
+          ? // Tools that need permissions, but no levels set: the editor shows the effective "Ask".
+            REVIEWER_AGENT_TEXT.replace('gitDiff]', 'gitDiff, editFile, runCommand]').replace(/permissions:\n( {2}.*\n)+/, '')
+          : scenario === 'long'
+            ? REVIEWER_AGENT_TEXT.replace('name: Reviewer', 'name: Security and dependency upgrade reviewer for payments')
+                .replace('description: Strict senior code reviewer', 'description: Checks every dependency bump for breaking changes, licence problems and known vulnerabilities before it is merged')
+                .replace('model: vscode/copilot/gpt-4.1', 'model: litellm/anthropic.claude-sonnet-4-20250514-v1:0-eu-central-1')
+                .replace('  - litellm/claude-sonnet', '  - litellm/claude-sonnet\n  - openrouter/meta-llama/llama-3.3-70b-instruct:free\n  - ollama/qwen2.5-coder:32b')
+            : REVIEWER_AGENT_TEXT;
+  const id = scenario === 'new' ? 'translator' : scenario === 'long' ? 'security-and-dependency-upgrade-reviewer' : 'reviewer';
+  const usedBy =
+    scenario === 'long'
+      ? ['.isarflow/workflows/nightly/upgrade-dependencies-and-fix-everything.workflow.yaml', '.isarflow/workflows/review-loop.workflow.yaml']
+      : id === 'reviewer'
+        ? ['.isarflow/workflows/review-loop.workflow.yaml']
+        : [];
+  probe.agentText = () => text;
   let streaming: { cancelled: boolean } | undefined;
 
   const doc = (): AgentDocumentState => {
@@ -426,7 +558,7 @@ export function agentHost(scenario: string, send: Send<HostToAgentEditor>) {
       agent: parsed.agent,
       valid: parsed.valid,
       diagnostics: parsed.diagnostics,
-      usedBy: id === 'reviewer' ? ['.isarflow/workflows/review-loop.workflow.yaml'] : [],
+      usedBy,
     };
   };
 

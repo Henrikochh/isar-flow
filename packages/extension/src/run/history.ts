@@ -27,8 +27,6 @@ export interface HistoryStore {
 }
 
 export interface FileRunHistory extends RunHistory, vscode.Disposable {
-  /** Reads a saved run (and caches it for `get`). */
-  getAsync(runId: string): Promise<RunView | undefined>;
   /** Loads the newest saved runs into the cache so `get` can answer synchronously. */
   loadAll(workflowUri?: string): Promise<void>;
 }

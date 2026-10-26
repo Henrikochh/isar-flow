@@ -20,6 +20,8 @@ export interface ToolContext {
   resolvePath(input: string): Promise<string>;
   /** Workspace-relative path with forward slashes ('.' for the root). */
   displayPath(absPath: string): string;
+  /** Like displayPath, with links, junctions and short names resolved: where a write really lands. */
+  realDisplayPath(absPath: string): Promise<string>;
   /** Resolves when the tool may go ahead; throws ToolError when the agent's permission or the user says no. */
   authorize(tool: ToolName, summary: string, detail?: string): Promise<void>;
 }

@@ -1,9 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import type { HostToSidebar, ModelCatalog, SidebarToHost } from '@isar-flow/core';
+import type { HostToSidebar, ModelCatalog, RunRecordSummary, SidebarToHost } from '@isar-flow/core';
 import type { Services } from '../../../src/contracts';
 import { registerSidebar, SIDEBAR_TAB_KEY, SIDEBAR_VIEW_ID } from '../../../src/sidebar/sidebarProvider';
 import { fakeContext, fakeLog, installFakeWorkspace } from '../store/fakeWorkspace';
+
+const FLOW_URI = 'file:///ws/a.workflow.yaml';
+const finished: RunRecordSummary = {
+  runId: 'old',
+  workflowUri: FLOW_URI,
+  workflowName: 'A',
+  status: 'success',
+  startedAt: 1,
+};
 
 function fakeServices() {
   const emitters = {
@@ -23,8 +32,14 @@ function fakeServices() {
     models: { onDidChange: emitters.models.event, catalog: () => catalog },
     runs: {
       onDidChangeRuns: emitters.runs.event,
-      history: { onDidChange: emitters.history.event, list: () => [] },
-      active: () => [{ runId: 'r', workflowUri: 'file:///ws/a.workflow.yaml' }],
+      history: { onDidChange: emitters.history.event, list: () => [finished] },
+      active: () => [
+        {
+          runId: 'r',
+          workflowUri: FLOW_URI,
+          view: { runId: 'r', workflowName: 'A', status: 'running', startedAt: 5 },
+        },
+      ],
     },
   } as unknown as Services;
   return { services, emitters, listAgents };
@@ -110,8 +125,8 @@ describe('sidebar provider', () => {
           agents: [],
           workflows: [],
           catalog: { models: [], providers: [], loading: false },
-          recentRuns: [],
-          activeRuns: ['file:///ws/a.workflow.yaml'],
+          recentRuns: [finished],
+          activeRuns: [{ runId: 'r', workflowUri: FLOW_URI, workflowName: 'A', startedAt: 5 }],
           tab: 'workflows',
         },
       },

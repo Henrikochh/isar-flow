@@ -81,6 +81,19 @@ describe('runConsoleCommand', () => {
     expect(value).toBe('hello');
   });
 
+  it('does not pass on ELECTRON_RUN_AS_NODE, which the extension host sets for itself', SLOW, async () => {
+    const before = process.env.ELECTRON_RUN_AS_NODE;
+    process.env.ELECTRON_RUN_AS_NODE = '1';
+    try {
+      const result = await run('node -e "console.log(process.env.ELECTRON_RUN_AS_NODE || \'unset\')"')
+        .promise;
+      expect(result.stdout.trim()).toBe('unset');
+    } finally {
+      if (before === undefined) delete process.env.ELECTRON_RUN_AS_NODE;
+      else process.env.ELECTRON_RUN_AS_NODE = before;
+    }
+  });
+
   it('runs npm through its shim', SLOW, async () => {
     const result = await run('npm --version').promise;
     expect(result.exitCode).toBe(0);

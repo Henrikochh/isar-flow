@@ -23,7 +23,7 @@ export interface BlockHandle {
 /** Selection, keyboard focus and drag wiring shared by cards and container headers. */
 export function useBlockHandle(entry: BlockEntry): BlockHandle {
   const { editable } = useEditor();
-  const { selection, tabStop, select, run } = useCanvas();
+  const { selection, tabStop, select, run, openMenu } = useCanvas();
   const title = blockTitle(entry);
   const item: DragItem | null = entry.id
     ? { kind: 'move', stepId: entry.id, stepType: entry.type, title }
@@ -39,6 +39,13 @@ export function useBlockHandle(entry: BlockEntry): BlockHandle {
     event.stopPropagation();
     if (entry.id) select(entry.id);
   };
+  const onContextMenu = (event: MouseEvent) => {
+    event.stopPropagation();
+    if (!entry.id || !editable) return;
+    event.preventDefault();
+    select(entry.id);
+    openMenu(entry.id, { x: event.clientX, y: event.clientY });
+  };
   return {
     props: {
       ref: setNodeRef,
@@ -50,6 +57,7 @@ export function useBlockHandle(entry: BlockEntry): BlockHandle {
       'data-step-id': entry.id,
       'data-wf-card': '',
       onClick,
+      onContextMenu,
     },
     selected,
     dragging: isDragging,

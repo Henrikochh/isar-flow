@@ -37,8 +37,11 @@ export function ToolsSection({ tools, error, update }: { tools: string[]; error?
           <div key={group.risk} className="ag-tool-group" role="group" aria-label={group.title}>
             <div className="ag-tool-group__header">
               <i className={`codicon codicon-${group.icon} ag-tool-group__icon ag-risk-${group.risk}`} aria-hidden="true" />
-              <span className="ag-tool-group__title">{group.title}</span>
-              <span className="ag-tool-group__hint">{group.hint}</span>
+              {/* One run of text, so a wrapped hint lines up under the title instead of the icon. */}
+              <span className="ag-tool-group__text">
+                <span className="ag-tool-group__title">{group.title}</span>{' '}
+                <span className="ag-tool-group__hint">{group.hint}</span>
+              </span>
             </div>
             {TOOL_NAMES.filter((name) => TOOL_INFO[name].risk === group.risk).map((name) => (
               <div key={name} className="ag-tool">

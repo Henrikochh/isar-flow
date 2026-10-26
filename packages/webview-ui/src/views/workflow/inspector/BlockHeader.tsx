@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { type BlockNode, collectStepIds, STEP_ID_PATTERN, STEP_TYPE_INFO, type Workflow } from '@isar-flow/core';
-import { IconButton, Stone, TextInput } from '../../../components';
+import { IconButton, Popover, Stone, TextInput } from '../../../components';
+import { MoveToMenu } from '../canvas/MoveToMenu';
 import { useWorkflowActions, useWorkflowState } from '../store';
 import { DraftInput } from './fields';
 import { FieldIssues } from './Issues';
@@ -43,35 +44,68 @@ export function BlockHeader({
           </span>
         )}
         <div className="wf-insp-head-titles">
-          <DraftInput
-            className="wf-insp-name"
-            aria-label="Block name"
-            placeholder={stepId}
-            value={asString(step.name)}
-            onCommit={(name) => setOrUnset(update, 'name', name.trim())}
-          />
+          <div className="wf-insp-head-name-row">
+            <DraftInput
+              className="wf-insp-name"
+              aria-label="Block name"
+              placeholder={stepId}
+              value={asString(step.name)}
+              onCommit={(name) => setOrUnset(update, 'name', name.trim())}
+            />
+            <div className="wf-insp-head-actions">
+              <MoveButton stepId={stepId} workflow={doc?.workflow} />
+              <IconButton icon="copy" label="Duplicate" onClick={() => actions.applyOps([{ op: 'duplicateStep', stepId }])} />
+              <IconButton icon="go-to-file" label="Show in YAML" onClick={() => actions.openYaml(stepId)} />
+              <IconButton
+                icon="trash"
+                label="Delete"
+                className="wf-insp-delete"
+                onClick={() => {
+                  actions.applyOps([{ op: 'deleteStep', stepId }]);
+                  actions.select(null);
+                }}
+              />
+            </div>
+          </div>
           <div className="wf-insp-head-meta">
             <span className="wf-insp-head-type">{type ? STEP_TYPE_INFO[type].label : 'Unknown block'}</span>
             <ParentLink block={block} />
           </div>
         </div>
-        <div className="wf-insp-head-actions">
-          <IconButton icon="copy" label="Duplicate" onClick={() => actions.applyOps([{ op: 'duplicateStep', stepId }])} />
-          <IconButton icon="go-to-file" label="Show in YAML" onClick={() => actions.openYaml(stepId)} />
-          <IconButton
-            icon="trash"
-            label="Delete"
-            className="wf-insp-delete"
-            onClick={() => {
-              actions.applyOps([{ op: 'deleteStep', stepId }]);
-              actions.select(null);
-            }}
-          />
-        </div>
       </div>
       <IdField id={stepId} workflow={doc?.workflow} onRename={onRename} />
       <FieldIssues issues={[...(issues.get('id') ?? []), ...(issues.get('name') ?? [])]} />
     </header>
+  );
+}
+
+/** "Move to…": the keyboard-friendly way to put the block into another list. */
+function MoveButton({ stepId, workflow }: { stepId: string; workflow: Workflow | null | undefined }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLButtonElement>(null);
+  const { applyOps } = useWorkflowActions();
+  return (
+    <>
+      <IconButton
+        ref={ref}
+        icon="move"
+        label="Move to…"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      />
+      <Popover open={open} anchorRef={ref} onClose={() => setOpen(false)} label="Move to" role="none" placement="bottom-end" width={264}>
+        <MoveToMenu
+          workflow={workflow}
+          stepId={stepId}
+          onMove={(target) => {
+            setOpen(false);
+            applyOps([{ op: 'moveStep', stepId, target }]);
+            ref.current?.focus();
+          }}
+        />
+      </Popover>
+    </>
   );
 }
 

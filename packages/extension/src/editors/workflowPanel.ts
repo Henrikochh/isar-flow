@@ -75,11 +75,8 @@ export class WorkflowPanel implements vscode.Disposable {
         return;
       case 'selectRun':
         return this.selectRun(message.runId);
-      case 'approval': {
-        const { requestId, approved, comment } = message;
-        runs.approvals.respond(requestId, comment === undefined ? { approved } : { approved, comment });
-        return;
-      }
+      case 'approval':
+        return this.answerApproval(message.requestId, message.approved, message.comment);
       case 'openYaml':
         return this.openYaml(message.stepId);
       case 'openAgent':
@@ -125,7 +122,7 @@ export class WorkflowPanel implements vscode.Disposable {
 
   /** Shows a past run on the canvas, now or as soon as the webview is ready. */
   showRun(runId: string): void {
-    if (this.ready) this.selectRun(runId);
+    if (this.ready) void this.selectRun(runId);
     else this.requestedRunId = runId;
   }
 
@@ -183,12 +180,12 @@ export class WorkflowPanel implements vscode.Disposable {
     this.requestedRunId = undefined;
     this.historyRunId = undefined;
     const live = this.liveRun();
-    if (requested !== undefined) this.selectRun(requested);
+    if (requested !== undefined) void this.selectRun(requested);
     else if (live) this.post({ type: 'run', run: live.view, live: true });
     for (const prompt of this.approvals.for(this.uri)) this.post({ type: 'approvalRequest', prompt });
   }
 
-  private selectRun(runId: string | null): void {
+  private async selectRun(runId: string | null): Promise<void> {
     const live = this.liveRun();
     if (runId === null || runId === live?.runId) {
       this.historyRunId = undefined;
@@ -196,13 +193,31 @@ export class WorkflowPanel implements vscode.Disposable {
       return;
     }
     this.historyRunId = runId;
-    this.post({ type: 'run', run: this.services.runs.history.get(runId) ?? null, live: false });
+    const { history } = this.services.runs;
+    const cached = history.get(runId);
+    if (cached) return this.post({ type: 'run', run: cached, live: false });
+    const stored = await history.getAsync(runId).catch(() => undefined);
+    // Another run may have been selected, or a new run started, while the saved run was read.
+    if (this.historyRunId === runId) this.post({ type: 'run', run: stored ?? null, live: false });
   }
 
   /** Live events go to the canvas unless it shows a past run; a new run always takes over the canvas. */
   private onRunEvent(event: RunEvent): void {
     if (event.type === 'run-start') this.historyRunId = undefined;
     if (this.historyRunId === undefined) this.post({ type: 'runEvent', event });
+  }
+
+  /**
+   * The answer comes from the webview, so it counts only for a prompt this canvas shows right now: not for
+   * another workflow's prompt, nor for one that moved to a dialog when the canvas was hidden.
+   */
+  private answerApproval(requestId: unknown, approved: unknown, comment: unknown): void {
+    if (typeof approved !== 'boolean') return;
+    if (!this.approvals.for(this.uri).some((prompt) => prompt.requestId === requestId)) return;
+    this.services.runs.approvals.respond(
+      requestId as string,
+      typeof comment === 'string' ? { approved, comment } : { approved },
+    );
   }
 
   private async applyOps(ops: WorkflowOp[]): Promise<void> {
@@ -234,7 +249,11 @@ export class WorkflowPanel implements vscode.Disposable {
       uri = vscode.Uri.parse(record.summary.uri);
     } else {
       if (!(await this.ui.confirm(`Agent '${agentId}' does not exist yet.`, 'Create agent'))) return;
-      uri = await this.services.agents.create(agentId, 'workspace');
+      // The file must carry exactly the id the workflow refers to, next to the workflow in multi-root setups.
+      uri = await this.services.agents.create(agentId, 'workspace', 'blank', {
+        id: agentId,
+        folder: this.ui.workspaceFolderOf(this.document.uri),
+      });
     }
     await this.ui.executeCommand('vscode.openWith', uri, AGENT_EDITOR_VIEW_TYPE);
   }

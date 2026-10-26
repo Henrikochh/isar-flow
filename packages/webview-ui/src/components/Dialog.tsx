@@ -1,7 +1,19 @@
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef } from 'react';
 import { IconButton } from './Button';
 
-/** Modal dialog with Escape to close and focus moved inside on open. */
+const FOCUSABLE =
+  'input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
+
+function tabStops(root: HTMLElement): HTMLElement[] {
+  const candidates = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+    (el) => el.tabIndex >= 0 && !el.closest('[hidden]'),
+  );
+  const shown = candidates.filter((el) => el.getClientRects().length > 0);
+  // jsdom has no layout; there every candidate counts.
+  return shown.length ? shown : candidates;
+}
+
+/** Modal dialog: focus moves inside on open, Tab cycles within it, Escape closes it and focus returns. */
 export function Dialog({
   title,
   icon,
@@ -16,6 +28,7 @@ export function Dialog({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -25,6 +38,27 @@ export function Dialog({
     first?.focus();
     return () => previous?.focus?.();
   }, []);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      onClose();
+      return;
+    }
+    if (event.key !== 'Tab' || !ref.current) return;
+    const stops = tabStops(ref.current);
+    if (!stops.length) return;
+    const first = stops[0];
+    const last = stops[stops.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !ref.current.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !ref.current.contains(active))) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   return (
     <div
@@ -38,17 +72,12 @@ export function Dialog({
         className="if-dialog"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="if-dialog-title"
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.stopPropagation();
-            onClose();
-          }
-        }}
+        aria-labelledby={titleId}
+        onKeyDown={onKeyDown}
       >
         <div className="if-dialog__header">
           {icon}
-          <h2 className="if-dialog__title" id="if-dialog-title">
+          <h2 className="if-dialog__title" id={titleId}>
             {title}
           </h2>
           <IconButton icon="close" label="Close" onClick={onClose} data-dialog-close />

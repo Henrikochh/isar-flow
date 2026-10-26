@@ -5,7 +5,7 @@ import { NewWorkflowCard } from './NewWorkflowCard';
 import { RecentRuns } from './RecentRuns';
 import { RiverArt } from './RiverArt';
 import { WorkflowRow } from './WorkflowRow';
-import { send, uniqueKeys, workflowRunState } from './model';
+import { activeRunOf, send, uniqueKeys } from './model';
 import { useNow } from './useNow';
 import { NEW_WORKFLOW_DRAFT, type WorkflowDraft } from './viewState';
 import './workflows.css';
@@ -19,10 +19,11 @@ export function WorkflowsPanel({
   draft: WorkflowDraft | undefined;
   onDraftChange: (draft: WorkflowDraft | undefined) => void;
 }) {
-  const now = useNow();
+  const { workflows, recentRuns, activeRuns } = state;
+  // Elapsed times of active runs tick every second; relative times of finished runs need far less.
+  const now = useNow(activeRuns.length > 0 ? 1000 : 30_000);
   const newRef = useRef<HTMLButtonElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
-  const { workflows, recentRuns } = state;
   const keys = uniqueKeys(workflows, (workflow) => workflow.uri);
 
   const open = () => (draft ? nameRef.current?.focus() : onDraftChange(NEW_WORKFLOW_DRAFT));
@@ -58,7 +59,7 @@ export function WorkflowsPanel({
           <ul className="sb-list" aria-label="Workflows">
             {workflows.map((workflow, index) => (
               <li key={keys[index]}>
-                <WorkflowRow workflow={workflow} run={workflowRunState(workflow, state)} trusted={state.trusted} now={now} />
+                <WorkflowRow workflow={workflow} run={activeRunOf(workflow, activeRuns)} trusted={state.trusted} now={now} />
               </li>
             ))}
           </ul>
@@ -76,7 +77,9 @@ export function WorkflowsPanel({
           </EmptyState>
         )}
       </Section>
-      {workflows.length > 0 || recentRuns.length > 0 ? <RecentRuns runs={recentRuns} now={now} /> : null}
+      {workflows.length > 0 || recentRuns.length > 0 || activeRuns.length > 0 ? (
+        <RecentRuns active={activeRuns} runs={recentRuns} now={now} />
+      ) : null}
     </>
   );
 }

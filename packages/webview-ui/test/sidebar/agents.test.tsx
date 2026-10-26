@@ -1,12 +1,11 @@
-import { cleanup, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { AgentSummary } from '@isar-flow/core';
 import { AGENTS } from '../../harness/fixtures';
 import { postedOfType, renderSidebar, resetPosted } from './helpers';
 
 beforeEach(resetPosted);
-afterEach(cleanup);
 
 const agentRow = (name: RegExp) => screen.getByRole('button', { name });
 
@@ -32,6 +31,13 @@ describe('Agents tab', () => {
     expect(reviewer).not.toHaveTextContent('Edits files');
 
     expect(agentRow(/^Docs writer/)).toHaveTextContent('User');
+  });
+
+  it('gives names and models that may be cut off a tooltip with the full text', () => {
+    renderSidebar();
+    const coder = agentRow(/^Coder/);
+    expect(within(coder).getByTitle('Coder')).toHaveTextContent('Coder');
+    expect(within(coder).getByTitle('litellm/claude-sonnet')).toHaveTextContent('litellm/claude-sonnet');
   });
 
   it('deletes an agent only after the inline confirmation', async () => {
@@ -82,7 +88,7 @@ describe('New agent card', () => {
     expect(screen.queryByRole('form', { name: 'New agent' })).not.toBeInTheDocument();
   });
 
-  it('keeps a typed name when the starter changes, and sends blank agents without a starter', async () => {
+  it('keeps a typed name when the starter changes, and sends the blank starter too', async () => {
     const user = userEvent.setup();
     renderSidebar();
     await user.click(screen.getByRole('button', { name: 'New agent' }));
@@ -91,7 +97,7 @@ describe('New agent card', () => {
     await user.click(screen.getByRole('radio', { name: 'Blank' }));
     expect(screen.getByLabelText('Name')).toHaveValue('  Translator ');
     await user.type(screen.getByLabelText('Name'), '{Enter}');
-    expect(postedOfType('createAgent')).toEqual([{ type: 'createAgent', name: 'Translator', scope: 'workspace' }]);
+    expect(postedOfType('createAgent')).toEqual([{ type: 'createAgent', name: 'Translator', scope: 'workspace', starter: 'blank' }]);
   });
 
   it('explains what is wrong instead of creating an unnamed or clashing agent', async () => {

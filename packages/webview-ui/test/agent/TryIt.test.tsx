@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { AgentEditorToHost } from '@isar-flow/core';
 import { AgentApp } from '../../src/views/agent/AgentApp';
 import type { TryItViewState } from '../../src/views/agent/transcript';
@@ -37,7 +37,6 @@ beforeEach(() => {
   host.posted.length = 0;
   host.state = undefined;
 });
-afterEach(cleanup);
 
 describe('Try it', () => {
   it('shows the empty state until something is asked', () => {
@@ -45,6 +44,12 @@ describe('Try it', () => {
     expect(screen.getByText('Ask the agent something to see how it responds with the current settings.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Clear conversation' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
+  it('says that it uses the settings in the editor, unsaved changes included', () => {
+    renderEditor();
+    expect(composer()).toHaveAccessibleDescription(/unsaved changes included/);
+    expect(composer()).not.toHaveAccessibleDescription(/saved file/);
   });
 
   it('sends on Enter and adds a new line on Shift+Enter', () => {
@@ -98,6 +103,22 @@ describe('Try it', () => {
     fromHost({ type: 'tryItEvent', event: { type: 'text', text: ' late' } });
     expect(screen.getByText('Partial')).toBeInTheDocument();
     expect(screen.queryByText('Partial late')).not.toBeInTheDocument();
+  });
+
+  it('keeps the keyboard in the composer when the Stop button goes away', () => {
+    renderEditor();
+    ask('Review the voucher changes');
+    screen.getByRole('button', { name: 'Stop' }).focus();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(composer()).toHaveFocus();
+
+    ask('And now?');
+    screen.getByRole('button', { name: 'Stop' }).focus();
+    fromHost({
+      type: 'tryItEvent',
+      event: { type: 'done', usage: { inputTokens: 1, outputTokens: 1 }, model: 'm' },
+    });
+    expect(composer()).toHaveFocus();
   });
 
   it('shows errors and ends the answer', () => {

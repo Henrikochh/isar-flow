@@ -90,8 +90,11 @@ export interface ToolHostOptions {
   defaultShell: ShellName;
 }
 
-/** Creates a tool host whose "allow for this run" answers are scoped to `runId`. */
-export type ToolHostFactory = (runId: string) => ToolHost;
+/**
+ * Creates a tool host whose "allow for this run" answers are scoped to `runId`. `workspaceRoot` is the
+ * folder of the workflow being run (multi-root workspaces); defaults to the first workspace folder.
+ */
+export type ToolHostFactory = (runId: string, workspaceRoot?: string) => ToolHost;
 
 /* ---------- models (src/models) ---------- */
 
@@ -123,6 +126,13 @@ export interface AgentRecord {
   definition: AgentDefinition | null;
 }
 
+export interface CreateAgentOptions {
+  /** Exact id (file basename), e.g. the id a workflow block refers to; default: a unique slug of the name. */
+  id?: string;
+  /** Workspace folder of a workspace agent (multi-root); default: the first folder. */
+  folder?: vscode.Uri;
+}
+
 export interface AgentStore {
   readonly onDidChange: vscode.Event<void>;
   /** All agents (workspace + user), shadowed user agents flagged. */
@@ -132,19 +142,30 @@ export interface AgentStore {
   get(id: string): AgentRecord | undefined;
   /** Identifies agent files by URI (scope + id), also for files not yet indexed. */
   identify(uri: vscode.Uri): { id: string; scope: AgentScope } | undefined;
-  /** Creates `<slug>.agent.yaml` and returns its URI. kind picks a starter definition. */
-  create(name: string, scope: AgentScope, kind?: 'blank' | 'coder' | 'reviewer'): Promise<vscode.Uri>;
+  /** Creates `<slug>.agent.yaml` (or `<options.id>.agent.yaml`) and returns its URI. kind picks a starter. */
+  create(
+    name: string,
+    scope: AgentScope,
+    kind?: 'blank' | 'coder' | 'reviewer',
+    options?: CreateAgentOptions,
+  ): Promise<vscode.Uri>;
   delete(uri: vscode.Uri): Promise<void>;
-  /** Creates starter agents for these ids in the workspace when no agent with that id exists. */
-  ensure(ids: ('coder' | 'reviewer')[]): Promise<void>;
+  /**
+   * Creates starter agents for these ids in the workspace folder (default: the first one) when no agent with
+   * that id exists.
+   */
+  ensure(ids: ('coder' | 'reviewer')[], folder?: vscode.Uri): Promise<void>;
   dispose(): void;
 }
 
 export interface WorkflowStore {
   readonly onDidChange: vscode.Event<void>;
   list(): WorkflowSummary[];
-  /** Creates `.isarflow/workflows/<slug>.workflow.yaml` from a template and returns its URI. */
-  create(name: string, template: WorkflowTemplateId): Promise<vscode.Uri>;
+  /**
+   * Creates `.isarflow/workflows/<slug>.workflow.yaml` from a template in the workspace folder (default: the
+   * first one) and returns its URI.
+   */
+  create(name: string, template: WorkflowTemplateId, folder?: vscode.Uri): Promise<vscode.Uri>;
   /** Workflows (relative paths) whose blocks reference the agent id. */
   usersOfAgent(agentId: string): string[];
   dispose(): void;
@@ -155,7 +176,10 @@ export interface WorkflowStore {
 export interface RunHistory {
   readonly onDidChange: vscode.Event<void>;
   list(workflowUri?: string): RunRecordSummary[];
+  /** A saved run when it is cached (recent runs); see getAsync for the others. */
   get(runId: string): RunView | undefined;
+  /** Reads a saved run from storage when it is not cached. */
+  getAsync(runId: string): Promise<RunView | undefined>;
   save(view: RunView, workflowUri: string): Promise<void>;
 }
 

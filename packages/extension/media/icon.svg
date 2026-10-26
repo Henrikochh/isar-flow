@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Isar Flow Marketplace icon. Render to icon.png (256×256); the motif matches isar-flow.svg. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14524a"/>
+      <stop offset="0.55" stop-color="#0e3631"/>
+      <stop offset="1" stop-color="#0b2622"/>
+    </linearGradient>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9df2e6"/>
+      <stop offset="1" stop-color="#5ccfc0"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.45" r="0.55">
+      <stop offset="0" stop-color="#5ccfc0" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#5ccfc0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#tile)"/>
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#glow)"/>
+  <rect x="9" y="9" width="238" height="238" rx="53" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="2"/>
+  <g transform="translate(6 0)">
+    <g fill="none" stroke="url(#river)" stroke-linecap="round" stroke-linejoin="round">
+      <!-- the river: from the top node, a bend to the left and back to the bottom node -->
+      <path d="M128 66c0 34-56 36-56 70s56 35 56 70" stroke-width="17"/>
+      <!-- the eddy beside the bend -->
+      <path d="M173 106c12 9 12 28 0 37" stroke-width="13" stroke-opacity="0.75"/>
+    </g>
+    <g stroke="#0b2622" stroke-width="6">
+      <circle cx="128" cy="50" r="20" fill="#9df2e6"/>
+      <circle cx="128" cy="206" r="20" fill="#5ccfc0"/>
+    </g>
+    <g fill="#0b2622">
+      <circle cx="128" cy="50" r="7"/>
+      <circle cx="128" cy="206" r="7"/>
+    </g>
+  </g>
+</svg>

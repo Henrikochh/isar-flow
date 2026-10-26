@@ -6,7 +6,8 @@
  *   node scripts/visual.mjs --only=workflow       # views/scenarios containing "workflow"
  *   node scripts/visual.mjs --themes=dark,light
  *
- * Output: packages/webview-ui/visual-output/<view>-<scenario>-<theme>.png
+ * Output: packages/webview-ui/visual-output/<view>-<name or scenario>-<theme>.png
+ * A shot with `act` interacts with the page (e.g. opens a menu) before the screenshot; `name` tells it apart.
  */
 import { mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
@@ -40,6 +41,19 @@ const SHOTS = [
   { view: 'workflow', scenario: 'selected', width: 1440, height: 900 },
   { view: 'workflow', scenario: 'running', width: 1440, height: 900 },
   { view: 'workflow', scenario: 'failed', width: 1440, height: 900 },
+  { view: 'workflow', scenario: 'history', width: 1440, height: 900 },
+  { view: 'workflow', scenario: 'noids', width: 1440, height: 900 },
+  {
+    view: 'workflow',
+    scenario: 'default',
+    name: 'moveto',
+    width: 1440,
+    height: 900,
+    act: async (page) => {
+      await page.click('[data-step-id="tests"]', { button: 'right' });
+      await page.getByRole('menuitem', { name: 'Move to…' }).click();
+    },
+  },
   { view: 'workflow', scenario: 'approval', width: 1440, height: 900 },
   { view: 'workflow', scenario: 'invalid', width: 1440, height: 900 },
   { view: 'workflow', scenario: 'empty', width: 1440, height: 900 },
@@ -49,12 +63,24 @@ const SHOTS = [
   { view: 'workflow', scenario: 'allblocks', width: 1440, height: 1700 },
   { view: 'workflow', scenario: 'long', width: 1440, height: 1500 },
   { view: 'workflow', scenario: 'long-narrow', width: 900, height: 1500 },
+  // Loops in loops and in If lanes, an If in an If, an empty loop: eddies, lanes and placeholders together.
+  { view: 'workflow', scenario: 'nested', width: 1440, height: 1700 },
+  { view: 'workflow', scenario: 'nested-narrow', width: 900, height: 1100 },
   { view: 'agent', scenario: 'default', width: 1280, height: 860 },
   { view: 'agent', scenario: 'tryit', width: 1280, height: 860 },
   { view: 'agent', scenario: 'new', width: 1280, height: 860 },
+  {
+    view: 'agent',
+    scenario: 'noperms',
+    width: 1280,
+    height: 860,
+    // Unset permission levels and the "Used by" rows sit below the fold.
+    act: (page) => page.getByRole('heading', { name: 'Used by' }).scrollIntoViewIfNeeded(),
+  },
 ];
 
-const shots = SHOTS.filter((s) => !only || `${s.view}-${s.scenario}`.includes(only));
+const shotName = (shot) => `${shot.view}-${shot.name ?? shot.scenario}`;
+const shots = SHOTS.filter((s) => !only || shotName(s).includes(only));
 
 await mkdir(outDir, { recursive: true });
 const server = await createServer({ root, configFile: resolve(root, 'vite.config.ts'), server: { port: 0, strictPort: false }, logLevel: 'error' });
@@ -76,7 +102,11 @@ try {
       await page.waitForSelector('body[data-harness-ready="true"]', { timeout: 15000 }).catch(() => {});
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(400);
-      const file = resolve(outDir, `${shot.view}-${shot.scenario}-${theme}.png`);
+      if (shot.act) {
+        await shot.act(page);
+        await page.waitForTimeout(300);
+      }
+      const file = resolve(outDir, `${shotName(shot)}-${theme}.png`);
       await page.screenshot({ path: file });
       console.log(`✓ ${file}`);
       await page.close();

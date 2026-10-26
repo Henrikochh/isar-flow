@@ -73,6 +73,16 @@ describe('agent store', () => {
     await expect(agents.create('x', 'workspace')).rejects.toThrow(/Open a folder first/);
   });
 
+  it('does not take agent paths on another host (UNC) for agent files', async () => {
+    const ws = installFakeWorkspace(['/ws']);
+    ws.fs.add('/ws/.isarflow/agents/coder.agent.yaml', agentText('Coder'));
+    const agents = await open();
+    const remote = vscode.Uri.parse('file://evil/ws/.isarflow/agents/coder.agent.yaml');
+    expect(agents.identify(remote)).toBeUndefined();
+    await expect(agents.delete(remote)).rejects.toThrow(/not an agent file/);
+    expect(ws.fs.deleted).toEqual([]);
+  });
+
   it('deletes agent files to the trash and refuses other files', async () => {
     const ws = installFakeWorkspace(['/ws']);
     ws.fs.add('/ws/.isarflow/agents/coder.agent.yaml', agentText('Coder')).add('/ws/src/app.ts', '');
@@ -107,6 +117,50 @@ describe('agent store', () => {
     await agents.ensure(['coder', 'reviewer']);
     expect(ws.fs.files.has('/ws/.isarflow/agents/coder.agent.yaml')).toBe(true);
     expect(ws.fs.files.has('/ws/.isarflow/agents/reviewer.agent.yaml')).toBe(false);
+  });
+
+  it('creates an agent with the exact id a workflow refers to, in the given workspace folder', async () => {
+    const ws = installFakeWorkspace(['/ws', '/two']);
+    const agents = await open();
+    const uri = await agents.create('MyAgent', 'workspace', 'blank', {
+      id: 'MyAgent',
+      folder: vscode.Uri.file('/two'),
+    });
+    expect(uri.path).toBe('/two/.isarflow/agents/MyAgent.agent.yaml');
+    expect(ws.fs.files.get(uri.path)).toContain('name: MyAgent');
+    expect(agents.get('MyAgent')?.summary.scope).toBe('workspace');
+  });
+
+  it('creates in the first workspace folder when the given folder is not one of them', async () => {
+    installFakeWorkspace(['/ws', '/two']);
+    const agents = await open();
+    const uri = await agents.create('Helper', 'workspace', 'blank', {
+      folder: vscode.Uri.file('/elsewhere'),
+    });
+    expect(uri.path).toBe('/ws/.isarflow/agents/helper.agent.yaml');
+  });
+
+  it('refuses an exact id that is taken, differs only in case or cannot be a file name', async () => {
+    const ws = installFakeWorkspace(['/ws']);
+    ws.fs.add('/ws/.isarflow/agents/myagent.agent.yaml', agentText('Mine'));
+    const agents = await open();
+    await expect(agents.create('MyAgent', 'workspace', 'blank', { id: 'MyAgent' })).rejects.toThrow(
+      /myagent/,
+    );
+    await expect(agents.create('x', 'workspace', 'blank', { id: 'myagent' })).rejects.toThrow(/already/);
+    await expect(agents.create('x', 'workspace', 'blank', { id: '../evil' })).rejects.toThrow(
+      /letters, digits/,
+    );
+    expect(ws.fs.files.get('/ws/.isarflow/agents/myagent.agent.yaml')).toBe(agentText('Mine'));
+    expect([...ws.fs.files.keys()]).toEqual(['/ws/.isarflow/agents/myagent.agent.yaml']);
+  });
+
+  it('ensures missing starter agents in the given workspace folder', async () => {
+    const ws = installFakeWorkspace(['/ws', '/two']);
+    const agents = await open();
+    await agents.ensure(['coder'], vscode.Uri.file('/two'));
+    expect(ws.fs.files.has('/two/.isarflow/agents/coder.agent.yaml')).toBe(true);
+    expect(ws.fs.files.has('/ws/.isarflow/agents/coder.agent.yaml')).toBe(false);
   });
 
   it('does nothing in ensure without a workspace folder', async () => {

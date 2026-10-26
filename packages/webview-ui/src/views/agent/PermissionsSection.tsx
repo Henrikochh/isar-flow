@@ -52,8 +52,9 @@ function PermissionRow({
 }) {
   const info = GATES[gate];
   const hintId = useId();
-  // Missing levels mean "none": the tool host refuses anything it was not allowed to do.
-  const current = level ?? 'none';
+  // A missing level means "ask": the tool host asks before every change or command it was not told about.
+  const current = level ?? 'ask';
+  const hint = !active ? info.off : level === undefined ? 'Not set — asks each time' : info.describe[level];
   return (
     <div className="ag-permission">
       <div className="ag-permission__text">
@@ -65,7 +66,7 @@ function PermissionRow({
           </span>
         ) : (
           <span className="ag-permission__hint" id={hintId}>
-            {active ? info.describe[current] : info.off}
+            {hint}
           </span>
         )}
       </div>
@@ -78,7 +79,8 @@ function PermissionRow({
 
 export function PermissionsSection({ form, issues, update }: { form: AgentForm; issues: FieldIssues; update: UpdateAgent }) {
   const set = (gate: Gate) => (level: PermissionLevel) => {
-    if (level === (form[gate] ?? 'none')) return;
+    // Choosing the shown default of an unset level still writes it, so the file states it.
+    if (level === form[gate]) return;
     const permissions: AgentPermissions = {};
     const edits = gate === 'edits' ? level : form.edits;
     const commands = gate === 'commands' ? level : form.commands;

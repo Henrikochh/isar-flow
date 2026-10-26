@@ -1,7 +1,7 @@
 /** Loop container: a frame on the river with a header and an eddy (return channel) on its left side. */
-import { Chip } from '../../../components';
 import { useCanvas } from './canvasContext';
 import { CardBadge, TypeStone } from './BlockCard';
+import { BreakableCode } from './BreakableCode';
 import { type BlockEntry, textOf } from './model';
 import { cx } from '../cx';
 import { RiverList } from './River';
@@ -54,6 +54,7 @@ export function LoopBlock({ entry }: { entry: BlockEntry }) {
     <div
       className={cx(
         'wf-loop',
+        entry.parent && 'wf-loop--nested',
         handle.selected && 'wf-loop--selected',
         handle.dragging && 'wf-loop--dragging',
         running && 'wf-loop--running',
@@ -90,7 +91,7 @@ export function LoopBlock({ entry }: { entry: BlockEntry }) {
               {summary.condition ? (
                 <>
                   {' '}
-                  <code className="wf-loop__cond">{summary.condition}</code>
+                  <BreakableCode className="wf-loop__cond" text={summary.condition} />
                 </>
               ) : null}
             </div>
@@ -99,8 +100,14 @@ export function LoopBlock({ entry }: { entry: BlockEntry }) {
         <div className="wf-loop__aside">
           {progressLabel ? (
             <span className={cx('wf-iter', progress?.running && 'wf-iter--live')}>{progressLabel}</span>
-          ) : max !== undefined ? (
-            <Chip tone="outline">max {max}</Chip>
+          ) : max !== undefined && summary.condition ? (
+            // Loops without a condition already say "Repeat N times"; the limit only adds to a condition.
+            <span
+              className="wf-iter wf-iter--limit"
+              title={max === 1 ? 'Runs at most once' : `Repeats at most ${max} times`}
+            >
+              max {max}
+            </span>
           ) : null}
           <CardBadge entry={entry} status={handle.status} />
         </div>

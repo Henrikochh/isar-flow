@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { type WorkflowSummary, type WorkflowTemplateId, workflowTemplate } from '@isar-flow/core';
 import type { AgentStore, RunHistory, WorkflowStore } from '../contracts';
 import { debounce } from './debounce';
-import { errorMessage, listFileNames, readText, writeText } from './files';
+import { errorMessage, listFileNames, readText, targetFolder, writeText } from './files';
 import { baseName, fileId, IGNORE_PATH_CASE, relativeTo, slugify, uniqueName } from './paths';
 import { summarizeWorkflow, usersOfAgent, type WorkflowRecord } from './workflowIndex';
 
@@ -81,11 +81,11 @@ class FileWorkflowStore implements IndexedWorkflowStore {
       );
   }
 
-  async create(name: string, template: WorkflowTemplateId): Promise<vscode.Uri> {
-    const folder = vscode.workspace.workspaceFolders?.[0];
-    if (!folder) throw new Error('Open a folder first to create workflows.');
-    if (TEMPLATES_WITH_AGENTS.includes(template)) await this.deps.agents.ensure(['coder', 'reviewer']);
-    const dir = vscode.Uri.joinPath(folder.uri, '.isarflow', 'workflows');
+  async create(name: string, template: WorkflowTemplateId, folder?: vscode.Uri): Promise<vscode.Uri> {
+    const root = targetFolder(folder);
+    if (!root) throw new Error('Open a folder first to create workflows.');
+    if (TEMPLATES_WITH_AGENTS.includes(template)) await this.deps.agents.ensure(['coder', 'reviewer'], root);
+    const dir = vscode.Uri.joinPath(root, '.isarflow', 'workflows');
     await vscode.workspace.fs.createDirectory(dir);
     const taken = new Set<string>();
     for (const file of await listFileNames(dir)) {

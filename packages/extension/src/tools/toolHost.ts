@@ -4,7 +4,7 @@ import type { ToolHostOptions } from '../contracts';
 import { abortError, throwIfAborted } from './abort';
 import { gitDiff, runCommand } from './commandTools';
 import { editFile, writeFile } from './editTools';
-import { resolveInWorkspaceReal } from './pathGuard';
+import { realRelativePath, resolveInWorkspaceReal } from './pathGuard';
 import { PermissionGate } from './permissions';
 import { listFiles, readFile, searchText } from './readTools';
 import type { ToolContext, ToolImpl, ToolWorkspace } from './types';
@@ -50,6 +50,7 @@ export function createToolHost(options: ToolHostOptions & { runId: string }): To
         runCommand: options.runCommand,
         resolvePath: (input) => resolveInWorkspaceReal(root, input, realPath),
         displayPath: (absPath) => path.relative(root, absPath).split(path.sep).join('/') || '.',
+        realDisplayPath: (absPath) => realRelativePath(root, absPath, realPath),
         authorize: (tool, summary, detail) => gate.authorize(tool, permissions, io, summary, detail),
       };
       try {

@@ -16,7 +16,7 @@ export const editFile: ToolImpl = async (args, ctx) => {
   }
   const absPath = await ctx.resolvePath(input);
   const rel = ctx.displayPath(absPath);
-  assertWritable(rel);
+  await assertWritable(ctx, absPath, rel);
   await applyEdit(ctx, absPath, rel, oldText, newText);
   await ctx.authorize(
     'editFile',
@@ -24,6 +24,7 @@ export const editFile: ToolImpl = async (args, ctx) => {
     `Replace:\n${clip(oldText, DETAIL_MAX)}\n\nWith:\n${clip(newText, DETAIL_MAX)}`,
   );
   // The file may have changed while the user was deciding, so the edit is planned again on fresh text.
+  await recheckPath(ctx, input, absPath, rel);
   const content = await applyEdit(ctx, absPath, rel, oldText, newText);
   await write(ctx, absPath, rel, content);
   return `Edited ${rel}: replaced ${plural(lineCount(oldText), 'line')} with ${plural(lineCount(newText), 'line')}.`;
@@ -34,7 +35,7 @@ export const writeFile: ToolImpl = async (args, ctx) => {
   const content = requiredString(args, 'content');
   const absPath = await ctx.resolvePath(input);
   const rel = ctx.displayPath(absPath);
-  assertWritable(rel);
+  await assertWritable(ctx, absPath, rel);
   const existed = await ctx.workspace.exists(absPath);
   const lines = plural(lineCount(content), 'line');
   await ctx.authorize(
@@ -42,6 +43,7 @@ export const writeFile: ToolImpl = async (args, ctx) => {
     `${existed ? 'Overwrite' : 'Create'} ${rel}`,
     `${lines}:\n${clip(content, DETAIL_MAX)}`,
   );
+  await recheckPath(ctx, input, absPath, rel);
   await write(ctx, absPath, rel, content);
   return `${existed ? 'Wrote' : 'Created'} ${rel} (${lines}).`;
 };
@@ -92,11 +94,27 @@ async function write(ctx: ToolContext, absPath: string, rel: string, content: st
   }
 }
 
-function assertWritable(rel: string): void {
+/**
+ * Refuses the folder itself and anything inside .git, also when a link, junction or Windows short name
+ * (GIT~1) leads there, or a trailing dot or space hides the name (Windows drops them).
+ */
+async function assertWritable(ctx: ToolContext, absPath: string, rel: string): Promise<void> {
   if (rel === '.') throw new ToolError('The path is the workspace folder itself. Pass a file path.');
-  if (rel.split('/').some((part) => part.toLowerCase() === '.git')) {
+  const real = await ctx.realDisplayPath(absPath);
+  if (real === '.') throw new ToolError('The path is the workspace folder itself. Pass a file path.');
+  if (isInsideGit(rel) || isInsideGit(real)) {
     throw new ToolError('Files inside .git cannot be changed. Use runCommand with git instead.');
   }
+}
+
+/** Checks the path again right before writing: a link may have been created while the user was asked. */
+async function recheckPath(ctx: ToolContext, input: string, absPath: string, rel: string): Promise<void> {
+  await ctx.resolvePath(input);
+  await assertWritable(ctx, absPath, rel);
+}
+
+function isInsideGit(rel: string): boolean {
+  return rel.split('/').some((part) => part.replace(/[. ]+$/, '').toLowerCase() === '.git');
 }
 
 /** Counts occurrences including overlapping ones, which would make the replacement ambiguous too. */

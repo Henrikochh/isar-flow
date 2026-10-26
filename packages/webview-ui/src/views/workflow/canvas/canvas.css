@@ -18,6 +18,8 @@
   --wf-lane-pad: 10px;
   --wf-radius-card: 10px;
   --wf-bend: 14px;
+  /* Width of a loop's eddy (return channel) left of its frame. */
+  --wf-eddy-w: 30px;
   /* Opaque river color for pieces that overlap; matches --if-river over the canvas background. */
   --wf-river-solid: color-mix(in srgb, var(--if-isar) 62%, var(--if-bg));
   position: relative;
@@ -106,10 +108,28 @@
   height: 32px;
 }
 
-/* First piece of an empty lane, so its slot lines up with the first card of the other lane. */
+/*
+ * Pieces above and below the placeholder of an empty list: 32 px each with the placeholder's padding, like the
+ * segments around a card, so the placeholder lines up with the first card of the other lane.
+ */
 .wf-line--lead {
   flex: none;
   height: 28px;
+  transition: height var(--if-duration) var(--if-ease);
+}
+
+.wf-line--tail {
+  flex: 1 1 28px;
+  min-height: 28px;
+}
+
+/* While dragging, segments open around a centered slot; the placeholder moves up to line up with those slots. */
+.wf-line--lead-open {
+  height: 14px;
+}
+
+.wf-line--tail-open {
+  min-height: 14px;
 }
 
 /* ---------- Lists and segments ---------- */
@@ -662,12 +682,17 @@
 }
 
 /* Condition line of the If header: "If <condition>", clamped to two lines. */
+/*
+ * Breaks at spaces first (see BreakableCode); overflow-wrap only for names too long for a line. Balanced, so a
+ * two-line condition does not leave "!= 0" alone on the second line.
+ */
 .wf-ifcond {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
   overflow-wrap: anywhere;
+  text-wrap: balance;
   font-size: var(--if-text-s);
   line-height: 1.5;
 }
@@ -682,7 +707,6 @@
   font-family: var(--if-font-code);
   font-size: var(--if-text-s);
   color: var(--if-fg);
-  word-break: break-all;
 }
 
 /* Badges in the card head */
@@ -712,6 +736,19 @@
 .wf-stone-unknown {
   --block-color: var(--if-foehn);
   --block-wash: color-mix(in srgb, var(--if-foehn) var(--if-wash-strength), transparent);
+}
+/* The top level of the workflow in "Move to…": the river's own color, with the Start marker's glyph. */
+.wf-stone-river {
+  --block-color: var(--if-isar);
+  --block-wash: color-mix(in srgb, var(--if-isar) var(--if-wash-strength), transparent);
+}
+
+/* Zero-size anchor at the pointer for the block menu opened with a right-click. */
+.wf-menu-point {
+  position: fixed;
+  width: 0;
+  height: 0;
+  pointer-events: none;
 }
 
 /* Break: a compact pill on the river */
@@ -760,11 +797,18 @@
   transition: opacity var(--if-duration) var(--if-ease);
 }
 
+/* Inside another container the eddy needs its own room, on both sides so the river stays centered. */
+.wf-loop--nested {
+  margin-inline: var(--wf-eddy-w);
+}
+
 .wf-loop--running {
   border-color: color-mix(in srgb, var(--if-enzian) 65%, transparent);
 }
 
 .wf-loop__head {
+  /* Opaque (the frame's 3 % plus 8 % on top), so the chips on the right can cover text that runs under them. */
+  --wf-loop-head-bg: color-mix(in srgb, var(--if-enzian) 10.8%, var(--if-bg));
   display: flex;
   align-items: center;
   gap: 10px;
@@ -772,7 +816,7 @@
   padding: 10px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--if-enzian) 22%, transparent);
   border-radius: 13px 13px 0 0;
-  background: color-mix(in srgb, var(--if-enzian) 8%, transparent);
+  background: var(--wf-loop-head-bg);
   cursor: pointer;
   user-select: none;
   /* The header follows the frame's width instead of widening it for a long condition. */
@@ -833,10 +877,12 @@
   color: var(--if-fg);
   font-family: var(--if-font-code);
   font-size: var(--if-text-s);
-  word-break: break-all;
 }
 
-/* Iteration chip and status stay in view on the right when a wide frame is scrolled sideways. */
+/*
+ * Iteration chip and status stay in view on the right when a wide frame is scrolled sideways. When the frame's
+ * right edge is out of view the condition can run under them, so they sit on the header color with a short fade.
+ */
 .wf-loop__aside {
   position: sticky;
   right: 12px;
@@ -845,6 +891,18 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  background: var(--wf-loop-head-bg);
+}
+
+.wf-loop__aside::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -20px;
+  width: 20px;
+  background: linear-gradient(to right, transparent, var(--wf-loop-head-bg));
+  pointer-events: none;
 }
 
 .wf-loop__body {
@@ -873,13 +931,21 @@
   color: var(--if-bg);
 }
 
+/* The iteration limit before a run: an outline in the frame's own color, quieter than the run's chips. */
+.wf-iter--limit {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--if-enzian) 45%, transparent);
+  color: var(--if-muted);
+  font-weight: 600;
+}
+
 /* Eddy: return channel on the left of the frame, from the bottom back up to the header. */
 .wf-eddy {
   position: absolute;
   top: 20px;
   bottom: 16px;
-  left: -30px;
-  width: 30px;
+  left: calc(-1 * var(--wf-eddy-w));
+  width: var(--wf-eddy-w);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -1305,6 +1371,12 @@ body.vscode-high-contrast-light .wf-pill {
 body.vscode-high-contrast .wf-loop,
 body.vscode-high-contrast-light .wf-loop {
   border-color: var(--if-enzian);
+}
+
+body.vscode-high-contrast .wf-iter--limit,
+body.vscode-high-contrast-light .wf-iter--limit {
+  box-shadow: inset 0 0 0 1px var(--if-enzian);
+  color: var(--if-fg);
 }
 
 body.vscode-high-contrast .wf-bank__shape,

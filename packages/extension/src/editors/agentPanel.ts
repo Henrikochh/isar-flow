@@ -1,18 +1,22 @@
-import type * as vscode from 'vscode';
+import * as vscode from 'vscode';
 import {
   type AgentDocumentState,
   type AgentEditorToHost,
+  type AgentScope,
   applyAgentUpdate,
   type HostToAgentEditor,
 } from '@isar-flow/core';
 import type { Services } from '../contracts';
+import { IGNORE_PATH_CASE } from '../store/paths';
 import { buildAgentDocumentState, validationContext } from './documentState';
 import { EditQueue } from './editQueue';
 import { agentIdFromFileName, fileNameOf } from './files';
-import { DOCUMENT_DEBOUNCE_MS, type EditorDocument, type EditorUi } from './host';
+import { DOCUMENT_DEBOUNCE_MS, type EditorDocument, type EditorUi, WORKFLOW_EDITOR_VIEW_TYPE } from './host';
 import { buildTryItRequest, TryItSession } from './tryIt';
 
 const UNTRUSTED = 'Trust this workspace to try agents. Nothing runs in Restricted Mode.';
+
+const uriKey = (uri: vscode.Uri) => (IGNORE_PATH_CASE ? uri.toString().toLowerCase() : uri.toString());
 
 /**
  * Host side of one agent editor: the form edits the agent file, Try it runs the agent as currently written.
@@ -35,7 +39,7 @@ export class AgentPanel implements vscode.Disposable {
     this.tryIt = new TryItSession(
       {
         resolver: services.models,
-        tools: services.tools,
+        tools: (runId) => services.tools(runId, this.toolRoot()),
         info: (text) => services.output.info(`Try it: ${text.trimEnd()}`),
       },
       (event) => this.post({ type: 'tryItEvent', event }),
@@ -71,6 +75,8 @@ export class AgentPanel implements vscode.Disposable {
       case 'addProvider':
         await this.ui.executeCommand('isarFlow.addProvider');
         return;
+      case 'openWorkflow':
+        return this.openWorkflow(message.path);
       default: {
         const unknown: never = message;
         throw new Error(`Unknown agent editor message ${JSON.stringify(unknown)}`);
@@ -86,18 +92,14 @@ export class AgentPanel implements vscode.Disposable {
   }
 
   state(): AgentDocumentState {
-    const { agents, workflows, models } = this.services;
-    const fileName = fileNameOf(this.document.uri);
-    const { id, scope } = agents.identify(this.document.uri) ?? {
-      id: agentIdFromFileName(fileName),
-      scope: 'workspace',
-    };
+    const { workflows, models } = this.services;
+    const { id, scope } = this.identity();
     return buildAgentDocumentState(
       this.document.getText(),
       this.document.uri.toString(),
       id,
       scope,
-      fileName,
+      fileNameOf(this.document.uri),
       workflows.usersOfAgent(id),
       { modelRefs: validationContext([], models.catalog()).modelRefs },
     );
@@ -108,6 +110,36 @@ export class AgentPanel implements vscode.Disposable {
     clearTimeout(this.timer);
     this.tryIt.dispose();
     for (const subscription of this.subscriptions.splice(0)) subscription.dispose();
+  }
+
+  private identity(): { id: string; scope: AgentScope } {
+    return (
+      this.services.agents.identify(this.document.uri) ?? {
+        id: agentIdFromFileName(fileNameOf(this.document.uri)),
+        scope: 'workspace',
+      }
+    );
+  }
+
+  /** Try it gives the agent tools in the folder of the agent file; user agents get the first folder. */
+  private toolRoot(): string | undefined {
+    return (this.ui.workspaceFolderOf(this.document.uri) ?? this.ui.workspaceFolders()[0])?.fsPath;
+  }
+
+  /**
+   * Opens a workflow of the "Used by" list. The path comes from the webview, so other paths are ignored.
+   * Used-by paths are relative to their workspace folder: the agent's own folder is tried first, then the
+   * others, and the first one whose workflow is indexed wins.
+   */
+  private async openWorkflow(relativePath: string): Promise<void> {
+    if (!this.services.workflows.usersOfAgent(this.identity().id).includes(relativePath)) return;
+    const own = this.ui.workspaceFolderOf(this.document.uri);
+    const folders = this.ui.workspaceFolders();
+    const ordered = own ? [own, ...folders.filter((f) => uriKey(f) !== uriKey(own))] : folders;
+    const candidates = ordered.map((folder) => vscode.Uri.joinPath(folder, ...relativePath.split('/')));
+    const indexed = new Set(this.services.workflows.list().map((w) => uriKey(vscode.Uri.parse(w.uri))));
+    const target = candidates.find((uri) => indexed.has(uriKey(uri))) ?? candidates[0];
+    if (target) await this.ui.executeCommand('vscode.openWith', target, WORKFLOW_EDITOR_VIEW_TYPE);
   }
 
   private post(message: HostToAgentEditor): void {

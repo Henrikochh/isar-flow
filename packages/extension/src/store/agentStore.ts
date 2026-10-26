@@ -6,7 +6,7 @@ import {
   DEFAULT_AGENT_MODEL,
   defaultAgentText,
 } from '@isar-flow/core';
-import type { AgentRecord, AgentStore } from '../contracts';
+import type { AgentRecord, AgentStore, CreateAgentOptions } from '../contracts';
 import {
   type AgentIndex,
   type AgentKind,
@@ -16,7 +16,7 @@ import {
   summarizeAgent,
 } from './agentIndex';
 import { debounce } from './debounce';
-import { errorMessage, listFileNames, readText, uriKey, writeText } from './files';
+import { errorMessage, listFileNames, readText, targetFolder, uriKey, writeText } from './files';
 import { baseName, fileId, IGNORE_PATH_CASE, slugify, uniqueName } from './paths';
 
 export { summarizeAgent } from './agentIndex';
@@ -37,6 +37,25 @@ export interface IndexedAgentStore extends AgentStore {
  */
 const WORKSPACE_WATCH_GLOB = '{**/.isarflow,**/.isarflow/agents,**/.isarflow/agents/*}';
 const RESCAN_DELAY_MS = 100;
+/** Ids that are safe as file names. Workflows may refer to other ids, but those cannot be created. */
+const FILE_ID = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/;
+
+/** Checks an id asked for exactly (e.g. the one a workflow refers to); files differing only in case clash. */
+function exactId(id: string, existing: string[]): string {
+  if (!FILE_ID.test(id)) {
+    throw new Error(
+      `An agent file can't be named '${id}'. Refer to the agent with an id made of letters, digits, _ and -, then create it.`,
+    );
+  }
+  const clash = existing.find((other) => other.toLowerCase() === id.toLowerCase());
+  if (clash === id) throw new Error(`An agent with the id '${id}' already exists.`);
+  if (clash !== undefined) {
+    throw new Error(
+      `An agent file '${clash}.agent.yaml' already exists. Ids are case-sensitive: refer to it as '${clash}' or pick another id.`,
+    );
+  }
+  return id;
+}
 
 export function createAgentStore(deps: AgentStoreDeps): IndexedAgentStore {
   return new FileAgentStore(deps);
@@ -88,19 +107,25 @@ class FileAgentStore implements IndexedAgentStore {
     return classifyAgentPath(uriKey(uri), dirs, IGNORE_PATH_CASE);
   }
 
-  async create(name: string, scope: AgentScope, kind: AgentKind = 'blank'): Promise<vscode.Uri> {
+  async create(
+    name: string,
+    scope: AgentScope,
+    kind: AgentKind = 'blank',
+    options: CreateAgentOptions = {},
+  ): Promise<vscode.Uri> {
     await this.ready;
-    const dir = scope === 'user' ? this.userDir : this.workspaceDirs()[0];
+    const dir = scope === 'user' ? this.userDir : this.workspaceDir(options.folder);
     if (!dir) {
       throw new Error('Open a folder first to create workspace agents, or create a user agent instead.');
     }
-    await vscode.workspace.fs.createDirectory(dir);
     // Unique across both scopes, so a new agent never shadows or is shadowed by another one.
-    const taken = new Set([
-      ...this.index.list.map((agent) => agent.id.toLowerCase()),
-      ...(await this.idsIn(dir)),
-    ]);
-    const id = uniqueName(slugify(name, kind === 'blank' ? 'agent' : kind), taken);
+    const existing = [...this.index.list.map((agent) => agent.id), ...(await this.idsIn(dir))];
+    const taken = new Set(existing.map((id) => id.toLowerCase()));
+    const id =
+      options.id === undefined
+        ? uniqueName(slugify(name, kind === 'blank' ? 'agent' : kind), taken)
+        : exactId(options.id, existing);
+    await vscode.workspace.fs.createDirectory(dir);
     const uri = vscode.Uri.joinPath(dir, `${id}.agent.yaml`);
     await writeText(uri, starterAgentText(name, kind));
     this.deps.log.info(`Created agent '${id}' at ${uri.fsPath}`);
@@ -119,13 +144,13 @@ class FileAgentStore implements IndexedAgentStore {
     await this.rescan();
   }
 
-  async ensure(ids: ('coder' | 'reviewer')[]): Promise<void> {
+  async ensure(ids: ('coder' | 'reviewer')[], folder?: vscode.Uri): Promise<void> {
     await this.ready;
-    const dir = this.workspaceDirs()[0];
+    const dir = this.workspaceDir(folder);
     if (!dir) return;
     // Workflows reference ids case-sensitively; files in the folder are compared case-insensitively.
     const known = new Set(this.index.list.map((agent) => agent.id));
-    const inDir = await this.idsIn(dir);
+    const inDir = new Set([...(await this.idsIn(dir))].map((id) => id.toLowerCase()));
     const missing = [...new Set(ids)].filter((id) => !known.has(id) && !inDir.has(id));
     if (missing.length === 0) return;
     await vscode.workspace.fs.createDirectory(dir);
@@ -181,14 +206,20 @@ class FileAgentStore implements IndexedAgentStore {
     return records.filter((record): record is AgentRecord => record !== undefined);
   }
 
-  /** Lowercase ids of the agent files on disk in `dir` (the index may lag), so new files never overwrite one. */
+  /** Ids of the agent files on disk in `dir` (the index may lag), so new files never overwrite one. */
   private async idsIn(dir: vscode.Uri): Promise<Set<string>> {
     const ids = new Set<string>();
     for (const name of await listFileNames(dir)) {
       const id = fileId(name, 'agent');
-      if (id !== undefined) ids.add(id.toLowerCase());
+      if (id !== undefined) ids.add(id);
     }
     return ids;
+  }
+
+  /** `.isarflow/agents` of the given workspace folder, else of the first one. */
+  private workspaceDir(folder?: vscode.Uri): vscode.Uri | undefined {
+    const root = targetFolder(folder);
+    return root && vscode.Uri.joinPath(root, '.isarflow', 'agents');
   }
 
   private workspaceDirs(): vscode.Uri[] {

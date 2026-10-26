@@ -1,21 +1,19 @@
-import { cleanup, screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { RunRecordSummary, WorkflowSummary } from '@isar-flow/core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ActiveRunSummary, WorkflowSummary } from '@isar-flow/core';
 import { RECENT_RUNS, WORKFLOWS } from '../../harness/fixtures';
 import { makeState, postedOfType, renderSidebar, resetPosted, sendState } from './helpers';
 
 beforeEach(resetPosted);
-afterEach(cleanup);
 
 const REVIEW = WORKFLOWS[0];
-const running: RunRecordSummary = {
+const active = (startedAt = Date.now() - 5_000): ActiveRunSummary => ({
   runId: 'run-9',
   workflowUri: REVIEW.uri,
   workflowName: REVIEW.name,
-  status: 'running',
-  startedAt: Date.now() - 5_000,
-};
+  startedAt,
+});
 
 describe('Workflows tab', () => {
   it('lists workflows with path and last run, and opens one on click', async () => {
@@ -26,6 +24,16 @@ describe('Workflows tab', () => {
     expect(row).toHaveTextContent('Succeeded');
     await user.click(row);
     expect(postedOfType('openWorkflow')).toEqual([{ type: 'openWorkflow', uri: REVIEW.uri }]);
+  });
+
+  it('gives workflow and run names that may be cut off a tooltip with the full text', () => {
+    renderSidebar({ tab: 'workflows' });
+    const row = screen.getByRole('button', { name: /^Fix failing tests/ });
+    expect(within(row).getByTitle('Fix failing tests')).toHaveTextContent('Fix failing tests');
+    const runs = screen.getByRole('list', { name: 'Recent runs' });
+    const failed = within(runs).getByRole('button', { name: /Fix failing tests/ });
+    expect(within(failed).getByTitle('Fix failing tests')).toHaveTextContent('Fix failing tests');
+    expect(within(failed).getByTitle(RECENT_RUNS[1].error as string)).toHaveTextContent("Loop 'fix_loop'");
   });
 
   it('runs a workflow', async () => {
@@ -39,24 +47,43 @@ describe('Workflows tab', () => {
     const user = userEvent.setup();
     renderSidebar({ tab: 'workflows' });
     await user.click(screen.getByRole('button', { name: 'Run Review until approved' }));
-    sendState(makeState({ tab: 'workflows', activeRuns: [REVIEW.uri], recentRuns: [running, ...RECENT_RUNS] }));
+    sendState(makeState({ tab: 'workflows', activeRuns: [active()] }));
 
     expect(screen.queryByRole('button', { name: 'Run Review until approved' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('status', { name: 'Running' }).length).toBeGreaterThan(0);
-    const stop = screen.getByRole('button', { name: 'Stop run' });
+    const stop = screen.getByRole('button', { name: 'Stop Review until approved' });
     expect(stop).toHaveFocus();
     await user.click(stop);
     expect(postedOfType('cancelRun')).toEqual([{ type: 'cancelRun', runId: 'run-9' }]);
+    // Only the workflow of the active run changes.
+    expect(screen.getByRole('button', { name: 'Run Fix failing tests' })).toBeEnabled();
   });
 
-  it('also recognises active runs listed by run id', () => {
-    renderSidebar({ tab: 'workflows', activeRuns: ['run-9'], recentRuns: [{ ...running, status: 'running' }] });
-    expect(screen.getByRole('button', { name: 'Stop run' })).toBeEnabled();
+  it('shows how long an active run has been going, ticking every second', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    try {
+      vi.setSystemTime(Date.UTC(2026, 9, 26, 9, 31, 10));
+      renderSidebar({ tab: 'workflows', activeRuns: [active(Date.UTC(2026, 9, 26, 9, 30))] });
+      const row = screen.getByRole('button', { name: /^Review until approved/ });
+      expect(row).toHaveTextContent('Running');
+      expect(row).toHaveTextContent('1 m 10 s');
+      expect(row).not.toHaveTextContent('Succeeded');
+      act(() => vi.advanceTimersByTime(3_000));
+      expect(row).toHaveTextContent('1 m 13 s');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('keeps Stop disabled until the host reports the run id', () => {
-    renderSidebar({ tab: 'workflows', activeRuns: [REVIEW.uri] });
-    expect(screen.getByRole('button', { name: /Stopping is available/ })).toBeDisabled();
+  it('lists active runs above the finished ones in recent runs', async () => {
+    const user = userEvent.setup();
+    renderSidebar({ tab: 'workflows', activeRuns: [active()] });
+    const runs = within(screen.getByRole('list', { name: 'Recent runs' })).getAllByRole('button');
+    expect(runs).toHaveLength(RECENT_RUNS.length + 1);
+    expect(runs[0]).toHaveTextContent('Review until approved');
+    expect(within(runs[0]).getByRole('img', { name: 'Running' })).toBeInTheDocument();
+    await user.click(runs[0]);
+    expect(postedOfType('openRun')).toEqual([{ type: 'openRun', runId: 'run-9', workflowUri: REVIEW.uri }]);
   });
 
   it('flags workflows with problems and does not offer to run them', () => {

@@ -14,11 +14,19 @@ export interface CanvasData {
   agents: Map<string, AgentSummary>;
   /** Blocks waiting for an approval decision. */
   awaitingApproval: Set<string>;
+  /** Opens the block menu, at the pointer when `at` is given, else below the block's card. */
+  openMenu(stepId: string, at?: { x: number; y: number }): void;
 }
 
 const CanvasContext = createContext<CanvasData | null>(null);
 
-export function CanvasDataProvider({ children }: { children: ReactNode }) {
+export function CanvasDataProvider({
+  children,
+  openMenu,
+}: {
+  children: ReactNode;
+  openMenu: CanvasData['openMenu'];
+}) {
   const state = useWorkflowState();
   const { select } = useWorkflowActions();
   const { model } = useEditor();
@@ -38,8 +46,8 @@ export function CanvasDataProvider({ children }: { children: ReactNode }) {
   const tabStop = selection && model.byId.has(selection) ? selection : (model.order[0] ?? null);
 
   const value = useMemo<CanvasData>(
-    () => ({ selection, tabStop, select, run: state.run, problems, agents, awaitingApproval }),
-    [selection, tabStop, select, state.run, problems, agents, awaitingApproval],
+    () => ({ selection, tabStop, select, run: state.run, problems, agents, awaitingApproval, openMenu }),
+    [selection, tabStop, select, state.run, problems, agents, awaitingApproval, openMenu],
   );
   return <CanvasContext.Provider value={value}>{children}</CanvasContext.Provider>;
 }

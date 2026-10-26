@@ -26,6 +26,11 @@
   box-shadow: inset 0 0 0 1px var(--if-isar);
   animation: sb-current 1.2s linear infinite;
 }
+/* High contrast: a full-strength outline, like the kit stones. */
+body.vscode-high-contrast .sb-tile,
+body.vscode-high-contrast-light .sb-tile {
+  box-shadow: inset 0 0 0 1px var(--if-isar);
+}
 @keyframes sb-current {
   from {
     background-position: 0 -200%;
@@ -41,6 +46,8 @@
 .sb-run-btn:hover:not(:disabled) {
   color: var(--if-isar);
 }
+/* Stop is tinted at rest too: a bare outline square would read as an empty checkbox. */
+.sb-stop-btn,
 .sb-stop-btn:hover:not(:disabled) {
   color: var(--if-alpenrose);
 }
@@ -56,6 +63,10 @@
 .sb-meta-running {
   font-weight: 600;
   color: var(--if-isar);
+}
+/* Ticks every second; equal-width digits keep the row from jittering. */
+.sb-meta-elapsed {
+  font-variant-numeric: tabular-nums;
 }
 .sb-meta-status {
   color: var(--if-fg);

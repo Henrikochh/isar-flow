@@ -1,8 +1,7 @@
 /** Unsent "New agent" / "New workflow" drafts, kept in the webview state so they survive the view being hidden. */
 import { useEffect, useState } from 'react';
-import type { AgentScope, WorkflowTemplateId } from '@isar-flow/core';
+import type { AgentScope, AgentStarter, WorkflowTemplateId } from '@isar-flow/core';
 import { getViewState, setViewState } from '../../vscode';
-import type { AgentStarter } from './model';
 
 export interface AgentDraft {
   name: string;

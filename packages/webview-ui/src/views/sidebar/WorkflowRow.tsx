@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
-import type { WorkflowSummary } from '@isar-flow/core';
+import type { ActiveRunSummary, WorkflowSummary } from '@isar-flow/core';
 import { Chip, IconButton, Spinner, StatusGlyph, statusLabel } from '../../components';
 import { formatRelativeTime } from '../../hooks';
-import { plural, send, workflowLabel, type WorkflowRunState } from './model';
+import { formatElapsed, plural, send, workflowLabel } from './model';
 import { PathText } from './PathText';
 
 export function WorkflowRow({
@@ -12,11 +12,13 @@ export function WorkflowRow({
   now,
 }: {
   workflow: WorkflowSummary;
-  run: WorkflowRunState;
+  /** The workflow's run in progress, if any. */
+  run: ActiveRunSummary | undefined;
   trusted: boolean;
   now: number;
 }) {
   const label = workflowLabel(workflow);
+  const running = run !== undefined;
   const uri = typeof workflow.uri === 'string' ? workflow.uri : '';
   const path = workflow.relativePath || '';
   const blockedReason = !trusted
@@ -33,17 +35,19 @@ export function WorkflowRow({
     pressed.current = false;
     const active = document.activeElement;
     if (!active || active === document.body) actionRef.current?.focus();
-  }, [run.running]);
+  }, [running]);
 
   return (
     <div className="sb-row">
       <button type="button" className="sb-row__main" onClick={() => uri && send({ type: 'openWorkflow', uri })} title={workflow.description || undefined}>
-        <span className={run.running ? 'sb-tile sb-tile--running' : 'sb-tile'} aria-hidden="true">
+        <span className={run ? 'sb-tile sb-tile--running' : 'sb-tile'} aria-hidden="true">
           <i className="codicon codicon-pulse" />
         </span>
         <span className="sb-row__body">
           <span className="sb-row__title">
-            <span className="sb-row__name">{label}</span>
+            <span className="sb-row__name" title={label}>
+              {label}
+            </span>
           </span>
           {path ? <PathText path={path} /> : null}
           <span className="sb-row__meta">
@@ -52,7 +56,7 @@ export function WorkflowRow({
         </span>
       </button>
       <div className="sb-row__trail">
-        {run.running ? (
+        {run ? (
           <>
             <span className="sb-running">
               <Spinner label="Running" />
@@ -60,11 +64,9 @@ export function WorkflowRow({
             <IconButton
               ref={actionRef}
               icon="debug-stop"
-              label={run.runId ? 'Stop run' : 'Stopping is available once the run has started'}
+              label={`Stop ${label}`}
               className="sb-stop-btn"
-              disabled={!run.runId}
               onClick={() => {
-                if (!run.runId) return;
                 pressed.current = true;
                 send({ type: 'cancelRun', runId: run.runId });
               }}
@@ -91,12 +93,12 @@ export function WorkflowRow({
   );
 }
 
-function RunLine({ workflow, run, now }: { workflow: WorkflowSummary; run: WorkflowRunState; now: number }) {
-  if (run.running) {
+function RunLine({ workflow, run, now }: { workflow: WorkflowSummary; run: ActiveRunSummary | undefined; now: number }) {
+  if (run) {
     return (
       <>
         <span className="sb-meta-running">Running</span>
-        {run.startedAt ? <span>started {formatRelativeTime(run.startedAt, now)}</span> : null}
+        <span className="sb-meta-elapsed">{formatElapsed(now - run.startedAt)}</span>
       </>
     );
   }

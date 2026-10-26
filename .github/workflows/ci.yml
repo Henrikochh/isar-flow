@@ -21,7 +21,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test
+      # Unit, contract and component tests with the coverage gate of spec §11.
+      - run: npm run test:coverage
       - run: npm run build
       - name: Integration tests (Linux)
         if: runner.os == 'Linux'

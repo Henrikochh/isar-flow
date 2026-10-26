@@ -44,6 +44,8 @@ export function editorDocument(document: vscode.TextDocument): EditorDocument {
 
 export const editorUi: EditorUi = {
   isTrusted: () => vscode.workspace.isTrusted,
+  workspaceFolders: () => (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri),
+  workspaceFolderOf: (uri) => vscode.workspace.getWorkspaceFolder(uri)?.uri,
   executeCommand: async (command, ...args) => vscode.commands.executeCommand(command, ...args),
   writeClipboard: async (text) => vscode.env.clipboard.writeText(text),
   confirm: async (message, action) =>

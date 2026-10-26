@@ -49,29 +49,57 @@ export async function resolveInWorkspaceReal(
 ): Promise<string> {
   const platform = options.platform ?? process.platform;
   const p = platform === 'win32' ? path.win32 : path.posix;
-  const isLink = options.isLink ?? isSymbolicLink;
   const target = resolveInWorkspace(root, input, platform);
   const realRoot = await realPath(p.resolve(root)).catch(() => p.resolve(root));
+  const real = await realPathOfNearest(target, input, realPath, options.isLink ?? isSymbolicLink, p);
+  if (real !== undefined && !isInside(realRoot, real, p)) {
+    throw new WorkspacePathError(
+      `The path "${printable(input)}" is outside the workspace: it leads there through a symbolic link or junction. ${HINT}`,
+    );
+  }
+  return target;
+}
 
+/**
+ * `absPath` relative to the real workspace root once links, junctions and Windows short names (GIT~1) are
+ * resolved, i.e. what the file system will actually touch. Forward slashes; '.' for the root.
+ */
+export async function realRelativePath(
+  root: string,
+  absPath: string,
+  realPath: (absPath: string) => Promise<string>,
+  options: RealPathOptions = {},
+): Promise<string> {
+  const p = (options.platform ?? process.platform) === 'win32' ? path.win32 : path.posix;
+  const lexicalRoot = p.resolve(root);
+  const real = await realPathOfNearest(absPath, absPath, realPath, options.isLink ?? isSymbolicLink, p);
+  const rel =
+    real === undefined
+      ? p.relative(lexicalRoot, absPath)
+      : p.relative(await realPath(lexicalRoot).catch(() => lexicalRoot), real);
+  return rel.split(p.sep).join('/') || '.';
+}
+
+/** Real path of the nearest existing ancestor of `target` (or of itself) with the missing parts appended. */
+async function realPathOfNearest(
+  target: string,
+  input: string,
+  realPath: (absPath: string) => Promise<string>,
+  isLink: (absPath: string) => Promise<boolean>,
+  p: typeof path.posix,
+): Promise<string | undefined> {
   let current = target;
   const missing: string[] = [];
   for (;;) {
     const real = await realPath(current).catch(() => undefined);
-    if (real !== undefined) {
-      if (!isInside(realRoot, p.join(real, ...missing), p)) {
-        throw new WorkspacePathError(
-          `The path "${printable(input)}" is outside the workspace: it leads there through a symbolic link or junction. ${HINT}`,
-        );
-      }
-      return target;
-    }
+    if (real !== undefined) return p.join(real, ...missing);
     if (await isLink(current)) {
       throw new WorkspacePathError(
         `The path "${printable(input)}" goes through a broken symbolic link or junction.`,
       );
     }
     const parent = p.dirname(current);
-    if (parent === current) return target;
+    if (parent === current) return undefined;
     missing.unshift(p.basename(current));
     current = parent;
   }

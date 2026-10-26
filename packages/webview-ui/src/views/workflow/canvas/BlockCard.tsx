@@ -16,7 +16,7 @@ export function CardBadge({ entry, status }: { entry: BlockEntry; status: StepSt
     return (
       <span
         className="wf-badge wf-badge--warning"
-        title="This block has no id. Add one in the YAML so it can be edited here."
+        title="This block has no id. Choose Add ids above the canvas so it can be edited here."
       >
         <i className="codicon codicon-warning wf-badge__icon" aria-hidden="true" />
         No id

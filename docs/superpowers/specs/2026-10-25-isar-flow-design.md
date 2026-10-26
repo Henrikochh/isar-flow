@@ -70,6 +70,10 @@ Workspace file conventions:
 - `.isarflow/agents/<id>.agent.yaml` — agent definitions (id = file basename).
 - `.isarflow/workflows/<name>.workflow.yaml` — workflows; any `*.workflow.yaml` anywhere opens in the canvas.
 - User-global agents live in the extension's global storage (`agents/<id>.agent.yaml`).
+- Implementation notes: `.yml` is accepted as well as `.yaml`. In multi-root workspaces the agents of all
+  folders are merged (first folder wins on an id clash); new workflows and workspace agents go to a folder
+  the user picks. Opening a missing agent from a block creates `<id>.agent.yaml` with exactly that id, in
+  the workflow's folder.
 
 ## 4. Model layer
 
@@ -96,6 +100,8 @@ type ChatStreamEvent =
 - Provider settings (`isarFlow.providers` in settings.json):
   `{ id, label, baseUrl, discoverModels: true, models?: string[], headers?: object }`.
   API keys: SecretStorage key `isarFlow.provider.<id>.apiKey`.
+  Implementation notes: `isarFlow.vscodeModels` (default true) turns the `vscode.lm` provider off;
+  `isarFlow.providers` is a restricted configuration, so in Restricted Mode only user endpoints are used.
 - OpenAI-compatible client: `GET {baseUrl}/models`; `POST {baseUrl}/chat/completions` with
   `stream: true`, SSE parsing, tool calls (`tools`, `tool_choice: auto`), `response_format: json_schema`
   when the step requests JSON and the model supports it (otherwise instruct + validate + one repair retry).
@@ -131,6 +137,8 @@ Built-in tools (all paths resolved inside the workspace folder; anything outside
 | `runCommand(command, cwd?)` | console runner, 120 s default timeout | `commands` |
 
 `ask` shows a VS Code modal (Allow / Allow for this run / Deny). Denials are returned to the model as tool errors.
+Implementation notes: an unset permission means `ask`; the agent editor's Try it treats `auto` as `ask`;
+edits are saved right away so later console blocks see them; nothing inside `.git` can be written.
 
 ## 6. Workflow YAML
 
@@ -151,11 +159,16 @@ Common block fields: `id` (required, `^[A-Za-z_][A-Za-z0-9_-]*$`, unique per wor
 |---|---|---|
 | `agent` | `agent` (id or inline `{model, systemPrompt, tools, permissions…}`), `prompt`, `model?`, `output?: {format: text\|json, schema?}`, `session?: fresh\|continue`, `context?: {files: [glob]}` | `text`, `json`, `model`, `usage.inputTokens`, `usage.outputTokens`, `turns`, `status` |
 | `console` | `run`, `shell?: auto\|pwsh\|powershell\|cmd\|bash\|sh`, `cwd?`, `env?` | `exitCode`, `stdout`, `stderr`, `output`, `timedOut`, `status` |
-| `loop` | `until` **or** `while` (condition), `maxIterations` (1–100, required), `onMaxIterations?: fail\|continue` (default `fail`), `steps` | `iterations`, `exitReason: condition\|maxIterations\|break` |
+| `loop` | `until` **or** `while` (condition) or neither (fixed count¹), `maxIterations` (1–100, required), `onMaxIterations?: fail\|continue` (default `fail`), `steps` | `iterations`, `exitReason: condition\|maxIterations\|break` |
 | `if` | `condition`, `then`, `else?` | `branch: then\|else`, `result` |
 | `break` | — (only inside a loop) | — |
 | `stop` | `outcome?: success\|failure` (default failure), `message?` | — |
 | `approval` | `message`, `onReject?: stop\|continue` (default stop) | `approved`, `comment` |
+
+¹ Implementation note: a loop without `until`/`while` runs its body exactly `maxIterations` times (unless a
+Break leaves earlier) and succeeds; `onMaxIterations` only applies to loops with a condition. An `agent` block
+may also omit `agent` and name only a `model` (no system prompt, no tools). Inputs are
+`{ type?: string|number|boolean, description?, default?, required?, multiline? }`.
 
 Every step also exposes `status` (`success | failure | skipped | cancelled`) and `durationMs`.
 
@@ -177,10 +190,11 @@ Inside a loop, `steps.<id>` always refers to the latest execution. `loop.iterati
   ternary `c ? a : b`, parentheses, function calls.
 - `==`/`!=`: if both sides are number-like they compare numerically, strings compare
   case-sensitively, otherwise strict equality.
-- Functions: `contains(haystack, needle)` (string or array), `startsWith`, `endsWith`,
+- Functions: `contains(haystack, needle, ignoreCase?)` (string or array), `startsWith`, `endsWith`,
   `matches(text, pattern, flags?)`, `length(x)`, `lower`, `upper`, `trim`, `head(text, n)`,
   `tail(text, n)` (last n lines), `lines(text)`, `json(text)`, `toJSON(value)`, `join(array, sep)`,
-  `default(value, fallback)`.
+  `default(value, fallback)`, and (added during implementation) `number(value)`, `string(value)`.
+  `===`/`!==` are accepted as aliases of `==`/`!=`; list literals `['a', 'b']` are allowed.
 - Evaluation never uses `eval`/`Function`; unknown identifiers resolve to `undefined`;
   unknown functions are a validation error.
 
@@ -202,9 +216,13 @@ isEmpty isNotEmpty isTrue isFalse`. `ignoreCase` applies to string operators.
 - The `.workflow.yaml` text document is the single source of truth. The canvas is a
   `CustomTextEditorProvider`, so undo/redo, dirty state, save and git work natively.
 - Webview → host: semantic edit operations
-  (`insertStep`, `moveStep`, `deleteStep`, `updateStep`, `duplicateStep`, `updateWorkflow`)
+  (`insertStep`, `moveStep`, `deleteStep`, `updateStep`, `duplicateStep`, `renameStep`, `updateWorkflow`)
   applied by core's `applyWorkflowOps(text, ops)` to the `yaml` `Document` (comments,
-  key order and formatting preserved). The host replaces only the changed text range.
+  key order, formatting and CRLF line endings preserved). The host replaces only the changed text range.
+  `renameStep` also rewrites `steps.<old>.` references in templates.
+- Implementation note: the webview applies the same ops to its copy of the text with core right away, so
+  edits show instantly; the host's next `document` message is authoritative and replaces the local result.
+  Host edits are queued, so quick successive ops never race (integration test with a CRLF file).
 - Host → webview: on every document change (debounced 150 ms) the host parses and validates
   and sends `{ workflow, diagnostics, text }`. Invalid YAML keeps the last valid model on the
   canvas and shows an error banner with "Show in YAML".
@@ -217,7 +235,8 @@ isEmpty isNotEmpty isTrue isFalse`. `ignoreCase` applies to string operators.
 ## 8. Engine and runs
 
 - `runWorkflow(workflow, { inputs, host, signal, budget }) → AsyncIterable<RunEvent>` (core).
-- `host` implements `runConsole`, `runAgent`, `requestApproval`, `log`.
+- `host` implements `runConsole`, `runAgent`, `requestApproval`; logging goes through the per-step
+  `StepIO.log(stream, text)` passed to each call (implementation note: no separate `host.log`).
 - Events: `run-start`, `step-start`, `step-log`, `step-end`, `loop-iteration`, `run-end`.
 - Cancellation via `AbortSignal` (kills process trees, aborts HTTP streams).
 - Before a run: schema + semantic validation must pass; workflow inputs are requested via a dialog;
@@ -225,6 +244,11 @@ isEmpty isNotEmpty isTrue isFalse`. `ignoreCase` applies to string operators.
 - Runs require a trusted workspace (`capabilities.untrustedWorkspaces.supported = "limited"`: in Restricted
   Mode workflows and agents can be viewed and edited, but nothing runs).
 - Run history: last 50 runs per workflow in workspace storage (events + outputs, trimmed to 1 MB each).
+  Implementation notes: the limit is the setting `isarFlow.historyLimit` (default 50, 1–500); the command
+  approval is remembered per workflow file and its hash also covers each block's shell, folder and env and
+  the workflow env; `isarFlow.confirmCommands` can only be turned off in user settings. Runs use the
+  workspace folder of the workflow file (multi-root) for console blocks, agent tools and context files.
+  On deactivation, running workflows are cancelled and saved to the history before the extension stops.
 
 ## 9. UI design system
 
@@ -292,7 +316,8 @@ Copy: plain verbs ("Run workflow", "Add block", "Fetch models"); errors say what
 - Golden YAML fixtures in `packages/core/test/fixtures`: round-trip and edit-op outputs compared
   byte-for-byte, so comment preservation regressions are caught.
 - Every bug fix starts with a regression test.
-- Coverage gate: core ≥ 90 % lines, extension host logic ≥ 70 %.
+- Coverage gate: core ≥ 90 % lines, extension host logic ≥ 70 % (thresholds in `vitest.config.ts`,
+  checked by `npm run test:coverage`, which CI runs).
 
 **Key scenarios**
 1. Review loop: tests fail → reviewer rejects → fixer edits → tests pass → reviewer approves → loop exits with `exitReason: condition`.

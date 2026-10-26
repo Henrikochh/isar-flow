@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import type { ChatModel, HostToAgentEditor, TryItEvent } from '@isar-flow/core';
+import type { ChatModel, HostToAgentEditor, TryItEvent, WorkflowSummary } from '@isar-flow/core';
 import { AgentPanel } from '../../../src/editors/agentPanel';
 import { DOCUMENT_CHANGED, WRITE_FAILED } from '../../../src/editors/host';
 import { AsyncDocument, FakeDocument, fakeServices, fakeUi, flush } from './fakes';
@@ -148,7 +148,23 @@ describe('AgentPanel', () => {
       { type: 'text', text: 'echo: Hello' },
       { type: 'done', usage: { inputTokens: 3, outputTokens: 2 }, model: 'vscode/copilot/gpt-4.1' },
     ]);
-    expect(services.tools).toHaveBeenCalledWith(expect.stringMatching(/^try-\d+$/));
+    // Agent tools work in the folder that holds the agent file.
+    expect(services.tools).toHaveBeenCalledWith(expect.stringMatching(/^try-\d+$/), '/w');
+  });
+
+  it('tries user agents with tools in the first workspace folder', async () => {
+    vi.useRealTimers();
+    const doc = new FakeDocument(TEXT, vscode.Uri.file('/home/me/.isarflow/agents/reviewer.agent.yaml'));
+    const { panel, services, ui, tryEvents } = setupWith(doc);
+    ui.folders = [vscode.Uri.file('/a'), vscode.Uri.file('/b')];
+    await panel.handle({ type: 'tryIt', prompt: 'Hello', history: [] });
+    await vi.waitFor(() => expect(tryEvents().at(-1)?.type).toBe('error'));
+    expect(services.tools).toHaveBeenCalledWith(expect.stringMatching(/^try-/), '/a');
+
+    ui.folders = [];
+    await panel.handle({ type: 'tryIt', prompt: 'Again', history: [] });
+    await vi.waitFor(() => expect(services.tools).toHaveBeenCalledTimes(2));
+    expect(services.tools).toHaveBeenLastCalledWith(expect.stringMatching(/^try-/), undefined);
   });
 
   it('explains why an agent cannot be tried', async () => {
@@ -195,6 +211,68 @@ describe('AgentPanel', () => {
     panel.dispose();
     await flush();
     expect(tryEvents()).toHaveLength(3);
+  });
+
+  describe('opening a workflow from the Used by list', () => {
+    const REVIEW = '.isarflow/workflows/review.workflow.yaml';
+    const summary = (fsPath: string): WorkflowSummary => ({
+      uri: vscode.Uri.file(fsPath).toString(),
+      name: 'Review',
+      relativePath: REVIEW,
+      valid: true,
+      stepCount: 1,
+    });
+    const opened = (fsPath: string) => [
+      ['vscode.openWith', vscode.Uri.file(fsPath), 'isarFlow.workflowEditor'],
+    ];
+
+    function setupUsedBy(agentUri = URI) {
+      const t = setupWith(new FakeDocument(TEXT, agentUri));
+      t.state.usersOfAgent.reviewer = [REVIEW];
+      return t;
+    }
+
+    it('opens the workflow in the canvas', async () => {
+      const { panel, ui } = setupUsedBy();
+      await panel.handle({ type: 'openWorkflow', path: REVIEW });
+      expect(ui.commands).toEqual(opened(`/w/${REVIEW}`));
+    });
+
+    it('ignores paths that are not in the list', async () => {
+      const { panel, ui } = setupUsedBy();
+      for (const path of ['../outside.workflow.yaml', 'other.workflow.yaml', `/w/${REVIEW}`]) {
+        await panel.handle({ type: 'openWorkflow', path });
+      }
+      expect(ui.commands).toEqual([]);
+    });
+
+    it('looks in the workspace folder that has the workflow', async () => {
+      const { panel, ui, state } = setupUsedBy(vscode.Uri.file('/home/me/agents/reviewer.agent.yaml'));
+      ui.folders = [vscode.Uri.file('/a'), vscode.Uri.file('/b')];
+      state.workflows = [summary(`/b/${REVIEW}`)];
+      await panel.handle({ type: 'openWorkflow', path: REVIEW });
+      expect(ui.commands).toEqual(opened(`/b/${REVIEW}`));
+    });
+
+    it("prefers the agent's own folder when several folders have the workflow", async () => {
+      const { panel, ui, state } = setupUsedBy(vscode.Uri.file('/b/.isarflow/agents/reviewer.agent.yaml'));
+      ui.folders = [vscode.Uri.file('/a'), vscode.Uri.file('/b')];
+      state.workflows = [summary(`/a/${REVIEW}`), summary(`/b/${REVIEW}`)];
+      await panel.handle({ type: 'openWorkflow', path: REVIEW });
+      expect(ui.commands).toEqual(opened(`/b/${REVIEW}`));
+    });
+
+    it('falls back to the first folder when the workflow is not indexed yet', async () => {
+      const { panel, ui } = setupUsedBy(vscode.Uri.file('/home/me/agents/reviewer.agent.yaml'));
+      ui.folders = [vscode.Uri.file('/a'), vscode.Uri.file('/b')];
+      await panel.handle({ type: 'openWorkflow', path: REVIEW });
+      expect(ui.commands).toEqual(opened(`/a/${REVIEW}`));
+
+      ui.commands.length = 0;
+      ui.folders = [];
+      await panel.handle({ type: 'openWorkflow', path: REVIEW });
+      expect(ui.commands).toEqual([]);
+    });
   });
 
   it('runs the remaining commands', async () => {

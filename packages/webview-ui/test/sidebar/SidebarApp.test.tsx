@@ -1,11 +1,10 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { SidebarApp } from '../../src/views/sidebar/SidebarApp';
 import { makeState, posted, postedOfType, renderSidebar, resetPosted, sendState } from './helpers';
 
 beforeEach(resetPosted);
-afterEach(cleanup);
 
 describe('SidebarApp', () => {
   it('posts ready once on mount and waits for the host state', () => {

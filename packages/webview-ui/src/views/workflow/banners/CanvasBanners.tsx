@@ -1,10 +1,13 @@
-/** Messages pinned above the canvas: pending approvals, unreadable YAML, failed edits and restricted mode. */
+/**
+ * Messages pinned above the canvas: pending approvals, unreadable YAML, failed edits, blocks without ids and
+ * restricted mode.
+ */
 import './banners.css';
 import { useState } from 'react';
 import type { ApprovalPrompt, Diagnostic } from '@isar-flow/core';
 import { Banner, Button, TextInput } from '../../../components';
 import { useEditor } from '../editorContext';
-import { blockTitle } from '../canvas/model';
+import { blocksNeedingIds, blockTitle } from '../canvas/model';
 import { useWorkflowActions, useWorkflowState } from '../store';
 
 function ApprovalBanner({ prompt }: { prompt: ApprovalPrompt }) {
@@ -50,6 +53,28 @@ function ApprovalBanner({ prompt }: { prompt: ApprovalPrompt }) {
   );
 }
 
+/** Blocks without a usable id cannot be selected, edited or referenced; one click gives them ids. */
+function MissingIdsBanner({ missing, invalid }: { missing: number; invalid: number }) {
+  const { applyOps } = useWorkflowActions();
+  const count = missing + invalid;
+  const what = invalid > 0 ? 'no valid id' : 'no id';
+  return (
+    <Banner
+      tone="warning"
+      actions={
+        <Button size="s" variant="secondary" icon="wand" onClick={() => applyOps([{ op: 'assignMissingIds' }])}>
+          Add ids
+        </Button>
+      }
+    >
+      <span className="wf-banner-message">
+        {count === 1 ? `1 block has ${what}.` : `${count} blocks have ${what}.`} Blocks need ids before they can be
+        edited or referenced.
+      </span>
+    </Banner>
+  );
+}
+
 function syntaxProblem(diagnostics: Diagnostic[]): Diagnostic | undefined {
   return (
     diagnostics.find((d) => d.severity === 'error' && d.code === 'yaml-syntax') ??
@@ -60,10 +85,13 @@ function syntaxProblem(diagnostics: Diagnostic[]): Diagnostic | undefined {
 export function CanvasBanners() {
   const { doc, approvals, opsError, trusted } = useWorkflowState();
   const { openYaml, dismissOpsError } = useWorkflowActions();
+  const { model, editable } = useEditor();
+  const ids = editable ? blocksNeedingIds(model) : { missing: 0, invalid: 0 };
+  const needIds = ids.missing + ids.invalid > 0;
   const unreadable = doc !== null && doc.workflow === null ? syntaxProblem(doc.diagnostics) : undefined;
   const unreadableDoc = doc !== null && doc.workflow === null;
 
-  if (!approvals.length && !unreadableDoc && !opsError && trusted) return null;
+  if (!approvals.length && !unreadableDoc && !opsError && !needIds && trusted) return null;
   const line = unreadable?.range ? ` (line ${unreadable.range.start.line + 1})` : '';
 
   return (
@@ -102,6 +130,7 @@ export function CanvasBanners() {
           <span className="wf-banner-message">{opsError}</span>
         </Banner>
       ) : null}
+      {needIds ? <MissingIdsBanner missing={ids.missing} invalid={ids.invalid} /> : null}
       {!trusted ? <Banner tone="warning">Running is disabled until you trust this workspace.</Banner> : null}
     </div>
   );

@@ -116,7 +116,8 @@ const STATUS_ICONS: Record<StepStatus, string> = {
   success: 'pass-filled',
   failure: 'error',
   skipped: 'circle-slash',
-  cancelled: 'debug-stop',
+  // A circled stop keeps the status glyphs one round family and never reads as an empty checkbox.
+  cancelled: 'stop-circle',
 };
 
 const STATUS_LABELS: Record<StepStatus, string> = {

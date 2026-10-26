@@ -1,8 +1,6 @@
-import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { render } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { TemplateTextArea, templateSegments } from '../../../src/views/workflow/inspector/TemplateTextArea';
-
-afterEach(cleanup);
 
 describe('TemplateTextArea', () => {
   it('splits text into plain runs and templates', () => {

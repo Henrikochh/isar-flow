@@ -1,8 +1,10 @@
 /** The river canvas: scrolls both ways, zooms, and renders the workflow as one stream from Start to End. */
-import { useEffect, useRef } from 'react';
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, EmptyState } from '../../../components';
 import { useEditor } from '../editorContext';
 import { useWorkflowActions, useWorkflowState } from '../store';
+import { BlockMenu, type BlockMenuRequest } from './BlockMenu';
 import { CanvasDataProvider, useCanvas } from './canvasContext';
 import { justDragged, useDragItem } from './dnd';
 import { EndMarker, StartMarker } from './Markers';
@@ -11,7 +13,9 @@ import { dropEdit } from './ops';
 import { cx } from '../cx';
 import { RiverList, useSlot } from './River';
 import { cardElement, useCanvasKeyboard } from './useCanvasKeyboard';
+import { useCenterLine } from './useCenterLine';
 import { useEdgeScroll } from './useEdgeScroll';
+import { useFollowRun } from './useFollowRun';
 import { useZoom } from './useZoom';
 import { ZoomControl } from './ZoomControl';
 
@@ -69,16 +73,52 @@ function River() {
   );
 }
 
+/** State of the block menu: which block it is for and what it is anchored to (the pointer or the card). */
+function useBlockMenu(scrollRef: RefObject<HTMLElement | null>) {
+  const [request, setRequest] = useState<BlockMenuRequest | null>(null);
+  const anchorRef = useRef<HTMLElement | null>(null);
+  const pointRef = useRef<HTMLSpanElement>(null);
+  const seq = useRef(0);
+
+  const open = useCallback(
+    (stepId: string, at?: { x: number; y: number }) => {
+      const point = pointRef.current;
+      if (at && point) {
+        point.style.left = `${at.x}px`;
+        point.style.top = `${at.y}px`;
+        anchorRef.current = point;
+      } else {
+        anchorRef.current = cardElement(scrollRef.current, stepId);
+      }
+      seq.current += 1;
+      setRequest({ stepId, seq: seq.current });
+    },
+    [scrollRef],
+  );
+
+  // Escape or a click elsewhere: the block keeps the focus, as after any other menu.
+  const close = () => {
+    if (request) cardElement(scrollRef.current, request.stepId)?.focus();
+    setRequest(null);
+  };
+
+  const point = createPortal(<span ref={pointRef} className="wf-menu-point" aria-hidden="true" />, document.body);
+  return { request, anchorRef, open, close, point };
+}
+
 export function Canvas() {
   const { workflow, stale, model } = useEditor();
   const { selection, approvals } = useWorkflowState();
   const drag = useDragItem();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const { zoom, setZoom, fit } = useZoom(scrollRef, contentRef);
-  const onKeyDown = useCanvasKeyboard(scrollRef);
+  useCenterLine(scrollRef, stageRef);
+  const menu = useBlockMenu(scrollRef);
+  const { onKeyDown, blockActions } = useCanvasKeyboard(scrollRef, menu.open);
   useEdgeScroll(scrollRef, drag !== null);
-  const centered = useRef(false);
+  useFollowRun(scrollRef);
   const { select } = useWorkflowActions();
 
   // Reveal the selected block (also when the host asks to focus one).
@@ -97,16 +137,8 @@ export function Canvas() {
     }
   }, [approvals]);
 
-  // When the river is wider than the canvas, start scrolled to its center line.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (centered.current || !el || model.entries.length === 0) return;
-    centered.current = true;
-    if (el.scrollWidth > el.clientWidth) el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
-  }, [model]);
-
   return (
-    <CanvasDataProvider>
+    <CanvasDataProvider openMenu={menu.open}>
       <div className="wf-canvas-wrap">
         <div
           ref={scrollRef}
@@ -121,7 +153,7 @@ export function Canvas() {
             select(null);
           }}
         >
-          <div className={cx('wf-stage', model.entries.length === 0 && 'wf-stage--center')}>
+          <div ref={stageRef} className={cx('wf-stage', model.entries.length === 0 && 'wf-stage--center')}>
             <div
               ref={contentRef}
               className={cx('wf-river', stale && 'wf-river--stale')}
@@ -139,6 +171,14 @@ export function Canvas() {
           </div>
         </div>
         <ZoomControl zoom={zoom} onZoom={setZoom} onFit={fit} />
+        {menu.point}
+        <BlockMenu
+          request={menu.request}
+          anchorRef={menu.anchorRef}
+          workflow={workflow}
+          actions={blockActions}
+          onClose={menu.close}
+        />
       </div>
     </CanvasDataProvider>
   );

@@ -63,10 +63,13 @@ export function Select<T extends string>({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    // Every typed word must appear somewhere in the option, so "tests exit" finds "tests › exitCode".
+    const words = q.split(/\s+/).filter(Boolean);
     const list = q
-      ? options.filter((o) =>
-          [o.label, o.description, o.value, o.group].some((t) => t && t.toLowerCase().includes(q)),
-        )
+      ? options.filter((o) => {
+          const haystack = [o.label, o.description, o.value, o.group].filter(Boolean).join(' ').toLowerCase();
+          return words.every((word) => haystack.includes(word));
+        })
       : options;
     if (allowCustom && q && !options.some((o) => o.value.toLowerCase() === q)) {
       return [...list, { value: query.trim() as T, label: customLabel(query.trim()), group: undefined }];
@@ -163,8 +166,12 @@ export function Select<T extends string>({
               className="if-input if-select__search"
               placeholder="Filter…"
               value={query}
+              role="combobox"
               aria-label="Filter options"
+              aria-expanded="true"
+              aria-autocomplete="list"
               aria-controls={listId}
+              aria-activedescendant={filtered[active] ? `${listId}-${active}` : undefined}
               onChange={(e) => {
                 setQuery(e.target.value);
                 setActive(0);

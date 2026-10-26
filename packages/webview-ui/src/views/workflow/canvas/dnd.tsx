@@ -92,7 +92,7 @@ export function EditorDnd({ children }: { children: ReactNode }) {
       accessibility={{
         screenReaderInstructions: {
           draggable:
-            'Drag the block onto the river to add or move it. Without a mouse, click a block in the palette to add it after the selection.',
+            'Drag the block onto the river to add or move it. Without a mouse, click a block in the palette to add it after the selection, or press Shift+F10 on a block and choose Move to… to move it.',
         },
       }}
     >

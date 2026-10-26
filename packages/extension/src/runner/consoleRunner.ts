@@ -4,7 +4,7 @@ import os from 'node:os';
 import type { ConsoleResult, ShellName } from '@isar-flow/core';
 import type { ConsoleRunOptions, RunConsoleCommand } from '../contracts';
 import { CappedText } from './capture';
-import { mergeEnv } from './env';
+import { commandEnv } from './env';
 import { killProcessTree } from './killTree';
 import { resolveShell, type ShellCommand } from './shells';
 import { StreamDecoder } from './streamDecoder';
@@ -50,7 +50,7 @@ function execute(
     try {
       child = spawn(shell.file, shell.args(options.command), {
         cwd: options.cwd,
-        env: mergeEnv(process.env, options.env),
+        env: commandEnv(process.env, options.env),
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
         windowsVerbatimArguments: shell.windowsVerbatimArguments,

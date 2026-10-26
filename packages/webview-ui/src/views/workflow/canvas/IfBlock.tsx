@@ -5,6 +5,7 @@
 import type { StepSlot } from '@isar-flow/core';
 import { useCanvas } from './canvasContext';
 import { CardHead, stateClasses } from './BlockCard';
+import { BreakableCode } from './BreakableCode';
 import type { BlockEntry } from './model';
 import { cx } from '../cx';
 import { RiverList } from './River';
@@ -91,9 +92,7 @@ export function IfBlock({ entry }: { entry: BlockEntry }) {
           <div className="wf-ifcond">
             <span className="wf-ifcond__kw">If</span>{' '}
             {condition ? (
-              <code className="wf-ifcond__text" title={condition}>
-                {condition}
-              </code>
+              <BreakableCode className="wf-ifcond__text" title={condition} text={condition} />
             ) : (
               <span className="wf-card__placeholder">No condition yet</span>
             )}

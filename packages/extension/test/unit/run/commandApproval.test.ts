@@ -50,6 +50,43 @@ describe('consoleCommandsOf', () => {
     ]);
   });
 
+  it('includes the shell, folder and environment a block sets, and the workflow environment', () => {
+    const wf = workflowOf(
+      [
+        'version: 1',
+        'name: x',
+        'env:',
+        '  CI: "1"',
+        'steps:',
+        '  - id: a',
+        '    type: console',
+        '    run: npm test',
+        '    shell: bash',
+        '    cwd: packages/app',
+        '    env:',
+        '      NODE_OPTIONS: --require ./hook.js',
+        '  - id: b',
+        '    type: console',
+        '    run: npm run lint',
+        '',
+      ].join('\n'),
+    );
+    expect(consoleCommandsOf(wf)).toEqual([
+      '(environment of all commands: CI=1)',
+      'npm test\n(shell: bash, folder: packages/app, environment: NODE_OPTIONS=--require ./hook.js)',
+      'npm run lint',
+    ]);
+  });
+
+  it('gives a different list when only the environment of a command changes', () => {
+    const wf = (env: string) =>
+      workflowOf(`version: 1\nname: x\nsteps:\n  - id: a\n    type: console\n    run: npm test\n${env}`);
+    const plain = hashCommands(consoleCommandsOf(wf('')));
+    const hooked = hashCommands(consoleCommandsOf(wf('    env:\n      NODE_OPTIONS: --require ./x.js\n')));
+    expect(hooked).not.toBe(plain);
+    expect(consoleCommandsOf(wf(''))).toEqual(['npm test']);
+  });
+
   it('returns nothing for workflows without console blocks', () => {
     const wf = workflowOf('version: 1\nname: x\nsteps:\n  - id: a\n    type: approval\n    message: ok?\n');
     expect(consoleCommandsOf(wf)).toEqual([]);

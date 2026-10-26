@@ -220,10 +220,10 @@ Companion to the spec (§9). Every webview must follow this brief so the product
 │   Max turns [20]                               │  │ ⚙ readFile src/app.ts    │ │
 │ Instructions                                   │  └──────────────────────────┘ │
 │   [ big TextArea, autoGrow, code-ish ]         │  [Ask the agent…     ][Send] │
-│ Tools                                          │  Uses the saved file. Tools  │
-│   [x] Read files       Read workspace files    │  that edit ask first.        │
-│   [x] Search           …                       │                              │
-│ Permissions                                    │                              │
+│ Tools                                          │  Uses the settings in this   │
+│   [x] Read files       Read workspace files    │  editor, unsaved changes     │
+│   [x] Search           …                       │  included. Edits and         │
+│ Permissions                                    │  commands ask first.         │
 │   Edit files    (Never | Ask | Always)         │                              │
 │   Run commands  (Never | Ask | Always)         │                              │
 │ Used by  review.workflow.yaml                  │                              │

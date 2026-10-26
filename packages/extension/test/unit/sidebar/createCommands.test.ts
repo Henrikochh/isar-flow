@@ -4,12 +4,14 @@ import type { AgentStore, WorkflowStore } from '../../../src/contracts';
 import { type CreateUi, newAgentFlow, newWorkflowFlow } from '../../../src/commands/create';
 
 /** Scripted UI: answers input boxes and quick picks in order (picking items by label). */
-function scriptedUi(answers: (string | undefined)[], hasWorkspace = true) {
+function scriptedUi(answers: (string | undefined)[], hasWorkspace = true, folders = ['/ws']) {
   const asked: string[] = [];
   const opened: unknown[][] = [];
   const next = () => answers.shift();
   const ui: CreateUi = {
     hasWorkspace: () => hasWorkspace,
+    workspaceFolders: () =>
+      hasWorkspace ? folders.map((path) => ({ name: path.slice(1), uri: vscode.Uri.file(path) })) : [],
     showInputBox: async (options) => {
       asked.push(`input ${options.prompt}`);
       expect(options.validateInput?.('  ')).toBe('Enter a name.');
@@ -46,8 +48,25 @@ describe('new workflow command', () => {
       'pick Start from: Blank (Start empty), Review loop (Implement, test and review until approved), ' +
         'Test and fix (Run tests and fix failures until they pass)',
     ]);
-    expect(create).toHaveBeenCalledWith('Review', 'review-loop');
+    expect(create).toHaveBeenCalledWith('Review', 'review-loop', vscode.Uri.file('/ws'));
     expect(opened).toEqual([['vscode.openWith', uri, 'isarFlow.workflowEditor']]);
+  });
+
+  it('asks which folder to use in a multi-root workspace', async () => {
+    const { store, create } = workflows();
+    const { ui, asked } = scriptedUi(['Review', 'Blank', 'two'], true, ['/ws', '/two']);
+    await newWorkflowFlow(ui, store);
+    expect(asked.at(-1)).toBe(
+      'pick Which workspace folder should the workflow be saved in?: ws (/ws), two (/two)',
+    );
+    expect(create).toHaveBeenCalledWith('Review', 'blank', vscode.Uri.file('/two'));
+
+    const dismissed = workflows();
+    await newWorkflowFlow(
+      scriptedUi(['Review', 'Blank', undefined], true, ['/ws', '/two']).ui,
+      dismissed.store,
+    );
+    expect(dismissed.create).not.toHaveBeenCalled();
   });
 
   it('stops quietly when a prompt is dismissed', async () => {
@@ -83,7 +102,7 @@ describe('new agent command', () => {
       'pick Start from',
       'pick Where should the agent be saved?',
     ]);
-    expect(create).toHaveBeenCalledWith('Strict reviewer', 'user', 'reviewer');
+    expect(create).toHaveBeenCalledWith('Strict reviewer', 'user', 'reviewer', {});
     expect(opened).toEqual([['vscode.openWith', uri, 'isarFlow.agentEditor']]);
   });
 
@@ -92,7 +111,23 @@ describe('new agent command', () => {
     const { ui, asked } = scriptedUi(['Helper', 'Blank'], false);
     await newAgentFlow(ui, store);
     expect(asked).toHaveLength(2);
-    expect(create).toHaveBeenCalledWith('Helper', 'user', 'blank');
+    expect(create).toHaveBeenCalledWith('Helper', 'user', 'blank', {});
+  });
+
+  it('asks which folder to use for workspace agents in a multi-root workspace', async () => {
+    const { store, create } = agents();
+    const { ui, asked } = scriptedUi(['Helper', 'Coder', 'Workspace', 'two'], true, ['/ws', '/two']);
+    await newAgentFlow(ui, store);
+    expect(asked.at(-1)).toBe(
+      'pick Which workspace folder should the agent be saved in?: ws (/ws), two (/two)',
+    );
+    expect(create).toHaveBeenCalledWith('Helper', 'workspace', 'coder', { folder: vscode.Uri.file('/two') });
+
+    const user = agents();
+    const asUser = scriptedUi(['Helper', 'Coder', 'User'], true, ['/ws', '/two']);
+    await newAgentFlow(asUser.ui, user.store);
+    expect(asUser.asked).toHaveLength(3);
+    expect(user.create).toHaveBeenCalledWith('Helper', 'user', 'coder', {});
   });
 
   it('stops quietly when the scope prompt is dismissed', async () => {

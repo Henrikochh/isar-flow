@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { AgentStone, Button, IconButton, TextArea } from '../../components';
 import { TranscriptView } from './TranscriptView';
 import type { TryIt } from './useTryIt';
 
-const HINT = 'Uses the saved file. Tools that edit ask first.';
+const HINT = 'Uses the settings in this editor, unsaved changes included. Edits and commands ask first.';
 
 function Composer({
   streaming,
@@ -17,7 +17,17 @@ function Composer({
   onStop: () => void;
 }) {
   const [text, setText] = useState('');
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const stopFocused = useRef(false);
   const canSend = text.trim() !== '' && !disabledReason;
+
+  // Stop disappears when the answer ends; a keyboard user who was on it continues in the composer.
+  useLayoutEffect(() => {
+    if (streaming || !stopFocused.current) return;
+    stopFocused.current = false;
+    inputRef.current?.focus();
+  }, [streaming]);
+
   const submit = () => {
     if (!disabledReason && onAsk(text)) setText('');
   };
@@ -31,6 +41,7 @@ function Composer({
     >
       <div className={disabledReason ? 'ag-composer__box ag-composer__box--disabled' : 'ag-composer__box'}>
         <TextArea
+          ref={inputRef}
           className="ag-composer__input"
           aria-label="Message to the agent"
           aria-describedby="ag-composer-hint"
@@ -60,12 +71,21 @@ function Composer({
             )}
           </p>
           {streaming ? (
-            <Button variant="danger" size="s" icon="debug-stop" onClick={onStop}>
+            <Button
+              key="stop"
+              variant="danger"
+              size="s"
+              icon="debug-stop"
+              onFocus={() => (stopFocused.current = true)}
+              onBlur={() => (stopFocused.current = false)}
+              onClick={onStop}
+            >
               Stop
             </Button>
           ) : (
             // The button takes the river color only once there is something to send.
             <Button
+              key="send"
               type="submit"
               variant={canSend ? 'run' : 'secondary'}
               size="s"
@@ -107,7 +127,7 @@ export function TryItPanel({
         {model ? (
           <span className="ag-tryit__model" title={`Answers come from ${model.ref}`}>
             <i className="codicon codicon-sparkle ag-tryit__model-icon" aria-hidden="true" />
-            {model.name}
+            <span className="ag-tryit__model-name">{model.name}</span>
           </span>
         ) : null}
         <IconButton

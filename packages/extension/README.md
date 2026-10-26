@@ -1,38 +1,62 @@
 # Isar Flow
 
-Configure AI agents and chain them into workflows, right inside VS Code. Build a workflow on a visual
-canvas, or write it as YAML; both are views of the same file and stay in sync. Agents can use the models
-VS Code offers (such as GitHub Copilot) or any OpenAI-compatible endpoint, such as LiteLLM, Ollama, vLLM or
-OpenRouter.
+Configure AI agents and chain them into workflows, right inside VS Code. A workflow is a YAML file made of
+blocks: agents that read and edit your code, console commands, loops, conditions and approvals. Build it on a
+visual canvas, the river, or write the YAML by hand; both are views of the same file and stay in sync,
+comments included. Agents use the models VS Code offers (such as GitHub Copilot) or any OpenAI-compatible
+endpoint, such as LiteLLM, Ollama, vLLM or OpenRouter.
 
 A typical workflow: an agent implements a task, your tests run in the console, a reviewer agent checks the
 result, and a loop repeats the fix until the tests pass and the reviewer approves.
 
 ## Features
 
-- **Agents view**: create agents for the workspace (`.isarflow/agents/`) or for your user. Each agent has a
-  model, fallback models, a system prompt, tools and permissions. Use **Try it** to chat with an agent
-  before you put it in a workflow.
-- **Workflow canvas**: blocks sit on a vertical stream. Drag blocks from the palette, edit them in the
-  inspector, and see problems as you type. Every visual edit rewrites the YAML and keeps your comments.
-- **Blocks**: Agent, Console, Loop, If/Else, Break, Stop and Approval (a human decides before the run goes on).
-- **Live runs**: the canvas shows which block is running, console output is mirrored to a terminal tab, and
-  recent runs are kept in a history you can open again.
+- **River editor**: blocks sit on a vertical stream; If / else splits it into two lanes, a loop draws a return
+  channel. Add blocks from the palette or with the **+** between blocks, drag them, or move them with **Move
+  to…** and the keyboard. Every visual edit changes only the affected lines of the YAML and keeps your
+  comments. Problems show up as you type, on the canvas and in the Problems view.
+- **Blocks**: Agent, Console, Loop (until, while or a fixed number of times), If / else, Break, Stop and
+  Approval (a person decides before the run goes on).
+- **Expressions and conditions**: `${{ steps.tests.exitCode == 0 }}`, `${{ tail(steps.tests.output, 80) }}`,
+  17 functions, and a condition builder that writes rules for you.
+- **Agents**: create agents for the workspace (`.isarflow/agents/`) or for your user. Each has a model,
+  fallback models, a system prompt, built-in tools and permissions. **Try it** chats with an agent before
+  you use it in a workflow.
+- **JSON answers**: describe the expected shape and later blocks read fields such as
+  `steps.review.json.approved`. An answer that does not fit gets one repair round.
+- **Live runs**: block status and loop iterations on the canvas, rendered prompts and outputs in the
+  inspector, console output mirrored to a terminal, approvals inline, and a history of recent runs.
 - **Built-in agent tools**: `readFile`, `listFiles`, `searchText`, `gitDiff`, `editFile`, `writeFile` and
   `runCommand`. Edits go through VS Code, so you can undo them.
 
 ## Quick start
 
 1. Open a folder and select the **Isar Flow** icon in the Activity Bar.
-2. On the **Workflows** tab, select **New workflow** and choose the **Review loop** template. Isar Flow creates
-   the workflow and, if they are missing, the agents `coder` and `reviewer`.
-3. Pick models for the agents: open each agent and choose a model. With GitHub Copilot installed, its models
-   are listed under **VS Code**. To use your own endpoint, see [Model endpoints](#model-endpoints).
-4. In the workflow, replace `npm test` with your test command, then select **Run**. Enter the task when
-   asked, and confirm the console commands the first time.
+2. On the **Workflows** tab, select **New**, enter a name and choose the **Review loop** template. Isar Flow
+   creates the workflow and, if they are missing, the agents `coder` and `reviewer`.
+3. Pick models for the agents: open each one from the **Agents** tab and choose a model. With GitHub Copilot
+   installed, its models are listed under **VS Code**. To use your own server, see
+   [Model endpoints](#model-endpoints).
+4. In the workflow, select the `tests` block and replace `npm test` with your test command. Select **Run**,
+   enter the task and confirm the console commands.
 
-You can also start a run with the **Run workflow** CodeLens at the top of a `.workflow.yaml` file, from the
-file's context menu, or with **Isar Flow: Run workflow** in the Command Palette.
+You can also start a run from the sidebar, with the **Run workflow** CodeLens at the top of a
+`.workflow.yaml` file, from the file's context menu, or with **Isar Flow: Run workflow**.
+
+## The river editor
+
+| Keys                     | Action                                                          |
+| ------------------------ | --------------------------------------------------------------- |
+| ↓ / → and ↑ / ←          | Select the next or previous block                               |
+| Alt+↑ / Alt+↓            | Move the selected block within its list                         |
+| Delete / Backspace       | Delete the selected block                                       |
+| Ctrl+D (Cmd+D)           | Duplicate the selected block                                    |
+| Shift+F10                | Open the block menu (Move to…, Duplicate, Show in YAML, Delete) |
+| Enter / Escape           | Go to the inspector / clear the selection                       |
+| Ctrl / Cmd + mouse wheel | Zoom                                                            |
+
+**Open YAML** shows the text beside the canvas. When the YAML cannot be read, the canvas keeps the last
+readable version and tells you which line to fix.
 
 ## Model endpoints
 
@@ -41,9 +65,9 @@ Agents refer to models as `<provider>/<model>`, for example `litellm/gpt-4.1` or
 **VS Code models** need no setup. The first time an agent uses one, VS Code asks you to allow Isar Flow to
 use it. Turn them off with the `isarFlow.vscodeModels` setting.
 
-**OpenAI-compatible endpoints**: run **Isar Flow: Add model endpoint** and pick a preset (LiteLLM, Ollama,
-OpenRouter, OpenAI) or **Custom…**. Isar Flow asks for an id, the base URL and the API key, then lists the
-endpoint's models with `GET /models`.
+**OpenAI-compatible endpoints**: run **Isar Flow: Add model endpoint** (or select **+** under **Models** in
+the sidebar) and pick a preset (LiteLLM, Ollama, OpenRouter, OpenAI) or **Custom…**. Isar Flow asks for an
+id, the base URL and the API key, then lists the endpoint's models with `GET /models`.
 
 ### LiteLLM
 
@@ -64,9 +88,9 @@ The endpoint is stored in your settings; the key is stored in VS Code's secret s
 ]
 ```
 
-Use **Isar Flow: Set provider API key** to change a key and **Isar Flow: Test model endpoint** to check a
-connection. Failed requests (rate limits, server errors) are retried; after that an agent's
-`fallbackModels` are tried in order.
+Use **Isar Flow: Edit model endpoint**, **Set provider API key** and **Test model endpoint** to manage
+endpoints. Requests that fail with a rate limit, a server or a network error are retried; after that an
+agent's `fallbackModels` are tried in order.
 
 ## Agents
 
@@ -84,8 +108,10 @@ tools: [readFile, listFiles, searchText, gitDiff]
 permissions: { edits: none, commands: none } # none | ask | auto
 ```
 
-`ask` shows a dialog with **Allow**, **Allow for this run** and **Deny**. A denied call is reported to the
-model as a tool error. Workspace agents win over user agents with the same id.
+`permissions.edits` gates `editFile` and `writeFile`, `permissions.commands` gates `runCommand`; reading
+tools never ask. `none` refuses, `auto` allows, and `ask` (also what an unset level means) shows a dialog with
+**Allow**, **Allow for this run** and **Deny**. A refused call is reported to the model as a tool error.
+**Try it** always asks instead of `auto`. Workspace agents win over user agents with the same id.
 
 ## Workflow YAML
 
@@ -130,7 +156,7 @@ steps:
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | `agent`    | `agent` (id or inline settings), `prompt`, `model`, `output: { format: text \| json, schema }`, `session: fresh \| continue`, `context: { files: [globs] }` | `text`, `json`, `model`, `usage`, `turns`            |
 | `console`  | `run`, `shell` (`auto`, `pwsh`, `powershell`, `cmd`, `bash`, `sh`), `cwd`, `env`                                                                            | `exitCode`, `stdout`, `stderr`, `output`, `timedOut` |
-| `loop`     | `until` or `while`, `maxIterations` (1–100, required), `onMaxIterations: fail \| continue`, `steps`                                                         | `iterations`, `exitReason`                           |
+| `loop`     | `until` or `while` (or neither: a fixed count), `maxIterations` (1–100, required), `onMaxIterations: fail \| continue`, `steps`                             | `iterations`, `exitReason`                           |
 | `if`       | `condition`, `then`, `else`                                                                                                                                 | `branch`, `result`                                   |
 | `break`    | ends the innermost loop                                                                                                                                     |                                                      |
 | `stop`     | `outcome: success \| failure`, `message`                                                                                                                    |                                                      |
@@ -145,7 +171,7 @@ unless `continueOnError: true` is set.
 `a ? b : c`. Functions: `contains`, `startsWith`, `endsWith`, `matches`, `length`, `lower`, `upper`, `trim`,
 `head`, `tail`, `lines`, `json`, `toJSON`, `join`, `default`, `number`, `string`.
 
-**Conditions** can also be written as data, which is what the condition builder on the canvas writes:
+**Conditions** can also be written as rules, which is what the condition builder on the canvas writes:
 
 ```yaml
 condition:
@@ -163,34 +189,49 @@ installed, workflow and agent files get completion and validation from the bundl
 ## Secrets
 
 Run **Isar Flow: Set workflow secret** to store a value in VS Code's secret storage, then use it as
-`${{ secrets.NAME }}`. Secret values are replaced with `••••••` in run output, the run view and the
-history.
+`${{ secrets.NAME }}`. Every stored secret is available to every workflow you run in a trusted workspace.
+Values of 4 or more characters are replaced with `••••••` in run events, the terminal, the history and
+approval prompts.
 
 ## Security
 
-- **Workspace Trust**: workflows and agents can be viewed and edited in Restricted Mode, but nothing runs.
-- **Console commands**: before a workflow runs commands you have not approved yet, Isar Flow lists them and
-  asks. A changed command needs approval again. Turn this off with `isarFlow.confirmCommands` only for
-  workflows you trust.
-- **Agent tools** only reach files inside the workspace folder. Paths that leave it (`..`, absolute paths,
-  links pointing outside) are refused, and writes inside `.git` are refused. Edits and commands follow the
-  agent's `permissions`.
+Isar Flow runs commands and lets models act in your workspace. Review workflows and agents written by others
+before you run them.
+
+- **Workspace Trust**: workflows and agents can be viewed and edited in Restricted Mode, but nothing runs,
+  and only your user model endpoints are used.
+- **Console commands**: before a workflow runs commands you have not approved yet, Isar Flow lists them (with
+  their shell, folder and environment) and asks. A changed command needs approval again. Only your user
+  settings can turn this off (`isarFlow.confirmCommands`).
+- **Templates are not escaped**: `${{ }}` values (inputs, block outputs including model answers, env and
+  secrets) are pasted into a console block's command line, folder and environment as they are, and the
+  confirmation shows the template, not the rendered command. Pass user input and agent output through `env`
+  and quote it in the shell instead of putting it into the command line.
+- **Agent permissions**: the command confirmation covers console blocks only. Agents with `edits` or
+  `commands` set to `auto` act without asking, and a workflow from a repository can use such agents.
+- **Agent tools** only reach files inside the workflow's workspace folder, checked after resolving links,
+  junctions and Windows short names; nothing inside `.git` can be written. Within that folder agents can
+  read every file, including `.env` files, and send it to the model provider.
+- **Workspace endpoints**: in a trusted workspace, `.vscode/settings.json` can define model endpoints. One
+  with the same id as yours replaces it and receives your stored API key.
+- **Not sandboxed**: commands run with your VS Code environment, including credentials in environment
+  variables.
 - **Runs always end**: loops need `maxIterations`, agents have `maxTurns`, blocks can have a `timeout`, and
   `isarFlow.maxTokensPerRun` stops a run that uses too many tokens. **Stop** ends a run and the processes it
   started.
-- API keys and secrets are kept in VS Code's secret storage, never in settings or workflow files.
-- Model output is shown as text; it is never rendered as HTML.
+- API keys and secrets are kept in VS Code's secret storage, never in settings or workflow files. Model output
+  is shown as text, never rendered as HTML.
 
 ## Settings
 
-| Setting                    | Default | Description                                                                                  |
-| -------------------------- | ------- | -------------------------------------------------------------------------------------------- |
-| `isarFlow.providers`       | `[]`    | OpenAI-compatible model endpoints.                                                           |
-| `isarFlow.vscodeModels`    | `true`  | Offer the language models available in VS Code.                                              |
-| `isarFlow.defaultShell`    | `auto`  | Shell for console blocks without `shell`: PowerShell on Windows, your login shell elsewhere. |
-| `isarFlow.maxTokensPerRun` | `0`     | Stop a run after this many tokens. `0` means no limit.                                       |
-| `isarFlow.confirmCommands` | `true`  | Ask before running console commands you have not approved.                                   |
-| `isarFlow.historyLimit`    | `50`    | Runs kept per workflow.                                                                      |
+| Setting                    | Default | Description                                                                                                         |
+| -------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------- |
+| `isarFlow.providers`       | `[]`    | OpenAI-compatible model endpoints.                                                                                  |
+| `isarFlow.vscodeModels`    | `true`  | Offer the language models available in VS Code.                                                                     |
+| `isarFlow.defaultShell`    | `auto`  | Shell for console blocks without `shell` and for agent commands: PowerShell on Windows, your login shell elsewhere. |
+| `isarFlow.maxTokensPerRun` | `0`     | Stop a run after this many tokens. `0` means no limit.                                                              |
+| `isarFlow.confirmCommands` | `true`  | Ask before running console commands you have not approved. User settings only.                                      |
+| `isarFlow.historyLimit`    | `50`    | Runs kept per workflow (1–500).                                                                                     |
 
 ## Troubleshooting
 
@@ -198,8 +239,11 @@ Run **Isar Flow: Show log** to see what happened during activation, model discov
 
 - _A model is missing_: run **Isar Flow: Refresh models** or **Isar Flow: Test model endpoint**. The base
   URL may end with or without `/v1`: when the plain URL answers 404, Isar Flow tries `<url>/v1`.
+- _VS Code models fail with a permission error_: allow Isar Flow when VS Code asks, or under **Accounts →
+  Manage Language Model Access**.
 - _A command works in your terminal but not in a workflow_: set `shell` on the block, or change
   `isarFlow.defaultShell`.
+- _Run is disabled_: hover it to see why (untrusted workspace, unreadable YAML, problems, or no blocks).
 
 ## License
 

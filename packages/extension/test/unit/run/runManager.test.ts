@@ -1,3 +1,4 @@
+import path from 'node:path';
 import * as vscode from 'vscode';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentDefinition, ModelCatalog, RunEvent, Workflow } from '@isar-flow/core';
@@ -63,6 +64,10 @@ interface Setup {
   click?: string;
   env?: Record<string, string | undefined>;
   modal?: boolean;
+  /** Workspace folder of the workflow; null for a workflow outside all folders. */
+  folder?: string | null;
+  /** Folder console commands run in. */
+  root?: string;
 }
 
 function setup(options: Setup = {}) {
@@ -77,6 +82,7 @@ function setup(options: Setup = {}) {
     trace: () => undefined,
   } as unknown as vscode.LogOutputChannel;
   const commands: ConsoleRunOptions[] = [];
+  const contextReads: { root: string | undefined; globs: string[] }[] = [];
   const runCommand = options.runCommand ?? exitZero;
   const context = {
     workspaceState: new FakeMemento(),
@@ -96,9 +102,12 @@ function setup(options: Setup = {}) {
       commands.push(o);
       return runCommand(o);
     },
-    tools: () => ({ execute: async () => ({ content: '' }) }),
+    tools: vi.fn(() => ({ execute: async () => ({ content: '' }) })),
     terminalFor: vi.fn(() => terminal),
-    readContextFiles: async () => [],
+    readContextFiles: async (globs) => {
+      contextReads.push({ root: undefined, globs });
+      return [];
+    },
   };
 
   const notifications: { kind: string; message: string; buttons: string[] }[] = [];
@@ -118,7 +127,8 @@ function setup(options: Setup = {}) {
     executeCommand: vi.fn(async () => undefined),
     readText: vi.fn(async () => options.text ?? CONSOLE_WORKFLOW),
     setting: <T>(key: string, fallback: T) => (key in settings ? (settings[key] as T) : fallback),
-    workspaceRoot: () => '/ws',
+    workspaceFolder: vi.fn(() => (options.folder === null ? undefined : (options.folder ?? '/ws'))),
+    workspaceRoot: vi.fn(() => options.root ?? '/ws'),
     promptInputs: vi.fn(async (_workflow: Workflow) => ('inputs' in options ? options.inputs : {})),
     confirmCommands: vi.fn(async () => ('confirm' in options ? options.confirm : 'Run')),
     createStatusItem: () => {
@@ -136,6 +146,10 @@ function setup(options: Setup = {}) {
     secrets,
     approvals,
     env: options.env ?? { PATH: '/bin' },
+    readContextFilesIn: (root) => async (globs) => {
+      contextReads.push({ root, globs });
+      return [];
+    },
   });
   const events: RunEvent[] = [];
   manager.onEvent(({ workflowUri, event }) => {
@@ -152,6 +166,7 @@ function setup(options: Setup = {}) {
     terminal,
     logLines,
     commands,
+    contextReads,
     notifications,
     statusItems,
     settings,
@@ -231,6 +246,18 @@ describe('createRunManager', () => {
     });
     t.manager.cancel(runId);
     await t.manager.whenFinished(runId);
+  });
+
+  it('stops runs on shutdown and resolves once they are saved to the history', async () => {
+    const t = setup({ runCommand: untilAborted });
+    const runId = (await t.manager.start(t.uri)) as string;
+    await flush();
+    await t.manager.shutdown();
+    expect(t.manager.history.list(t.uri.toString()).map((r) => [r.runId, r.status])).toEqual([
+      [runId, 'cancelled'],
+    ]);
+    expect(t.manager.active()).toEqual([]);
+    expect(await t.manager.start(t.uri)).toBeUndefined();
   });
 
   it('ends a cancelled run as cancelled and saves it', async () => {
@@ -361,6 +388,59 @@ steps:
     const runId = (await t.manager.start(t.uri)) as string;
     await t.manager.whenFinished(runId);
     expect(t.commands[0]).toMatchObject({ command: 'echo hi s3cret', shell: 'bash' });
+  });
+
+  it("works in the workflow's own workspace folder", async () => {
+    const text = `version: 1
+name: Folder
+steps:
+  - id: build
+    type: console
+    run: npm run build
+    cwd: app
+  - id: ask
+    type: agent
+    agent: coder
+    prompt: Hi
+    context:
+      files: [README.md]
+`;
+    const agents = { coder: { name: 'Coder', model: 'x/y' } };
+    const t = setup({ text, agents, folder: '/second', root: '/second' });
+    const runId = (await t.manager.start(t.uri)) as string;
+    await t.manager.whenFinished(runId);
+    expect(t.ui.workspaceFolder).toHaveBeenCalledWith(t.uri);
+    expect(t.commands[0].cwd).toBe(path.resolve('/second', 'app'));
+    expect(t.deps.tools).toHaveBeenCalledWith(runId, '/second');
+    expect(t.contextReads).toEqual([{ root: '/second', globs: ['README.md'] }]);
+  });
+
+  it('keeps agent tools and context files out of the folder of a workflow outside all folders', async () => {
+    const text = `version: 1
+name: Loose
+steps:
+  - id: build
+    type: console
+    run: npm run build
+  - id: ask
+    type: agent
+    agent: coder
+    prompt: Hi
+    context:
+      files: [README.md]
+`;
+    const t = setup({
+      text,
+      agents: { coder: { name: 'Coder', model: 'x/y' } },
+      folder: null,
+      root: '/loose',
+    });
+    const runId = (await t.manager.start(t.uri)) as string;
+    await t.manager.whenFinished(runId);
+    // Console commands run beside the file; tools and context files use the default (first) folder.
+    expect(t.commands[0].cwd).toBe(path.resolve('/loose'));
+    expect(t.deps.tools).toHaveBeenCalledWith(runId, undefined);
+    expect(t.contextReads).toEqual([{ root: undefined, globs: ['README.md'] }]);
   });
 
   it('logs failed blocks and saves failed runs', async () => {

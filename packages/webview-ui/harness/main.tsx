@@ -1,20 +1,29 @@
 /**
  * Browser harness: renders a webview with a mock host, a VS Code theme and a scenario.
- * URL: /harness/index.html?view=workflow&scenario=running&theme=dark[&bare=1]
+ * URL: /harness/index.html?view=workflow&scenario=running&theme=dark[&bare=1][&latency=300]
+ * `latency` delays every host message by that many ms, like a busy extension host.
  */
 import { applyTheme, type HarnessTheme } from './themes';
-import { agentHost, sidebarHost, sidebarViewState, workflowHost } from './mockHost';
+import { agentHost, probe, sidebarHost, sidebarViewState, workflowHost } from './mockHost';
 import { TRANSCRIPT_FIXTURE } from './transcript';
 
 const params = new URLSearchParams(location.search);
 const view = params.get('view') ?? 'workflow';
 const scenario = params.get('scenario') ?? 'default';
 const theme = (params.get('theme') ?? 'dark') as HarnessTheme;
+const latency = Number(params.get('latency')) || 0;
 
 document.body.dataset.view = view;
 applyTheme(theme);
 
-const toWebview = (message: unknown) => window.postMessage(message, '*');
+// Scripted checks (scripts/interactions.mjs) read what the webview posted and what the mock host holds.
+const posted: unknown[] = [];
+(window as unknown as { __harness: unknown }).__harness = { posted, probe };
+
+const toWebview = (message: unknown) => {
+  if (latency) setTimeout(() => window.postMessage(message, '*'), latency);
+  else window.postMessage(message, '*');
+};
 const handler: (message: never) => void =
   view === 'sidebar'
     ? sidebarHost(scenario, toWebview)
@@ -31,6 +40,7 @@ let viewState: unknown =
 
 window.acquireVsCodeApi = () => ({
   postMessage: (message: unknown) => {
+    posted.push(message);
     console.debug('[webview → host]', message);
     setTimeout(() => handler(message as never), 0);
   },

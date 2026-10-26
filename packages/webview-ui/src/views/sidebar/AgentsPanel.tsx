@@ -47,7 +47,7 @@ export function AgentsPanel({
             onChange={onDraftChange}
             onCancel={close}
             onCreate={({ name, scope, starter }) => {
-              send(starter === 'blank' ? { type: 'createAgent', name, scope } : { type: 'createAgent', name, scope, starter });
+              send({ type: 'createAgent', name, scope, starter });
               close();
             }}
           />

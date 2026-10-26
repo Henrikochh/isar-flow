@@ -263,3 +263,57 @@ steps:
             type: approval
             message: All regression tests pass and coverage is within the agreed threshold. Roll the upgrade out to staging and then to every production region now?
 `;
+
+/** Containers inside containers: loops in loops and in If lanes, an If in an If, and an empty loop. */
+export const NESTED_WORKFLOW_TEXT = `version: 1
+name: Ship a release candidate
+inputs:
+  channel: { type: string, default: beta }
+steps:
+  - id: attempts
+    name: Up to three attempts
+    type: loop
+    maxIterations: 3
+    steps:
+      - id: flaky
+        name: Retry flaky suites
+        type: loop
+        until: { value: "\${{ steps.suite.exitCode }}", op: eq, to: 0 }
+        maxIterations: 4
+        steps:
+          - id: suite
+            type: console
+            continueOnError: true
+            run: npm run test:e2e
+      - id: green
+        type: if
+        condition: { value: "\${{ steps.suite.exitCode }}", op: eq, to: 0 }
+        then:
+          - id: done
+            type: break
+        else:
+          - id: heal
+            type: agent
+            agent: coder
+            prompt: Fix the failing end-to-end tests. \${{ tail(steps.suite.output, 60) }}
+  - id: route
+    type: if
+    condition: { value: "\${{ inputs.channel }}", op: eq, to: beta }
+    then:
+      - id: soak
+        type: loop
+        maxIterations: 2
+        steps: []
+    else:
+      - id: risky
+        type: if
+        condition: "\${{ steps.heal.status == 'success' }}"
+        then:
+          - id: sign_off
+            type: approval
+            message: The agent changed code to get the suite green. Ship anyway?
+        else:
+          - id: ship
+            type: console
+            run: npm publish
+`;

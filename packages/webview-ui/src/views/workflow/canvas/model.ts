@@ -4,6 +4,7 @@
  * model when the YAML does not match the schema: blocks may lack ids, have unknown types or odd fields.
  */
 import {
+  STEP_ID_PATTERN,
   STEP_TYPE_INFO,
   type InsertTarget,
   type Step,
@@ -126,6 +127,17 @@ export function buildCanvasModel(workflow: Workflow | null | undefined): CanvasM
   const root = buildList(stepList(workflow?.steps), ROOT_LIST, null, 'steps');
   const order = entries.filter((e) => e.id !== undefined && byId.get(e.id) === e).map((e) => e.id as string);
   return { root, entries, byId, order };
+}
+
+/** Blocks whose id is missing, or present but against the id rule; ops and references cannot rely on either. */
+export function blocksNeedingIds(model: CanvasModel): { missing: number; invalid: number } {
+  let missing = 0;
+  let invalid = 0;
+  for (const entry of model.entries) {
+    if (!entry.id) missing++;
+    else if (!STEP_ID_PATTERN.test(entry.id)) invalid++;
+  }
+  return { missing, invalid };
 }
 
 export function targetOf(info: ListInfo, index: number): InsertTarget {

@@ -1,5 +1,5 @@
 import type { BlockNode, Condition } from '@isar-flow/core';
-import { Banner, Button, SegmentedControl } from '../../../../components';
+import { SegmentedControl } from '../../../../components';
 import { ConditionBuilder } from '../ConditionBuilder';
 import { toTemplate } from '../conditionModel';
 import { NumberField } from '../fields';
@@ -32,7 +32,8 @@ export function LoopSettings({ block, step, stepId, update, issues }: SettingsPr
   const switchMode = (next: RepeatMode) => {
     if (next === mode) return;
     if (next === 'fixed') {
-      update({ onMaxIterations: 'continue' }, ['until', 'while']);
+      // A loop without a condition succeeds after its last iteration, so onMaxIterations has no effect.
+      update({}, ['until', 'while', 'onMaxIterations']);
     } else if (mode === 'fixed') {
       update({ [next]: starterCondition(block, next) }, ['onMaxIterations']);
     } else {
@@ -81,20 +82,6 @@ export function LoopSettings({ block, step, stepId, update, issues }: SettingsPr
           if (value !== undefined) update({ maxIterations: value });
         }}
       />
-
-      {mode === 'fixed' && onMax === 'fail' ? (
-        <Banner
-          tone="warning"
-          title="This loop fails the run after its last iteration."
-          actions={
-            <Button size="s" variant="secondary" onClick={() => update({ onMaxIterations: 'continue' })}>
-              Continue after the last iteration
-            </Button>
-          }
-        >
-          Without a condition the loop always reaches its limit.
-        </Banner>
-      ) : null}
 
       {mode === 'fixed' ? null : (
         <Group label="When the limit is reached" issues={issues.get('onMaxIterations')}>

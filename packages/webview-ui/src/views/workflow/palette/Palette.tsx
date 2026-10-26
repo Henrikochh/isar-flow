@@ -85,6 +85,13 @@ export function Palette() {
   const targetList = selected?.list.targetable ? selected.list : ROOT_LIST;
   const insert = (item: Exclude<DragItem, { kind: 'move' }>) =>
     edit(dropEdit(item, insertionTarget(model, selection), workflow));
+  // A block names an agent by id, so each id is offered once: the agent that id resolves to.
+  const seen = new Set<string>();
+  const usable = agents.filter((agent) => {
+    if (agent.shadowed || seen.has(agent.id)) return false;
+    seen.add(agent.id);
+    return true;
+  });
 
   const toggle = () => {
     setRail(!rail);
@@ -131,12 +138,12 @@ export function Palette() {
         ) : (
           <h2 className="wf-palette__title wf-palette__title--agents">Agents</h2>
         )}
-        {agents.length ? (
+        {usable.length ? (
           <ul className="wf-pal-list" aria-label="Agents">
-            {agents.map((agent) => (
+            {usable.map((agent) => (
               <PaletteItem
-                key={`${agent.scope}:${agent.id}`}
-                id={`agent:${agent.scope}:${agent.id}`}
+                key={agent.id}
+                id={`agent:${agent.id}`}
                 item={{ kind: 'agent', agentId: agent.id, name: agent.name }}
                 leading={<AgentStone id={agent.id} name={agent.name} />}
                 label={agent.name}

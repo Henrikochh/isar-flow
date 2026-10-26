@@ -1,15 +1,13 @@
-import path from 'node:path';
 import * as vscode from 'vscode';
-import type { ShellName, ToolHost } from '@isar-flow/core';
 import { registerCodeLens } from './codelens';
 import { registerCreateCommands } from './commands/create';
 import { registerWorkflowCommands } from './commands/workflowCommands';
-import type { RunTerminal, Services, ToolHostFactory } from './contracts';
+import type { RunManagerDeps, RunTerminal, Services } from './contracts';
 import { registerDiagnostics } from './diagnostics';
 import { registerAgentEditor } from './editors/agentEditor';
 import { registerWorkflowEditor } from './editors/workflowEditor';
 import { createModelRegistry, registerModelCommands } from './models';
-import { createContextFileReader } from './run/contextFiles';
+import { createWorkspaceContextReader } from './run/contextFiles';
 import { createRunManager, type WorkflowRunManager } from './run/runManager';
 import { registerSecretCommands, WorkflowSecrets } from './run/secrets';
 import { runConsoleCommand } from './runner/consoleRunner';
@@ -18,7 +16,7 @@ import { registerSidebar } from './sidebar/sidebarProvider';
 import { createAgentStore, type IndexedAgentStore } from './store/agentStore';
 import { createWorkflowStore, type IndexedWorkflowStore } from './store/workflowStore';
 import { createPermissionPrompt } from './tools/permissionPrompt';
-import { createToolHost } from './tools/toolHost';
+import { createToolHostFactory } from './tools/toolHostFactory';
 import { createVscodeWorkspaceAdapter } from './tools/vscodeWorkspace';
 
 /** Returned from activate(); integration tests drive the extension through it. */
@@ -28,10 +26,11 @@ export interface IsarFlowApi extends Services {
   runs: WorkflowRunManager;
 }
 
-const NO_FOLDER_TOOL_ERROR = 'Agent tools need an open folder. Open a folder in VS Code and run again.';
+/** Default folder for agent tools and context files; runs use the workflow's own folder. */
+const firstFolder = (): string | undefined => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
-/** Folder that agent tools and context files are confined to. */
-const workspaceRoot = (): string | undefined => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+/** The run manager of the active extension, so deactivate() can wait for stopped runs to be saved. */
+let activeRuns: WorkflowRunManager | undefined;
 
 export function activate(context: vscode.ExtensionContext): IsarFlowApi {
   const output = vscode.window.createOutputChannel('Isar Flow', { log: true });
@@ -43,20 +42,16 @@ export function activate(context: vscode.ExtensionContext): IsarFlowApi {
   const agents = createAgentStore({ context, log: output });
   context.subscriptions.push(agents);
 
-  // One host per run: "Allow for this run" lives in the host, and the root and shell are read at run start.
-  const prompt = createPermissionPrompt();
-  const tools: ToolHostFactory = (runId) => {
-    const root = workspaceRoot();
-    if (!root) return noFolderToolHost;
-    return createToolHost({
-      runId,
-      workspaceRoot: root,
-      workspace: createVscodeWorkspaceAdapter(root),
-      runCommand: runConsoleCommand,
-      prompt,
-      defaultShell: vscode.workspace.getConfiguration('isarFlow').get<ShellName>('defaultShell', 'auto'),
-    });
-  };
+  const tools = createToolHostFactory({
+    defaultRoot: firstFolder,
+    workspace: (root) => createVscodeWorkspaceAdapter(root),
+    defaultShell: (root) =>
+      vscode.workspace
+        .getConfiguration('isarFlow', vscode.Uri.file(root))
+        .get<string>('defaultShell', 'auto'),
+    runCommand: runConsoleCommand,
+    prompt: createPermissionPrompt(),
+  });
 
   const terminals = new Map<string, RunTerminal>();
   const terminalFor = (workflowName: string): RunTerminal => {
@@ -74,15 +69,13 @@ export function activate(context: vscode.ExtensionContext): IsarFlowApi {
     },
   });
 
-  const contextFiles = createVscodeWorkspaceAdapter();
-  const readContextFiles = createContextFileReader(
-    (glob, max) => contextFiles.findFiles(glob, max),
-    (relPath) => {
-      const root = workspaceRoot();
-      if (!root) return Promise.reject(new Error('No workspace folder is open.'));
-      return contextFiles.readFile(path.join(root, relPath));
-    },
-  );
+  const readContextFilesIn = (root: string): RunManagerDeps['readContextFiles'] =>
+    createWorkspaceContextReader(root, createVscodeWorkspaceAdapter(root));
+  const readContextFiles: RunManagerDeps['readContextFiles'] = (globs, signal) => {
+    const root = firstFolder();
+    if (!root) return Promise.reject(new Error('No workspace folder is open.'));
+    return readContextFilesIn(root)(globs, signal);
+  };
 
   const secrets = new WorkflowSecrets(context);
   context.subscriptions.push(registerSecretCommands(context, secrets));
@@ -98,9 +91,10 @@ export function activate(context: vscode.ExtensionContext): IsarFlowApi {
       terminalFor,
       readContextFiles,
     },
-    { secrets },
+    { secrets, readContextFilesIn },
   );
   context.subscriptions.push(runs);
+  activeRuns = runs;
   // Warms the cache so history.get(runId) answers synchronously for recent runs.
   runs.history.loadAll().catch((error: unknown) => {
     output.warn(`Could not load the run history: ${error instanceof Error ? error.message : String(error)}`);
@@ -124,9 +118,9 @@ export function activate(context: vscode.ExtensionContext): IsarFlowApi {
   return services;
 }
 
-export function deactivate(): void {}
-
-/** Used when no folder is open: agents still run, but every tool call explains why it was refused. */
-const noFolderToolHost: ToolHost = {
-  execute: async () => ({ isError: true, content: NO_FOLDER_TOOL_ERROR }),
-};
+/** VS Code waits for the returned promise, so runs stopped by the shutdown still reach the history. */
+export async function deactivate(): Promise<void> {
+  const runs = activeRuns;
+  activeRuns = undefined;
+  await runs?.shutdown();
+}

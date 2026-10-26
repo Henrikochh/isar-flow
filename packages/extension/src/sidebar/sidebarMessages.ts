@@ -1,36 +1,38 @@
 import * as vscode from 'vscode';
-import type { AgentScope, SidebarTab, SidebarToHost, WorkflowTemplateId } from '@isar-flow/core';
+import type {
+  AgentScope,
+  AgentStarter,
+  SidebarTab,
+  SidebarToHost,
+  WorkflowTemplateId,
+} from '@isar-flow/core';
+import { AGENT_FOLDER_PROMPT, type FolderChoice, WORKFLOW_FOLDER_PROMPT } from '../commands/folders';
 import type { AgentStore, RunManager, WorkflowStore } from '../contracts';
-import { baseName } from '../store/paths';
 
 export const AGENT_EDITOR = 'isarFlow.agentEditor';
 export const WORKFLOW_EDITOR = 'isarFlow.workflowEditor';
 
 const TEMPLATES: readonly WorkflowTemplateId[] = ['blank', 'review-loop', 'test-fix'];
-const MAX_LISTED_USERS = 5;
+const STARTERS: readonly AgentStarter[] = ['blank', 'coder', 'reviewer'];
 
 export interface SidebarHandlerDeps {
-  agents: Pick<AgentStore, 'list' | 'create' | 'delete'>;
-  workflows: Pick<WorkflowStore, 'create' | 'usersOfAgent'>;
+  agents: Pick<AgentStore, 'create' | 'delete'>;
+  workflows: Pick<WorkflowStore, 'create'>;
   runs: Pick<RunManager, 'start' | 'cancel'>;
   executeCommand(command: string, ...args: unknown[]): Thenable<unknown>;
-  /** Modal question; resolves true when the user picked `action`. */
-  confirm(message: string, action: string, detail?: string): Thenable<boolean>;
   setTab(tab: SidebarTab): Thenable<void>;
   /** Sends the full state now. */
   pushState(): void;
   /** Sends the state after the debounce window. */
   schedulePush(): void;
+  /** The workspace folder to create in; asks in a multi-root workspace. */
+  pickFolder(placeHolder: string): Promise<FolderChoice>;
 }
 
-function usedByDetail(paths: string[]): string | undefined {
-  if (paths.length === 0) return undefined;
-  const shown = paths.slice(0, MAX_LISTED_USERS).join(', ');
-  const more = paths.length - MAX_LISTED_USERS;
-  return more > 0 ? `Used by ${shown} and ${more} more.` : `Used by ${shown}.`;
-}
-
-/** Handles messages from the sidebar webview. Values are checked because they cross the webview boundary. */
+/**
+ * Handles messages from the sidebar webview. Values are checked because they cross the webview boundary.
+ * Deleting an agent and removing a provider are confirmed inline in the sidebar, so they run without a dialog.
+ */
 export function createSidebarHandler(deps: SidebarHandlerDeps): (message: SidebarToHost) => Promise<void> {
   const open = (uri: vscode.Uri, editor: string) => deps.executeCommand('vscode.openWith', uri, editor);
 
@@ -49,27 +51,31 @@ export function createSidebarHandler(deps: SidebarHandlerDeps): (message: Sideba
         return;
       case 'createAgent': {
         const scope: AgentScope = message.scope === 'user' ? 'user' : 'workspace';
-        await open(await deps.agents.create(String(message.name ?? ''), scope), AGENT_EDITOR);
-        return;
-      }
-      case 'deleteAgent': {
-        const uri = vscode.Uri.parse(message.uri);
-        const agent = deps.agents.list().find((a) => a.uri === message.uri);
-        const users = agent && !agent.shadowed ? deps.workflows.usersOfAgent(agent.id) : [];
-        const confirmed = await deps.confirm(
-          `Delete agent '${agent?.name ?? baseName(uri.path)}'? Workflows that use it will stop working.`,
-          'Delete',
-          usedByDetail(users),
+        const starter = STARTERS.find((s) => s === message.starter) ?? 'blank';
+        const folder = scope === 'workspace' ? await deps.pickFolder(AGENT_FOLDER_PROMPT) : undefined;
+        if (folder === 'dismissed') return;
+        const options = folder ? { folder } : {};
+        await open(
+          await deps.agents.create(String(message.name ?? ''), scope, starter, options),
+          AGENT_EDITOR,
         );
-        if (confirmed) await deps.agents.delete(uri);
         return;
       }
+      case 'deleteAgent':
+        // The store only deletes files in an agent folder, and moves them to the trash.
+        await deps.agents.delete(vscode.Uri.parse(message.uri));
+        return;
       case 'openWorkflow':
         await open(vscode.Uri.parse(message.uri), WORKFLOW_EDITOR);
         return;
       case 'createWorkflow': {
         const template = TEMPLATES.includes(message.template) ? message.template : 'blank';
-        await open(await deps.workflows.create(String(message.name ?? ''), template), WORKFLOW_EDITOR);
+        const folder = await deps.pickFolder(WORKFLOW_FOLDER_PROMPT);
+        if (folder === 'dismissed') return;
+        await open(
+          await deps.workflows.create(String(message.name ?? ''), template, folder),
+          WORKFLOW_EDITOR,
+        );
         return;
       }
       case 'runWorkflow': {
@@ -90,8 +96,10 @@ export function createSidebarHandler(deps: SidebarHandlerDeps): (message: Sideba
         return;
       case 'editProvider':
       case 'setProviderKey':
-      case 'removeProvider':
         await deps.executeCommand(`isarFlow.${message.type}`, message.providerId);
+        return;
+      case 'removeProvider':
+        await deps.executeCommand('isarFlow.removeProvider', message.providerId, { confirmed: true });
         return;
       case 'refreshModels':
         await deps.executeCommand('isarFlow.refreshModels');

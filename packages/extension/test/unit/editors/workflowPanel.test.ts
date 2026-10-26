@@ -176,8 +176,14 @@ describe('WorkflowPanel', () => {
     const { panel, last } = setupWith(doc);
     // E.g. a field commits on blur and the click that caused the blur sends the next op.
     await Promise.all([
-      panel.handle({ type: 'ops', ops: [{ op: 'updateStep', stepId: 'tests', set: { run: 'npm run unit' } }] }),
-      panel.handle({ type: 'ops', ops: [{ op: 'updateStep', stepId: 'implement', set: { prompt: 'Do more' } }] }),
+      panel.handle({
+        type: 'ops',
+        ops: [{ op: 'updateStep', stepId: 'tests', set: { run: 'npm run unit' } }],
+      }),
+      panel.handle({
+        type: 'ops',
+        ops: [{ op: 'updateStep', stepId: 'implement', set: { prompt: 'Do more' } }],
+      }),
     ]);
     expect(last('opsFailed')).toBeUndefined();
     expect(doc.text).toContain('run: npm run unit');
@@ -262,6 +268,31 @@ describe('WorkflowPanel', () => {
     expect(posted.at(-1)).toEqual({ type: 'run', run: null, live: false });
   });
 
+  it('loads a past run that is no longer cached', async () => {
+    const { panel, posted, state } = setup();
+    state.stored.older = view('older');
+    await panel.handle({ type: 'ready' });
+    posted.length = 0;
+    await panel.handle({ type: 'selectRun', runId: 'older' });
+    expect(posted).toEqual([{ type: 'run', run: view('older'), live: false }]);
+  });
+
+  it('drops a slow history load when another run was selected meanwhile', async () => {
+    const { panel, posted, state, services } = setup();
+    state.views.old = view('old');
+    let release: (value: RunView | undefined) => void = () => undefined;
+    vi.mocked(services.runs.history.getAsync).mockImplementationOnce(
+      () => new Promise<RunView | undefined>((resolve) => (release = resolve)),
+    );
+    await panel.handle({ type: 'ready' });
+    posted.length = 0;
+    const slow = panel.handle({ type: 'selectRun', runId: 'older' });
+    await panel.handle({ type: 'selectRun', runId: 'old' });
+    release(view('older'));
+    await slow;
+    expect(posted).toEqual([{ type: 'run', run: view('old'), live: false }]);
+  });
+
   it('clears the canvas when no run is live', async () => {
     const { panel, last } = setup();
     await panel.handle({ type: 'selectRun', runId: null });
@@ -317,7 +348,16 @@ describe('WorkflowPanel', () => {
   });
 
   it('passes approval answers to the broker', async () => {
-    const { panel, services } = setup();
+    const { panel, services, emitters } = setup();
+    for (const requestId of ['q1', 'q2']) {
+      emitters.approvalRequest.fire({
+        requestId,
+        runId: 'r1',
+        stepId: 'gate',
+        message: 'OK?',
+        workflowUri: URI,
+      });
+    }
     await panel.handle({ type: 'approval', requestId: 'q1', approved: false, comment: 'Not yet' });
     await panel.handle({ type: 'approval', requestId: 'q2', approved: true });
     expect(services.runs.approvals.respond).toHaveBeenNthCalledWith(1, 'q1', {
@@ -325,6 +365,56 @@ describe('WorkflowPanel', () => {
       comment: 'Not yet',
     });
     expect(services.runs.approvals.respond).toHaveBeenNthCalledWith(2, 'q2', { approved: true });
+  });
+
+  it('ignores answers to approvals this canvas does not show', async () => {
+    const { panel, services, emitters } = setup();
+    emitters.approvalRequest.fire({
+      requestId: 'other',
+      runId: 'r9',
+      stepId: 'gate',
+      message: 'OK?',
+      workflowUri: 'file:///x',
+    });
+    emitters.approvalRequest.fire({
+      requestId: 'done',
+      runId: 'r1',
+      stepId: 'gate',
+      message: 'OK?',
+      workflowUri: URI,
+    });
+    emitters.approvalResolve.fire({ requestId: 'done', workflowUri: URI });
+    await panel.handle({ type: 'approval', requestId: 'other', approved: true });
+    await panel.handle({ type: 'approval', requestId: 'done', approved: true });
+    await panel.handle({ type: 'approval', requestId: 'unknown', approved: true });
+    expect(services.runs.approvals.respond).not.toHaveBeenCalled();
+  });
+
+  it('only accepts true or false as an approval answer', async () => {
+    const { panel, services, emitters } = setup();
+    emitters.approvalRequest.fire({
+      requestId: 'q1',
+      runId: 'r1',
+      stepId: 'gate',
+      message: 'OK?',
+      workflowUri: URI,
+    });
+    const forged = {
+      type: 'approval',
+      requestId: 'q1',
+      approved: 'yes',
+      comment: 42,
+    } as unknown as Parameters<typeof panel.handle>[0];
+    await panel.handle(forged);
+    expect(services.runs.approvals.respond).not.toHaveBeenCalled();
+    const sloppy = {
+      type: 'approval',
+      requestId: 'q1',
+      approved: false,
+      comment: 42,
+    } as unknown as Parameters<typeof panel.handle>[0];
+    await panel.handle(sloppy);
+    expect(services.runs.approvals.respond).toHaveBeenCalledWith('q1', { approved: false });
   });
 
   it('opens the YAML beside the canvas at the block', async () => {
@@ -349,19 +439,22 @@ describe('WorkflowPanel', () => {
     expect(viewType).toBe('isarFlow.agentEditor');
   });
 
-  it('offers to create a missing agent', async () => {
+  it('offers to create a missing agent with exactly that id, in the folder of the workflow', async () => {
     const { panel, ui, services } = setup();
-    await panel.handle({ type: 'openAgent', agentId: 'reviewer' });
-    expect(ui.confirmations).toEqual(["Agent 'reviewer' does not exist yet."]);
+    await panel.handle({ type: 'openAgent', agentId: 'MyReviewer' });
+    expect(ui.confirmations).toEqual(["Agent 'MyReviewer' does not exist yet."]);
     expect(services.agents.create).not.toHaveBeenCalled();
 
     ui.confirmAnswer = true;
-    await panel.handle({ type: 'openAgent', agentId: 'reviewer' });
-    expect(services.agents.create).toHaveBeenCalledWith('reviewer', 'workspace');
+    await panel.handle({ type: 'openAgent', agentId: 'MyReviewer' });
+    expect(services.agents.create).toHaveBeenCalledWith('MyReviewer', 'workspace', 'blank', {
+      id: 'MyReviewer',
+      folder: vscode.Uri.file('/w'),
+    });
     const [command, uri, viewType] = ui.commands.at(-1) as [string, vscode.Uri, string];
     expect([command, uri.path, viewType]).toEqual([
       'vscode.openWith',
-      '/w/.isarflow/agents/reviewer.agent.yaml',
+      '/w/.isarflow/agents/MyReviewer.agent.yaml',
       'isarFlow.agentEditor',
     ]);
   });

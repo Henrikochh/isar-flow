@@ -1,0 +1,64 @@
+# Drafts release notes from the git log, lets you approve them, then adds them to RELEASE_NOTES.md.
+# Needs the agent "writer" in .isarflow/agents/ (see examples/agents) and git.
+#
+# The console blocks use bash (on Windows: Git Bash, which comes with Git for Windows). Inputs and the
+# agent's answer reach the commands only through environment variables, quoted in the script, never
+# pasted into the command line: ${{ }} values are inserted without escaping.
+version: 1
+name: Release notes
+description: Draft release notes from the commits since the last tag, approve them, write them to a file.
+inputs:
+  version: { type: string, description: 'Version you are releasing, e.g. 1.4.0', required: true }
+  since: { type: string, description: Tag or commit to start from. Leave empty for the latest tag. }
+steps:
+  - id: changes
+    type: console
+    shell: bash
+    env:
+      SINCE: ${{ inputs.since }}
+    run: |
+      from="${SINCE:-$(git describe --tags --abbrev=0 2>/dev/null)}"
+      if [ -n "$from" ]; then range="$from..HEAD"; else range="HEAD"; fi
+      git log --no-merges -n 300 --pretty='format:- %s (%h)' "$range"
+
+  - id: no_changes
+    type: if
+    condition: { value: '${{ steps.changes.stdout }}', op: isEmpty }
+    then:
+      - id: nothing_to_do
+        type: stop
+        outcome: success
+        message: No commits since ${{ default(inputs.since, 'the latest tag') }}.
+
+  - id: draft
+    type: agent
+    agent: writer
+    prompt: |
+      Write release notes for version ${{ inputs.version }} from these commits:
+
+      ${{ steps.changes.stdout }}
+
+      Group the changes under "Added", "Changed" and "Fixed" (leave out empty groups). Write one short line
+      per user-visible change in plain language and drop internal changes such as refactorings or CI.
+      Answer with the Markdown list only, without a heading.
+
+  - id: approve
+    type: approval
+    message: |
+      Add these notes for ${{ inputs.version }} to RELEASE_NOTES.md?
+
+      ${{ steps.draft.text }}
+    onReject: stop
+
+  - id: write
+    type: console
+    shell: bash
+    env:
+      VERSION: ${{ inputs.version }}
+      NOTES: ${{ steps.draft.text }}
+    run: |
+      {
+        printf '## %s\n\n%s\n\n' "$VERSION" "$NOTES"
+        if [ -f RELEASE_NOTES.md ]; then cat RELEASE_NOTES.md; fi
+      } > RELEASE_NOTES.md.tmp && mv RELEASE_NOTES.md.tmp RELEASE_NOTES.md
+      echo "Added the notes for $VERSION to RELEASE_NOTES.md"

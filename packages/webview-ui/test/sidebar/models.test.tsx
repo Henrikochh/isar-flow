@@ -1,11 +1,10 @@
-import { cleanup, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { CATALOG } from '../../harness/fixtures';
 import { postedOfType, renderSidebar, resetPosted } from './helpers';
 
 beforeEach(resetPosted);
-afterEach(cleanup);
 
 describe('Models section', () => {
   it('lists providers with status, model counts and errors', () => {
@@ -18,6 +17,14 @@ describe('Models section', () => {
     expect(ollama).toHaveTextContent('Not reachable');
     expect(ollama).toHaveTextContent('Cannot reach http://localhost:11434/v1. Is the server running?');
     expect(within(ollama).getByRole('img', { name: 'Error' })).toBeInTheDocument();
+  });
+
+  it('gives provider names and errors that may be cut off a tooltip with the full text', () => {
+    renderSidebar();
+    const litellm = screen.getByRole('button', { name: /LiteLLM.*5 models/ });
+    expect(within(litellm).getByTitle('LiteLLM (localhost:4000)')).toHaveTextContent('LiteLLM (localhost:4000)');
+    const ollama = screen.getByRole('button', { name: /Ollama.*Not reachable/ });
+    expect(within(ollama).getByTitle('Cannot reach http://localhost:11434/v1. Is the server running?')).toBeInTheDocument();
   });
 
   it('opens the provider settings when a row is clicked', async () => {

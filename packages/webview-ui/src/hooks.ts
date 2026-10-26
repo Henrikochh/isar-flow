@@ -1,40 +1,53 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * Local editing state for a field whose source of truth lives in the host document. While the user is
- * editing (dirty), incoming value updates are ignored so a slow round-trip never clobbers typing;
- * changes are committed after `delay` ms of inactivity and on flush (blur).
+ * Local editing state for a field whose source of truth lives in the host document. Changes are committed
+ * after `delay` ms of inactivity and on flush (blur, Enter, unmount). From the first change until that flush
+ * the field owns its text: incoming values are ignored, so neither a slow round-trip nor the document's
+ * normalized echo of a paused commit (a trimmed trailing space) changes what is being typed.
  */
 export function useDraft<T>(value: T, commit: (value: T) => void, delay = 350) {
   const [draft, setDraft] = useState(value);
   const dirty = useRef(false);
+  const editing = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latest = useRef(value);
+  const incoming = useRef(value);
+  incoming.current = value;
   const commitRef = useRef(commit);
   commitRef.current = commit;
 
   useEffect(() => {
-    if (!dirty.current) setDraft(value);
+    if (!editing.current) setDraft(value);
   }, [value]);
 
-  const flush = useCallback(() => {
+  /** Commits pending text; returns whether anything was committed. */
+  const commitPending = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = undefined;
-    if (dirty.current) {
-      dirty.current = false;
-      commitRef.current(latest.current);
-    }
+    if (!dirty.current) return false;
+    dirty.current = false;
+    commitRef.current(latest.current);
+    return true;
   }, []);
+
+  const flush = useCallback(() => {
+    const wasEditing = editing.current;
+    editing.current = false;
+    // With nothing new to commit, show the document's value now (it may have normalized the last commit).
+    if (!commitPending() && wasEditing) setDraft(incoming.current);
+  }, [commitPending]);
 
   const change = useCallback(
     (next: T) => {
       dirty.current = true;
+      editing.current = true;
       latest.current = next;
       setDraft(next);
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(flush, delay);
+      timer.current = setTimeout(commitPending, delay);
     },
-    [delay, flush],
+    [delay, commitPending],
   );
 
   useEffect(() => () => flush(), [flush]);

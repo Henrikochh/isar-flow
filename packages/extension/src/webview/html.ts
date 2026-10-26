@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import * as vscode from 'vscode';
 import type { WebviewKind } from '@isar-flow/core';
 
@@ -5,7 +6,7 @@ const NONCE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456
 
 export function createNonce(): string {
   let nonce = '';
-  for (let i = 0; i < 32; i++) nonce += NONCE_CHARS.charAt(Math.floor(Math.random() * NONCE_CHARS.length));
+  for (let i = 0; i < 32; i++) nonce += NONCE_CHARS.charAt(randomInt(NONCE_CHARS.length));
   return nonce;
 }
 
