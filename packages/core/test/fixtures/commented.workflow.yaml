@@ -1,0 +1,32 @@
+# Review loop used by the team.
+version: 1
+name: Review until approved # shown in the sidebar
+
+inputs:
+  task:
+    type: string
+    description: What should be implemented?
+
+steps:
+  # First, let the coder implement the task.
+  - id: implement
+    type: agent
+    agent: coder
+    prompt: |
+      Implement in this repository:
+      ${{ inputs.task }}
+
+  - id: review_loop
+    type: loop
+    maxIterations: 5 # keep this low, tokens are expensive
+    until: "${{ steps.review.json.approved }}"
+    steps:
+      - id: tests
+        type: console
+        run: npm test
+        continueOnError: true
+      - id: review
+        type: agent
+        agent: reviewer
+        prompt: "Review. Tests exited with ${{ steps.tests.exitCode }}."
+        output: { format: json, schema: { approved: boolean } }

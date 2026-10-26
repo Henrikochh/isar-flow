@@ -222,7 +222,8 @@ isEmpty isNotEmpty isTrue isFalse`. `ignoreCase` applies to string operators.
 - Cancellation via `AbortSignal` (kills process trees, aborts HTTP streams).
 - Before a run: schema + semantic validation must pass; workflow inputs are requested via a dialog;
   if the console commands' content hash is not yet approved for this workspace, show them and ask.
-- Runs require a trusted workspace (`capabilities.untrustedWorkspaces.supported = false`).
+- Runs require a trusted workspace (`capabilities.untrustedWorkspaces.supported = "limited"`: in Restricted
+  Mode workflows and agents can be viewed and edited, but nothing runs).
 - Run history: last 50 runs per workflow in workspace storage (events + outputs, trimmed to 1 MB each).
 
 ## 9. UI design system

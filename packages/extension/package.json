@@ -13,7 +13,324 @@
     "AI",
     "Other"
   ],
+  "keywords": [
+    "ai",
+    "agents",
+    "workflow",
+    "llm",
+    "litellm",
+    "copilot",
+    "yaml",
+    "automation"
+  ],
   "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/*.workflow.yaml",
+    "workspaceContains:.isarflow/**"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Workflows and agents can be viewed and edited, but not run, in Restricted Mode."
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "isarFlow",
+          "title": "Isar Flow",
+          "icon": "media/isar-flow.svg"
+        }
+      ]
+    },
+    "views": {
+      "isarFlow": [
+        {
+          "type": "webview",
+          "id": "isarFlow.sidebar",
+          "name": "Isar Flow"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "isarFlow.workflowEditor",
+        "displayName": "Isar Flow canvas",
+        "selector": [
+          {
+            "filenamePattern": "*.workflow.yaml"
+          },
+          {
+            "filenamePattern": "*.workflow.yml"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "isarFlow.agentEditor",
+        "displayName": "Isar Flow agent editor",
+        "selector": [
+          {
+            "filenamePattern": "*.agent.yaml"
+          },
+          {
+            "filenamePattern": "*.agent.yml"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "isarFlow.newWorkflow",
+        "title": "New workflow",
+        "category": "Isar Flow",
+        "icon": "$(add)"
+      },
+      {
+        "command": "isarFlow.newAgent",
+        "title": "New agent",
+        "category": "Isar Flow",
+        "icon": "$(person-add)"
+      },
+      {
+        "command": "isarFlow.runWorkflow",
+        "title": "Run workflow",
+        "category": "Isar Flow",
+        "icon": "$(play)"
+      },
+      {
+        "command": "isarFlow.cancelRun",
+        "title": "Stop run",
+        "category": "Isar Flow",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "isarFlow.openInCanvas",
+        "title": "Open in Isar Flow editor",
+        "category": "Isar Flow",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "isarFlow.openYaml",
+        "title": "Open YAML",
+        "category": "Isar Flow",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "isarFlow.addProvider",
+        "title": "Add model endpoint",
+        "category": "Isar Flow"
+      },
+      {
+        "command": "isarFlow.editProvider",
+        "title": "Edit model endpoint",
+        "category": "Isar Flow"
+      },
+      {
+        "command": "isarFlow.removeProvider",
+        "title": "Remove model endpoint",
+        "category": "Isar Flow"
+      },
+      {
+        "command": "isarFlow.setProviderKey",
+        "title": "Set provider API key",
+        "category": "Isar Flow",
+        "icon": "$(key)"
+      },
+      {
+        "command": "isarFlow.testProvider",
+        "title": "Test model endpoint",
+        "category": "Isar Flow"
+      },
+      {
+        "command": "isarFlow.refreshModels",
+        "title": "Refresh models",
+        "category": "Isar Flow",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "isarFlow.setSecret",
+        "title": "Set workflow secret",
+        "category": "Isar Flow"
+      },
+      {
+        "command": "isarFlow.showLog",
+        "title": "Show log",
+        "category": "Isar Flow",
+        "icon": "$(output)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "isarFlow.runWorkflow",
+          "when": "activeCustomEditorId == isarFlow.workflowEditor || resourceFilename =~ /\\.workflow\\.ya?ml$/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "isarFlow.openYaml",
+          "when": "activeCustomEditorId == isarFlow.workflowEditor || activeCustomEditorId == isarFlow.agentEditor",
+          "group": "navigation@2"
+        },
+        {
+          "command": "isarFlow.openInCanvas",
+          "when": "!activeCustomEditorId && resourceFilename =~ /\\.(workflow|agent)\\.ya?ml$/",
+          "group": "navigation@2"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "isarFlow.refreshModels",
+          "when": "view == isarFlow.sidebar",
+          "group": "navigation@3"
+        },
+        {
+          "command": "isarFlow.showLog",
+          "when": "view == isarFlow.sidebar",
+          "group": "overflow"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "isarFlow.runWorkflow",
+          "when": "resourceFilename =~ /\\.workflow\\.ya?ml$/",
+          "group": "isarFlow@1"
+        },
+        {
+          "command": "isarFlow.openYaml",
+          "when": "resourceFilename =~ /\\.(workflow|agent)\\.ya?ml$/",
+          "group": "isarFlow@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "isarFlow.openYaml",
+          "when": "activeCustomEditorId == isarFlow.workflowEditor || activeCustomEditorId == isarFlow.agentEditor"
+        },
+        {
+          "command": "isarFlow.openInCanvas",
+          "when": "resourceFilename =~ /\\.(workflow|agent)\\.ya?ml$/"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Isar Flow",
+      "properties": {
+        "isarFlow.providers": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "OpenAI-compatible model endpoints (LiteLLM, Ollama, vLLM, OpenRouter …). API keys are stored securely with **Isar Flow: Set provider API key**, never here.",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "baseUrl"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$",
+                "description": "Short id used in model references, e.g. litellm → litellm/gpt-4.1"
+              },
+              "label": {
+                "type": "string",
+                "description": "Display name"
+              },
+              "baseUrl": {
+                "type": "string",
+                "description": "Base URL, e.g. http://localhost:4000 or http://localhost:11434/v1"
+              },
+              "discoverModels": {
+                "type": "boolean",
+                "default": true,
+                "description": "List models via GET /models"
+              },
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Model ids offered in addition to (or instead of) discovered ones"
+              },
+              "headers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Extra HTTP headers"
+              }
+            }
+          }
+        },
+        "isarFlow.vscodeModels": {
+          "type": "boolean",
+          "default": true,
+          "description": "Offer the language models available in VS Code (for example GitHub Copilot)."
+        },
+        "isarFlow.defaultShell": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "pwsh",
+            "powershell",
+            "cmd",
+            "bash",
+            "sh"
+          ],
+          "default": "auto",
+          "enumDescriptions": [
+            "PowerShell 7 or Windows PowerShell on Windows, your login shell elsewhere",
+            "PowerShell 7",
+            "Windows PowerShell",
+            "Command Prompt",
+            "Bash",
+            "sh"
+          ],
+          "description": "Shell used by console blocks that do not choose one."
+        },
+        "isarFlow.maxTokensPerRun": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Stop a run when its agents used more tokens than this. 0 means no limit."
+        },
+        "isarFlow.confirmCommands": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask before running a workflow whose console commands you have not approved yet."
+        },
+        "isarFlow.historyLimit": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 500,
+          "description": "Runs kept per workflow."
+        }
+      }
+    },
+    "yamlValidation": [
+      {
+        "fileMatch": "*.workflow.yaml",
+        "url": "./schemas/workflow.schema.json"
+      },
+      {
+        "fileMatch": "*.workflow.yml",
+        "url": "./schemas/workflow.schema.json"
+      },
+      {
+        "fileMatch": "*.agent.yaml",
+        "url": "./schemas/agent.schema.json"
+      },
+      {
+        "fileMatch": "*.agent.yml",
+        "url": "./schemas/agent.schema.json"
+      }
+    ]
+  },
   "scripts": {
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
@@ -22,6 +339,7 @@
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
+    "@isar-flow/core": "*",
     "@types/mocha": "^10.0.10",
     "@types/vscode": "^1.95.0",
     "@vscode/test-electron": "^3.1.0",

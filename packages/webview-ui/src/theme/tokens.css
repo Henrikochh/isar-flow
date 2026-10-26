@@ -1,0 +1,135 @@
+/*
+ * Isar Flow design tokens.
+ * Surfaces, text and borders come from the active VS Code theme so the UI feels native everywhere;
+ * the Isar palette adds the block-type colors and the river.
+ */
+
+:root {
+  --if-font-ui: var(--vscode-font-family, system-ui, -apple-system, 'Segoe UI', sans-serif);
+  --if-font-display: 'Barlow Semi Condensed', var(--if-font-ui);
+  --if-font-code: var(--vscode-editor-font-family, 'Cascadia Code', Consolas, 'Courier New', monospace);
+  --if-text-xs: 11px;
+  --if-text-s: 12px;
+  --if-text-m: var(--vscode-font-size, 13px);
+  --if-text-l: 15px;
+  --if-text-xl: 19px;
+  --if-text-xxl: 24px;
+
+  --if-space-1: 4px;
+  --if-space-2: 8px;
+  --if-space-3: 12px;
+  --if-space-4: 16px;
+  --if-space-5: 24px;
+  --if-space-6: 32px;
+
+  --if-radius-s: 4px;
+  --if-radius-m: 6px;
+  --if-radius-l: 10px;
+  --if-radius-pill: 999px;
+
+  --if-bg: var(--vscode-editor-background, #1f1f1f);
+  --if-fg: var(--vscode-editor-foreground, var(--vscode-foreground, #cccccc));
+  --if-muted: var(--vscode-descriptionForeground, #9d9d9d);
+  --if-border: var(--vscode-panel-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35)));
+  --if-border-strong: var(--vscode-contrastBorder, var(--vscode-input-border, rgba(128, 128, 128, 0.55)));
+  --if-surface: var(--vscode-editorWidget-background, #252526);
+  --if-surface-sunken: var(--vscode-sideBar-background, var(--if-bg));
+  --if-hover: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12));
+  --if-selected: var(--vscode-list-activeSelectionBackground, rgba(0, 120, 212, 0.3));
+  --if-selected-fg: var(--vscode-list-activeSelectionForeground, var(--if-fg));
+  --if-focus: var(--vscode-focusBorder, #0078d4);
+  --if-link: var(--vscode-textLink-foreground, #4daafc);
+  --if-input-bg: var(--vscode-input-background, #313131);
+  --if-input-fg: var(--vscode-input-foreground, var(--if-fg));
+  --if-input-border: var(--vscode-input-border, rgba(128, 128, 128, 0.35));
+  --if-placeholder: var(--vscode-input-placeholderForeground, var(--if-muted));
+  --if-button-bg: var(--vscode-button-background, #0078d4);
+  --if-button-fg: var(--vscode-button-foreground, #ffffff);
+  --if-button-hover: var(--vscode-button-hoverBackground, #026ec1);
+  --if-button-secondary-bg: var(--vscode-button-secondaryBackground, #313131);
+  --if-button-secondary-fg: var(--vscode-button-secondaryForeground, var(--if-fg));
+  --if-button-secondary-hover: var(--vscode-button-secondaryHoverBackground, #3c3c3c);
+  --if-shadow: var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
+  --if-error: var(--vscode-errorForeground, #f85149);
+  --if-warning: var(--vscode-editorWarning-foreground, #cca700);
+
+  /* Isar palette — dark defaults. */
+  --if-isar: #5ccfc0;
+  --if-kies: #b3ac9f;
+  --if-enzian: #8aa4ff;
+  --if-foehn: #e8b04e;
+  --if-alpenrose: #f07a84;
+  --if-almgruen: #7bd88f;
+  --if-on-isar: #0b2622;
+
+  --if-river: color-mix(in srgb, var(--if-isar) 62%, transparent);
+  --if-river-width: 3px;
+  --if-wash-strength: 16%;
+
+  --if-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --if-duration: 160ms;
+}
+
+body.vscode-light {
+  --if-isar: #0b7f72;
+  --if-kies: #6b665b;
+  --if-enzian: #3550c4;
+  --if-foehn: #9a6400;
+  --if-alpenrose: #c02f3c;
+  --if-almgruen: #2f7d3b;
+  --if-on-isar: #ffffff;
+  --if-wash-strength: 11%;
+  --if-river: color-mix(in srgb, var(--if-isar) 55%, transparent);
+}
+
+body.vscode-high-contrast {
+  --if-isar: #6ff0dd;
+  --if-kies: #e0dbd0;
+  --if-enzian: #a9bcff;
+  --if-foehn: #ffd27a;
+  --if-alpenrose: #ff9aa2;
+  --if-almgruen: #9cf0ad;
+  --if-on-isar: #000000;
+  --if-river: var(--if-isar);
+  --if-wash-strength: 0%;
+  --if-border: var(--vscode-contrastBorder, #6fc3df);
+}
+
+body.vscode-high-contrast-light {
+  --if-isar: #005a50;
+  --if-kies: #3d3a33;
+  --if-enzian: #1f3399;
+  --if-foehn: #6b4500;
+  --if-alpenrose: #8f0f1c;
+  --if-almgruen: #1b5627;
+  --if-on-isar: #ffffff;
+  --if-river: var(--if-isar);
+  --if-wash-strength: 0%;
+  --if-border: var(--vscode-contrastBorder, #0f4a85);
+}
+
+/* Block type color: set data-type on any element to get --block-color and its wash. */
+[data-type='agent'] {
+  --block-color: var(--if-isar);
+}
+[data-type='console'] {
+  --block-color: var(--if-kies);
+}
+[data-type='loop'] {
+  --block-color: var(--if-enzian);
+}
+[data-type='if'] {
+  --block-color: var(--if-foehn);
+}
+[data-type='break'] {
+  --block-color: var(--if-enzian);
+}
+[data-type='stop'] {
+  --block-color: var(--if-alpenrose);
+}
+[data-type='approval'] {
+  --block-color: var(--if-almgruen);
+}
+[data-type] {
+  --block-wash: color-mix(in srgb, var(--block-color) var(--if-wash-strength), transparent);
+}

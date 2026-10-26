@@ -1,0 +1,156 @@
+import type { ReactNode } from 'react';
+import type { StepStatus, StepType } from '@isar-flow/core';
+import { agentColorType, BLOCK_ICONS, initialsOf } from '../blockMeta';
+
+export function Spinner({ label }: { label?: string }) {
+  return <span className="if-spinner" role={label ? 'status' : undefined} aria-label={label} />;
+}
+
+export type ChipTone = 'neutral' | 'isar' | 'success' | 'warning' | 'error' | 'outline';
+
+export function Chip({
+  children,
+  tone = 'neutral',
+  icon,
+  code,
+  title,
+}: {
+  children: ReactNode;
+  tone?: ChipTone;
+  icon?: string;
+  code?: boolean;
+  title?: string;
+}) {
+  const classes = ['if-chip', tone !== 'neutral' && `if-chip--${tone}`, code && 'if-chip--code'].filter(Boolean).join(' ');
+  return (
+    <span className={classes} title={title}>
+      {icon ? <i className={`codicon codicon-${icon}`} aria-hidden="true" /> : null}
+      {children}
+    </span>
+  );
+}
+
+/** Colored tile with the block type's icon. */
+export function Stone({ type, size = 'm', title }: { type: StepType; size?: 's' | 'm' | 'l'; title?: string }) {
+  return (
+    <span className={`if-stone if-stone--${size}`} data-type={type} title={title} aria-hidden={title ? undefined : true}>
+      <i className={`codicon codicon-${BLOCK_ICONS[type]}`} />
+    </span>
+  );
+}
+
+/** Agent avatar: initials on a tile colored deterministically from the agent id. */
+export function AgentStone({ id, name, size = 'm' }: { id: string; name: string; size?: 's' | 'm' | 'l' }) {
+  return (
+    <span className={`if-stone if-stone--${size}`} data-type={agentColorType(id)} aria-hidden="true">
+      <span className="if-stone__initials">{initialsOf(name || id)}</span>
+    </span>
+  );
+}
+
+export type BannerTone = 'info' | 'warning' | 'error' | 'success';
+
+const BANNER_ICONS: Record<BannerTone, string> = {
+  info: 'info',
+  warning: 'warning',
+  error: 'error',
+  success: 'pass',
+};
+
+export function Banner({
+  tone = 'info',
+  title,
+  children,
+  actions,
+}: {
+  tone?: BannerTone;
+  title?: ReactNode;
+  children?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className={`if-banner if-banner--${tone}`} role={tone === 'error' ? 'alert' : 'status'}>
+      <i className={`codicon codicon-${BANNER_ICONS[tone]}`} aria-hidden="true" />
+      <div className="if-banner__body">
+        {title ? <div className="if-banner__title">{title}</div> : null}
+        {children ? <div>{children}</div> : null}
+        {actions ? <div className="if-banner__actions">{actions}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+export function EmptyState({
+  art,
+  title,
+  children,
+  actions,
+}: {
+  art?: ReactNode;
+  title: ReactNode;
+  children?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="if-empty">
+      {art ? <div className="if-empty__art">{art}</div> : null}
+      <div className="if-empty__title">{title}</div>
+      {children ? <div className="if-empty__body">{children}</div> : null}
+      {actions ? <div className="if-empty__actions">{actions}</div> : null}
+    </div>
+  );
+}
+
+const STATUS_ICONS: Record<StepStatus, string> = {
+  pending: 'circle-large-outline',
+  running: 'loading',
+  success: 'pass-filled',
+  failure: 'error',
+  skipped: 'circle-slash',
+  cancelled: 'debug-stop',
+};
+
+const STATUS_LABELS: Record<StepStatus, string> = {
+  pending: 'Waiting',
+  running: 'Running',
+  success: 'Succeeded',
+  failure: 'Failed',
+  skipped: 'Skipped',
+  cancelled: 'Cancelled',
+};
+
+export function statusLabel(status: StepStatus): string {
+  return STATUS_LABELS[status];
+}
+
+export function StatusGlyph({ status }: { status: StepStatus }) {
+  return (
+    <span className={`if-status if-status--${status}`} title={STATUS_LABELS[status]} role="img" aria-label={STATUS_LABELS[status]}>
+      {status === 'running' ? <Spinner /> : <i className={`codicon codicon-${STATUS_ICONS[status]}`} aria-hidden="true" />}
+    </span>
+  );
+}
+
+export function Kbd({ children }: { children: ReactNode }) {
+  return <kbd className="if-kbd">{children}</kbd>;
+}
+
+export function Section({
+  title,
+  actions,
+  children,
+}: {
+  title: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="if-section">
+      <div className="if-section__header">
+        <h3 className="if-section__title">{title}</h3>
+        {actions}
+      </div>
+      {children}
+    </section>
+  );
+}
