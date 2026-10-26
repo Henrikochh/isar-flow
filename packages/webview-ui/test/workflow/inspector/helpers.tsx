@@ -9,7 +9,11 @@ import {
 } from '@isar-flow/core';
 import { AGENTS, CATALOG, RECENT_RUNS } from '../../../harness/fixtures';
 import { Inspector } from '../../../src/views/workflow/inspector/Inspector';
-import { initialWorkflowUiState, WorkflowStoreProvider, type WorkflowUiState } from '../../../src/views/workflow/store';
+import {
+  initialWorkflowUiState,
+  WorkflowStoreProvider,
+  type WorkflowUiState,
+} from '../../../src/views/workflow/store';
 
 type PostedWindow = { __posted?: unknown[] };
 
@@ -35,7 +39,9 @@ export function sentOps(): WorkflowOp[] {
 
 export function docFor(text: string = REVIEW_LOOP): WorkflowDocumentState {
   const parsed = parseWorkflowText(text);
-  const semantic = parsed.workflow ? validateWorkflow(parsed.workflow, { agentIds: AGENTS.map((a) => a.id) }) : [];
+  const semantic = parsed.workflow
+    ? validateWorkflow(parsed.workflow, { agentIds: AGENTS.map((a) => a.id) })
+    : [];
   const diagnostics = [...parsed.diagnostics, ...semantic];
   return {
     uri: 'file:///w/review-loop.workflow.yaml',

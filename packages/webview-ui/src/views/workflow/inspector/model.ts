@@ -2,7 +2,14 @@
  * Defensive accessors for the lenient workflow model: while the YAML is invalid, any field may be missing
  * or have the wrong type, so the inspector never trusts the declared TypeScript shape.
  */
-import { type BlockNode, type Diagnostic, listBlocks, STEP_TYPES, type StepType, type Workflow } from '@isar-flow/core';
+import {
+  type BlockNode,
+  type Diagnostic,
+  listBlocks,
+  STEP_TYPES,
+  type StepType,
+  type Workflow,
+} from '@isar-flow/core';
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -60,7 +67,11 @@ const CODE_FIELDS: Record<string, string> = { 'agent-missing': 'agent' };
  * Splits the block's diagnostics between the fields that render them and a general list. A diagnostic belongs
  * to a field when its path continues the block's path with that property name.
  */
-export function blockIssues(diagnostics: readonly Diagnostic[], block: BlockNode, fields: readonly string[]): BlockIssues {
+export function blockIssues(
+  diagnostics: readonly Diagnostic[],
+  block: BlockNode,
+  fields: readonly string[],
+): BlockIssues {
   const byField = new Map<string, Diagnostic[]>();
   const general: Diagnostic[] = [];
   const shown = new Set(fields);

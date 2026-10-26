@@ -77,7 +77,15 @@ function PermissionRow({
   );
 }
 
-export function PermissionsSection({ form, issues, update }: { form: AgentForm; issues: FieldIssues; update: UpdateAgent }) {
+export function PermissionsSection({
+  form,
+  issues,
+  update,
+}: {
+  form: AgentForm;
+  issues: FieldIssues;
+  update: UpdateAgent;
+}) {
   const set = (gate: Gate) => (level: PermissionLevel) => {
     // Choosing the shown default of an unset level still writes it, so the file states it.
     if (level === form[gate]) return;

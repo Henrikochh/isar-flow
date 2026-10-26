@@ -102,7 +102,10 @@ function useBlockMenu(scrollRef: RefObject<HTMLElement | null>) {
     setRequest(null);
   };
 
-  const point = createPortal(<span ref={pointRef} className="wf-menu-point" aria-hidden="true" />, document.body);
+  const point = createPortal(
+    <span ref={pointRef} className="wf-menu-point" aria-hidden="true" />,
+    document.body,
+  );
   return { request, anchorRef, open, close, point };
 }
 

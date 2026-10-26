@@ -92,7 +92,10 @@ export function Disclosure({
         aria-controls={bodyId}
         onClick={() => setOpen((value) => !value)}
       >
-        <i className={`codicon codicon-chevron-${open ? 'down' : 'right'} wf-insp-chevron`} aria-hidden="true" />
+        <i
+          className={`codicon codicon-chevron-${open ? 'down' : 'right'} wf-insp-chevron`}
+          aria-hidden="true"
+        />
         <span className="wf-insp-disclosure-title">{title}</span>
         {!open && summary ? <span className="wf-insp-disclosure-summary">{summary}</span> : null}
       </button>
@@ -108,15 +111,28 @@ export function Disclosure({
 const ADVANCED_KEYS = ['timeout', 'retry', 'continueOnError'];
 
 /** Advanced group shared by agent and console blocks: timeout, retries and (optionally) continue on error. */
-export function AdvancedSettings({ step, update, issues, withContinueOnError }: SettingsProps & { withContinueOnError: boolean }) {
+export function AdvancedSettings({
+  step,
+  update,
+  issues,
+  withContinueOnError,
+}: SettingsProps & { withContinueOnError: boolean }) {
   const timeout = asNumber(step.timeout);
   const retry = isRecord(step.retry) ? step.retry : undefined;
   const retries = asNumber(retry?.max);
   const continueOnError = step.continueOnError === true;
   const chips = [
     timeout !== undefined ? <Chip key="t" tone="outline">{`Timeout ${timeout} s`}</Chip> : null,
-    retries !== undefined ? <Chip key="r" tone="outline">{retries === 1 ? '1 retry' : `${retries} retries`}</Chip> : null,
-    withContinueOnError && continueOnError ? <Chip key="c" tone="outline">Continues on error</Chip> : null,
+    retries !== undefined ? (
+      <Chip key="r" tone="outline">
+        {retries === 1 ? '1 retry' : `${retries} retries`}
+      </Chip>
+    ) : null,
+    withContinueOnError && continueOnError ? (
+      <Chip key="c" tone="outline">
+        Continues on error
+      </Chip>
+    ) : null,
   ].filter(Boolean);
   const hasIssues = ADVANCED_KEYS.some((key) => issues.has(key));
   return (
@@ -139,7 +155,9 @@ export function AdvancedSettings({ step, update, issues, withContinueOnError }: 
         placeholder="None"
         hint="Run the block again when it fails, up to this many times."
         issues={issues.get('retry')}
-        onCommit={(value) => setOrUnset(update, 'retry', value === undefined ? undefined : { ...retry, max: value })}
+        onCommit={(value) =>
+          setOrUnset(update, 'retry', value === undefined ? undefined : { ...retry, max: value })
+        }
       />
       {withContinueOnError ? (
         <ContinueOnError value={continueOnError} update={update} issues={issues.get('continueOnError')} />
@@ -161,7 +179,11 @@ export function ContinueOnError({
 }) {
   return (
     <div className="wf-insp-switch">
-      <Switch checked={value} label="Continue on error" onChange={(checked) => setOrUnset(update, 'continueOnError', checked || undefined)} />
+      <Switch
+        checked={value}
+        label="Continue on error"
+        onChange={(checked) => setOrUnset(update, 'continueOnError', checked || undefined)}
+      />
       {hint ? <div className="if-field__hint wf-insp-switch-hint">{hint}</div> : null}
       <FieldIssues issues={issues} />
     </div>

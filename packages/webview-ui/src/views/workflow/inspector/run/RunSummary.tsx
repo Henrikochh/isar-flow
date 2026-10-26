@@ -32,10 +32,18 @@ export function RunSummary({ run, live, workflow }: { run: RunView; live: boolea
           <StatusGlyph status={run.status} />
         </span>
         <div className="wf-run-hero-text">
-          <h2 className="wf-run-hero-title if-display">{waiting ? 'Waiting for approval' : statusLabel(run.status)}</h2>
+          <h2 className="wf-run-hero-title if-display">
+            {waiting ? 'Waiting for approval' : statusLabel(run.status)}
+          </h2>
           <div className="wf-run-hero-meta">
             {duration !== undefined ? <span>{formatDuration(duration)}</span> : null}
-            <span>{live ? (running ? 'Live run' : 'Latest run') : `Started ${formatRelativeTime(run.startedAt, now)}`}</span>
+            <span>
+              {live
+                ? running
+                  ? 'Live run'
+                  : 'Latest run'
+                : `Started ${formatRelativeTime(run.startedAt, now)}`}
+            </span>
           </div>
         </div>
         {live ? null : (
@@ -47,8 +55,16 @@ export function RunSummary({ run, live, workflow }: { run: RunView; live: boolea
 
       {totalTokens > 0 ? (
         <div className="wf-insp-chips">
-          <Chip tone="outline" icon="arrow-up" title="Input tokens">{`${formatTokens(run.usage.inputTokens)} in`}</Chip>
-          <Chip tone="outline" icon="arrow-down" title="Output tokens">{`${formatTokens(run.usage.outputTokens)} out`}</Chip>
+          <Chip
+            tone="outline"
+            icon="arrow-up"
+            title="Input tokens"
+          >{`${formatTokens(run.usage.inputTokens)} in`}</Chip>
+          <Chip
+            tone="outline"
+            icon="arrow-down"
+            title="Output tokens"
+          >{`${formatTokens(run.usage.outputTokens)} out`}</Chip>
         </div>
       ) : null}
 
@@ -111,10 +127,14 @@ function RunRiver({ run, workflow }: { run: RunView; workflow: Workflow }) {
               <span className="wf-run-river-body" style={{ paddingLeft: block.ancestors.length * 14 }}>
                 {type ? <Stone type={type} size="s" /> : null}
                 <span className="wf-run-river-title">{blockTitle(block.step) || 'Block without id'}</span>
-                {stepRun && stepRun.executions > 1 ? <span className="wf-run-river-count">{`×${stepRun.executions}`}</span> : null}
+                {stepRun && stepRun.executions > 1 ? (
+                  <span className="wf-run-river-count">{`×${stepRun.executions}`}</span>
+                ) : null}
               </span>
               <span className="wf-run-river-time">
-                {stepRun?.durationMs !== undefined && status !== 'skipped' ? formatDuration(stepRun.durationMs) : ''}
+                {stepRun?.durationMs !== undefined && status !== 'skipped'
+                  ? formatDuration(stepRun.durationMs)
+                  : ''}
               </span>
             </button>
           </li>

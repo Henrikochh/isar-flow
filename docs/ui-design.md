@@ -29,6 +29,15 @@ Companion to the spec (§9). Every webview must follow this brief so the product
   Keep selectors flat (one class) to avoid specificity fights.
 - Block colors: put `data-type="<block type>"` on an element to get `--block-color` / `--block-wash`.
 - Every interactive element is reachable by keyboard and shows the `:focus-visible` outline.
+- Text meets WCAG AA in dark, light and high contrast themes: 4.5:1 (3:1 for large text) against its background.
+  **Dimmed states never fade text.** Skipped blocks, blocks a run has not reached and hidden agents show it with
+  the frame (hollow, dashed), a faded stone or river segment and a muted (still 4.5:1) title, plus a glyph or chip
+  that names the state. `scripts/interactions.mjs` measures every view, these states included.
+  Palette-colored text on a wash of its own color (toned chips, badges, the validity pill) mixes in `--if-fg`
+  by `--if-ink-strength` (100 % in dark themes, 72 % in light ones) so it keeps 4.5:1 on the wash.
+- SegmentedControl: the selected segment is tinted and ringed with the text color, so it stands out on any
+  theme's input background (its edge has at least 3:1 against the track); high contrast themes ring it with
+  `contrastActiveBorder`.
 - Text from models or logs is rendered as plain text (`white-space: pre-wrap`), never as HTML.
 
 ## Sidebar (view `sidebar`, ~240–400 px wide)
@@ -52,6 +61,8 @@ Companion to the spec (§9). Every webview must follow this brief so the product
 
 - Rows are buttons: click opens the agent editor / workflow canvas. Hover background `--if-hover`;
   rows have 8 px radius and 8 px padding. No card borders around rows.
+- A user agent hidden by a workspace agent with the same id shows a warning chip "Hidden"; its stone fades to
+  45 % and its name turns muted (text keeps 4.5:1).
 - **New agent** expands an inline card at the top of the list: name field, starter
   (SegmentedControl: Blank / Coder / Reviewer), scope (Workspace / User), buttons Create agent / Cancel.
 - Workflows tab:
@@ -142,6 +153,9 @@ Companion to the spec (§9). Every webview must follow this brief so the product
   "Repeat 5 times"), chip "max 5". On the left side of the frame an **eddy**: a return channel drawn as an
   SVG path from the bottom of the body curving up to the header, with an arrowhead, in `--if-enzian`.
   During a run the header shows "Iteration 2 of 5".
+  When the frame is scrolled sideways, the stone and titles stay in view on the left and the chips on the
+  right. Text that reaches the chips runs under them: they sit on the opaque header color, as tall as the
+  header, with a 20 px fade.
 - **If** (container): header card with Stone + "If tests.exitCode ≠ 0" (describeCondition). Below, the river
   forks into two equal-width lanes (CSS grid `1fr 1fr`) labelled "Then" and "Else"; the fork and merge
   are drawn with 3 px rounded connectors so the split looks like a river around a gravel bank.
@@ -149,7 +163,8 @@ Companion to the spec (§9). Every webview must follow this brief so the product
 - **Run state**: segments the run has passed are full strength; segments not reached are 35 % opacity;
   the segment above the running block shows a flowing current (animated dashes moving down, 1.2 s loop).
   Running card: outline glow `0 0 0 3px color-mix(--if-isar 35%)`. Succeeded/failed/skipped glyphs in the
-  card; skipped cards at 55 % opacity.
+  card. Skipped cards (an If branch the run did not take) are hollow with a dashed `--if-border-strong` border,
+  no shadow, a stone at 45 % opacity and a muted title; skipped loops get a dashed frame. Text is never faded.
 - **Keyboard**: arrows move selection (document order), Delete/Backspace deletes, Ctrl/Cmd+D duplicates,
   Alt+↑/↓ moves the block within its list, Enter focuses the inspector, Escape clears selection.
 - **Drag & drop**: dnd-kit. Drag existing cards (move) or palette items (insert). Drop on insertion slots
@@ -192,6 +207,8 @@ Companion to the spec (§9). Every webview must follow this brief so the product
   (monospace, stderr lines in alpenrose, auto-scroll while running, Copy button); agent → answer text,
   JSON (pretty, code font), token chips, tool lines; errors as Banner error.
 - No block selected during a run: run summary (status, duration, tokens) and list of blocks with status.
+  Blocks not reached or skipped are quiet: their river segment fades to 35 %, the stone to 45 % and the title
+  turns muted.
 
 ### Dialogs and banners
 - Run with inputs → Dialog "Run <name>" with one Field per input (TextArea when multiline), values

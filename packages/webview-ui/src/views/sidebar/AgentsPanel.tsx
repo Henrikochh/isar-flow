@@ -34,7 +34,14 @@ export function AgentsPanel({
       <Section
         title="Agents"
         actions={
-          <Button ref={newRef} size="s" icon="add" aria-label="New agent" aria-expanded={draft !== undefined} onClick={open}>
+          <Button
+            ref={newRef}
+            size="s"
+            icon="add"
+            aria-label="New agent"
+            aria-expanded={draft !== undefined}
+            onClick={open}
+          >
             New
           </Button>
         }

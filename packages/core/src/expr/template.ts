@@ -53,7 +53,11 @@ export function renderTemplate(text: string, ctx: ExpressionContext): unknown {
   const matches = findTemplateExpressions(text);
   if (matches.length === 0) return text;
   const first = matches[0];
-  if (matches.length === 1 && text.slice(0, first.start).trim() === '' && text.slice(first.end).trim() === '') {
+  if (
+    matches.length === 1 &&
+    text.slice(0, first.start).trim() === '' &&
+    text.slice(first.end).trim() === ''
+  ) {
     return evaluateExpression(first.expr, ctx);
   }
   let out = '';

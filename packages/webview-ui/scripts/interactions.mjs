@@ -201,28 +201,30 @@ async function unnamedControls(page) {
   return bad;
 }
 
-/** Visible text whose contrast against its (opaque) background is below `min`, as "ratio text (.class)". */
-async function lowContrast(page, min) {
-  // Slide-ins fade from transparent; measure once they have settled (spinners and pulses never end).
-  await page.evaluate(() =>
-    Promise.all(
-      document
-        .getAnimations()
-        .filter((a) => a.effect?.getTiming().iterations !== Infinity)
-        .map((a) => a.finished.catch(() => undefined)),
-    ),
-  );
-  return page.evaluate((min) => {
-    const DIMMED =
-      '.wf-card--skipped, .wf-pill--skipped, .wf-loop--skipped, .wf-if--skipped, .wf-run-river-item--quiet, .sb-row--dimmed';
-    const parse = (c) => {
-      const m = c.match(/rgba?\(([^)]+)\)/);
-      if (!m) return null;
-      const [r, g, b, a = 1] = m[1]
+/**
+ * Puts color helpers on `window.__colors` (WCAG luminance and ratio, alpha blending, the opaque background behind
+ * an element). Chromium reports color-mix() results as `color(srgb r g b / a)`, so both that and rgb() parse.
+ */
+async function installColorTools(page) {
+  await page.evaluate(() => {
+    if (window.__colors) return;
+    const channels = (list) =>
+      list
         .split(/[ ,/]+/)
         .filter(Boolean)
         .map(Number);
-      return { r, g, b, a };
+    const parse = (c) => {
+      const rgb = c.match(/rgba?\(([^)]+)\)/);
+      if (rgb) {
+        const [r, g, b, a = 1] = channels(rgb[1]);
+        return { r, g, b, a };
+      }
+      const srgb = c.match(/color\(srgb ([^)]+)\)/);
+      if (srgb) {
+        const [r, g, b, a = 1] = channels(srgb[1]);
+        return { r: r * 255, g: g * 255, b: b * 255, a };
+      }
+      return null;
     };
     const lum = ({ r, g, b }) => {
       const f = (v) => {
@@ -230,6 +232,10 @@ async function lowContrast(page, min) {
         return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
       };
       return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const ratio = (x, y) => {
+      const [hi, lo] = [lum(x), lum(y)].sort((a, b) => b - a);
+      return (hi + 0.05) / (lo + 0.05);
     };
     const blend = (top, bottom) => ({
       r: top.r * top.a + bottom.r * (1 - top.a),
@@ -251,6 +257,24 @@ async function lowContrast(page, min) {
       if (!layers.length) return null;
       return layers.reduceRight((acc, layer) => blend(layer, acc));
     };
+    window.__colors = { parse, lum, ratio, blend, background };
+  });
+}
+
+/** Visible text whose contrast against its (opaque) background is below `min`, as "ratio text (.class)". */
+async function lowContrast(page, min) {
+  // Slide-ins fade from transparent; measure once they have settled (spinners and pulses never end).
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getTiming().iterations !== Infinity)
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  );
+  await installColorTools(page);
+  return page.evaluate((min) => {
+    const { parse, ratio: contrast, blend, background } = window.__colors;
     const out = [];
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const seen = new Set();
@@ -263,16 +287,12 @@ async function lowContrast(page, min) {
       if (style.visibility !== 'visible' || rect.width === 0 || rect.height === 0) continue;
       if (el.closest('[aria-hidden="true"], [inert], .wf-river--stale, [disabled], [aria-disabled="true"]'))
         continue;
-      // Dimmed on purpose by the UI brief (skipped blocks, hidden agents); their glyph or chip says why.
-      if (el.closest(DIMMED)) continue;
       let opacity = 1;
       for (let e = el; e; e = e.parentElement) opacity *= Number(getComputedStyle(e).opacity);
       const bg = background(el);
       const fg = parse(style.color);
       if (!bg || !fg) continue;
-      const color = blend({ ...fg, a: fg.a * opacity }, bg);
-      const [hi, lo] = [lum(color), lum(bg)].sort((a, b) => b - a);
-      const ratio = (hi + 0.05) / (lo + 0.05);
+      const ratio = contrast(blend({ ...fg, a: fg.a * opacity }, bg), bg);
       const large =
         parseFloat(style.fontSize) >= 18.66 ||
         (parseFloat(style.fontSize) >= 14 && Number(style.fontWeight) >= 700);
@@ -283,6 +303,36 @@ async function lowContrast(page, min) {
     }
     return out;
   }, min);
+}
+
+/**
+ * Segmented controls on the page, each with the contrast of its selected segment's edge (the inset ring over the
+ * fill, else the fill) against the track; WCAG 1.4.11 asks 3:1 for the visual that marks a state.
+ */
+async function segmentEdges(page) {
+  await installColorTools(page);
+  return page.evaluate(() => {
+    const { parse, ratio, blend, background } = window.__colors;
+    return [...document.querySelectorAll('.if-segmented')].map((track) => {
+      const item = track.querySelector('[aria-checked="true"], [aria-selected="true"]');
+      const name = track.getAttribute('aria-label');
+      if (!item) return { name, ratio: 0, selected: '(none)' };
+      const trackBg = background(track);
+      const fill = background(item);
+      // Behind a gradient or image the colors cannot be measured; NaN fails the check and says so.
+      if (!trackBg || !fill) return { name, ratio: NaN, selected: item.textContent.trim() };
+      const ring = getComputedStyle(item)
+        .boxShadow.split(/,(?![^(]*\))/)
+        .find((shadow) => /\binset\b/.test(shadow));
+      const ringColor = ring ? parse(ring) : null;
+      const edge = ringColor ? blend(ringColor, fill) : fill;
+      return {
+        name,
+        selected: item.textContent.trim(),
+        ratio: Math.max(ratio(edge, trackBg), ratio(fill, trackBg)),
+      };
+    });
+  });
 }
 
 /* ---------------- flows ---------------- */
@@ -1133,18 +1183,21 @@ flow(
 
 /* ---- contrast, all views and themes ---- */
 
+// Dimmed states (skipped blocks, quiet run rows, hidden agents) fade their frame and stone, never their text, so
+// they are measured like everything else. `dimmed` lists the ones a scenario must show, so the check stays real.
 for (const theme of ['dark', 'light', 'hc', 'hcl']) {
-  for (const [view, scenario, width] of [
+  for (const [view, scenario, width, dimmed = []] of [
     ['workflow', 'selected', 1440],
     ['workflow', 'running', 1440],
     ['workflow', 'failed', 1440],
     ['workflow', 'history', 1440],
-    ['workflow', 'approval', 1440],
+    ['workflow', 'approval', 1440, ['.wf-card--skipped', '.wf-run-river-item--quiet']],
+    ['workflow', 'nested-run', 1440, ['.wf-if--skipped', '.wf-card--skipped', '.wf-run-river-item--quiet']],
     ['workflow', 'invalid', 1440],
     ['workflow', 'noids', 1440],
     ['sidebar', 'default', 340],
     ['sidebar', 'wide-running', 400],
-    ['sidebar', 'narrow-messy', 240],
+    ['sidebar', 'narrow-messy', 240, ['.sb-row--dimmed']],
     ['sidebar', 'narrow-messy-workflows', 240],
     ['sidebar', 'untrusted', 340],
     ['agent', 'default', 1280],
@@ -1155,6 +1208,8 @@ for (const theme of ['dark', 'light', 'hc', 'hcl']) {
       `contrast: ${view} ${scenario} (${theme})`,
       { view, scenario, theme, width, height: 900 },
       async (h) => {
+        for (const selector of dimmed)
+          check((await h.page.locator(selector).count()) > 0, `the scenario shows ${selector}`);
         const low = await lowContrast(h.page, 4.5);
         check(
           low.length === 0,
@@ -1165,13 +1220,93 @@ for (const theme of ['dark', 'light', 'hc', 'hcl']) {
   }
 }
 
+/* ---- loop heads: a title that slides under the chips is hidden, not printed through them ---- */
+
+// A narrow loop scrolled partly out of view keeps its stone and titles in view (sticky), so they slide under the
+// iteration chip and status on the right. Those sit on the header color and must cover every text line they meet.
+for (const [scenario, width] of [
+  ['nested-run', 1440],
+  ['nested-run', 900],
+]) {
+  flow(
+    `workflow: loop chips cover the title that slides under them (${scenario}, ${width} px)`,
+    { view: 'workflow', scenario, width, height: 1700 },
+    async (h) => {
+      const heads = await h.page.evaluate(() =>
+        [...document.querySelectorAll('.wf-loop__head')].map((head) => {
+          const aside = head.querySelector(':scope > .wf-loop__aside');
+          const a = aside.getBoundingClientRect();
+          const lines = [];
+          const walker = document.createTreeWalker(
+            head.querySelector('.wf-loop__lead'),
+            NodeFilter.SHOW_TEXT,
+          );
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            for (const r of range.getClientRects())
+              if (r.width > 0 && r.right > a.left + 1 && r.left < a.right - 1)
+                lines.push({ text: node.textContent.trim(), top: r.top, bottom: r.bottom });
+          }
+          return {
+            title: head.querySelector('.wf-loop__title')?.textContent ?? '?',
+            aside: { top: a.top, bottom: a.bottom },
+            lines,
+          };
+        }),
+      );
+      const reached = heads.filter((head) => head.lines.length > 0);
+      check(reached.length > 0, 'the scenario shows a loop whose title slides under its chips');
+      const shown = reached.flatMap((head) =>
+        head.lines
+          .filter((l) => l.top < head.aside.top - 0.5 || l.bottom > head.aside.bottom + 0.5)
+          .map(
+            (l) =>
+              `"${l.text}" in loop ${head.title}: text ${Math.round(l.top)}–${Math.round(l.bottom)}, ` +
+              `chips ${Math.round(head.aside.top)}–${Math.round(head.aside.bottom)}`,
+          ),
+      );
+      check(shown.length === 0, `text shows through the loop chips:\n      ${shown.join('\n      ')}`);
+    },
+  );
+}
+
+/* ---- segmented controls: the selected choice stands out in every theme ---- */
+
+for (const theme of ['dark', 'light', 'hc', 'hcl']) {
+  for (const [view, scenario, width] of [
+    ['sidebar', 'narrow-newagent', 240], // tabs, Starter, Scope
+    ['agent', 'noperms', 1280], // permission levels
+    ['workflow', 'selected', 1440], // Answer format
+    ['workflow', 'failed', 1440], // Settings / Run output
+    ['workflow', 'condition', 1440], // Rules / Expression
+  ]) {
+    flow(
+      `segmented: selected choice stands out in ${view} ${scenario} (${theme})`,
+      { view, scenario, theme, width, height: 900 },
+      async (h) => {
+        const controls = await segmentEdges(h.page);
+        check(controls.length > 0, 'the page shows a segmented control');
+        const faint = controls.filter((c) => !(c.ratio >= 3));
+        check(
+          faint.length === 0,
+          `selected segment edge below 3:1 against its track:\n      ${faint
+            .map((c) => `${c.ratio.toFixed(2)} "${c.selected}" in ${c.name}`)
+            .join('\n      ')}`,
+        );
+      },
+    );
+  }
+}
+
 /* ---------------- runner ---------------- */
 
 const flows = FLOWS.filter((f) => !only || f.name.includes(only));
+// No file watching: an edit elsewhere in the repo (core is served from source) must not reload a page mid-flow.
 const server = await createServer({
   root,
   configFile: resolve(root, 'vite.config.ts'),
-  server: { port: 0, strictPort: false },
+  server: { port: 0, strictPort: false, watch: null, hmr: false },
   logLevel: 'error',
 });
 await server.listen();
@@ -1211,7 +1346,10 @@ try {
       await page.goto(`${base}harness/index.html?${query}`, { waitUntil: 'networkidle' });
       await page.waitForSelector('body[data-harness-ready="true"]', { timeout: 15_000 });
       if (latency) await pause(latency + 100);
-      await page.evaluate(() => document.fonts.ready);
+      // A stalled font request must not hang the run; the flow's own timeout starts after this.
+      await page.evaluate(() =>
+        Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5000))]),
+      );
       let timer;
       await Promise.race([
         f.run(helpers(page)),

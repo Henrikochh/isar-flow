@@ -6,7 +6,11 @@ import type { FieldIssues, UpdateAgent } from './agentForm';
 
 const SCOPE: Record<AgentScope, { label: string; icon: string; title: string }> = {
   workspace: { label: 'Workspace', icon: 'folder', title: 'Stored in this workspace under .isarflow/agents' },
-  user: { label: 'User', icon: 'account', title: 'Stored in your user settings and available in every workspace' },
+  user: {
+    label: 'User',
+    icon: 'account',
+    title: 'Stored in your user settings and available in every workspace',
+  },
 };
 
 export function AgentHeader({
@@ -80,7 +84,12 @@ export function AgentHeader({
           </div>
         ) : null}
       </div>
-      <Button variant="ghost" icon="go-to-file" title={`Open ${fileName} in the text editor`} onClick={onOpenYaml}>
+      <Button
+        variant="ghost"
+        icon="go-to-file"
+        title={`Open ${fileName} in the text editor`}
+        onClick={onOpenYaml}
+      >
         Open YAML
       </Button>
     </header>

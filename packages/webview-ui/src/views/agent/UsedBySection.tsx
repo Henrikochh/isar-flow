@@ -15,7 +15,13 @@ export function UsedBySection({
   return (
     <Section
       title="Used by"
-      actions={usedBy.length ? <span className="ag-section-count">{usedBy.length === 1 ? '1 workflow' : `${usedBy.length} workflows`}</span> : null}
+      actions={
+        usedBy.length ? (
+          <span className="ag-section-count">
+            {usedBy.length === 1 ? '1 workflow' : `${usedBy.length} workflows`}
+          </span>
+        ) : null
+      }
     >
       {usedBy.length ? (
         <ul className="ag-used-by">

@@ -112,7 +112,9 @@ export function VariableList({ stepId, onPick }: VariablePickerProps) {
         data-index={index}
         role="option"
         aria-selected={index === active}
-        className={['if-select__option', index === active && 'if-select__option--active'].filter(Boolean).join(' ')}
+        className={['if-select__option', index === active && 'if-select__option--active']
+          .filter(Boolean)
+          .join(' ')}
         onMouseEnter={() => setActive(index)}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => onPick(variable)}
@@ -144,7 +146,13 @@ export function VariableList({ stepId, onPick }: VariablePickerProps) {
         onKeyDown={onKeyDown}
         data-autofocus
       />
-      <div ref={listRef} id={listId} className="if-select__list wf-insp-var-list" role="listbox" aria-label="Variables">
+      <div
+        ref={listRef}
+        id={listId}
+        className="if-select__list wf-insp-var-list"
+        role="listbox"
+        aria-label="Variables"
+      >
         {rows.length ? rows : <div className="if-select__empty">No variables match "{query.trim()}".</div>}
       </div>
     </>

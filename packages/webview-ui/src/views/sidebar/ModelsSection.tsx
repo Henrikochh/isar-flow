@@ -24,7 +24,9 @@ export function ModelsSection({ catalog }: { catalog: ModelCatalog }) {
       }
     >
       {providers.length === 0 ? (
-        <p className="sb-note">No model providers yet. Add an OpenAI-compatible endpoint such as LiteLLM or Ollama.</p>
+        <p className="sb-note">
+          No model providers yet. Add an OpenAI-compatible endpoint such as LiteLLM or Ollama.
+        </p>
       ) : (
         <ul className="sb-list" aria-label="Model providers">
           {providers.map((provider, index) => (
@@ -74,7 +76,9 @@ function ProviderRow({ provider }: { provider: ProviderSummary }) {
             <span className="sb-provider__label" title={label}>
               {label}
             </span>
-            <span className={editable ? 'sb-provider__count sb-provider__count--yields' : 'sb-provider__count'}>
+            <span
+              className={editable ? 'sb-provider__count sb-provider__count--yields' : 'sb-provider__count'}
+            >
               {providerCountText(provider)}
             </span>
           </span>
@@ -87,7 +91,11 @@ function ProviderRow({ provider }: { provider: ProviderSummary }) {
       </button>
       {editable ? (
         <div className="sb-row__overlay">
-          <IconButton icon="key" label={provider.hasApiKey ? 'Change API key' : 'Set API key'} onClick={() => send({ type: 'setProviderKey', providerId: provider.id })} />
+          <IconButton
+            icon="key"
+            label={provider.hasApiKey ? 'Change API key' : 'Set API key'}
+            onClick={() => send({ type: 'setProviderKey', providerId: provider.id })}
+          />
           <IconButton icon="trash" label={`Remove ${label}`} onClick={() => setConfirming(true)} />
         </div>
       ) : null}

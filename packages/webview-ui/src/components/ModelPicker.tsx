@@ -92,7 +92,9 @@ export function ModelPicker({
       allowCustom
       customLabel={(text) => `Use model "${text}"`}
       placeholder={catalog.loading && catalog.models.length === 0 ? 'Loading models…' : placeholder}
-      emptyText={catalog.loading ? 'Loading models…' : 'No models match. Type a full reference like litellm/gpt-4.1.'}
+      emptyText={
+        catalog.loading ? 'Loading models…' : 'No models match. Type a full reference like litellm/gpt-4.1.'
+      }
       onChange={(next) => onChange(next === EMPTY ? '' : next)}
       footer={footer}
     />

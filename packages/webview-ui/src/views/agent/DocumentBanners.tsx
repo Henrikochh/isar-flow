@@ -58,7 +58,9 @@ export function DocumentBanners({
             {doc.agent === null ? (
               <span>Fix the YAML to edit the agent here.</span>
             ) : more > 0 ? (
-              <span>{more === 1 ? 'One more problem is marked below.' : `${more} more problems are marked below.`}</span>
+              <span>
+                {more === 1 ? 'One more problem is marked below.' : `${more} more problems are marked below.`}
+              </span>
             ) : null}
           </span>
         </Banner>

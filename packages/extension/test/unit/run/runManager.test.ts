@@ -375,6 +375,91 @@ steps:
     expect(disabled.ui.confirmCommands).not.toHaveBeenCalled();
   });
 
+  describe('agents that act without asking', () => {
+    const text = `version: 1
+name: Implement
+steps:
+  - id: implement
+    type: agent
+    agent: coder
+    prompt: Implement it
+`;
+    const coder = (permissions: AgentDefinition['permissions']): Record<string, AgentDefinition> => ({
+      coder: { name: 'Coder', model: 'x/y', tools: ['readFile', 'editFile', 'runCommand'], permissions },
+    });
+    const calls = (t: ReturnType<typeof setup>) =>
+      (t.ui.confirmCommands as ReturnType<typeof vi.fn>).mock.calls as [string, string, string[]][];
+
+    it('are confirmed before a workflow without console blocks runs', async () => {
+      const declined = setup({
+        text,
+        agents: coder({ edits: 'auto', commands: 'auto' }),
+        confirm: undefined,
+      });
+      expect(await declined.manager.start(declined.uri)).toBeUndefined();
+      const [[message, detail]] = calls(declined);
+      expect(message).toBe("Run 'Implement'? These agents can change your workspace without asking:");
+      expect(detail).toContain(
+        "agent 'coder' in block 'implement': edits files and runs commands without asking",
+      );
+      expect(declined.manager.active()).toEqual([]);
+      expect(declined.events).toEqual([]);
+    });
+
+    it('are listed after the console commands', async () => {
+      const both = text + '  - id: test\n    type: console\n    run: npm test\n';
+      const t = setup({ text: both, agents: coder({ edits: 'auto' }), confirm: undefined });
+      await t.manager.start(t.uri);
+      const [[message, detail]] = calls(t);
+      expect(message).toBe(
+        "Run 'Implement'? It runs these commands and lets agents change your workspace without asking:",
+      );
+      expect(detail).toMatch(
+        /npm test\n\nAgents that act without asking:\n• agent 'coder' in block 'implement': edits files without asking/,
+      );
+    });
+
+    it('need approval again when their permissions change', async () => {
+      const agents = coder({ edits: 'auto' });
+      const t = setup({ text, agents, confirm: 'Run and remember' });
+      await t.manager.whenFinished((await t.manager.start(t.uri)) as string);
+      await t.manager.whenFinished((await t.manager.start(t.uri)) as string);
+      expect(calls(t)).toHaveLength(1);
+
+      agents.coder = { ...agents.coder, permissions: { edits: 'auto', commands: 'auto' } };
+      await t.manager.whenFinished((await t.manager.start(t.uri)) as string);
+      expect(calls(t)).toHaveLength(2);
+      expect(calls(t)[1][1]).toContain('edits files and runs commands without asking');
+    });
+
+    it('run with the agent files the question was about', async () => {
+      const t = setup({ text, agents: coder({ edits: 'auto' }) });
+      // The agent file is deleted while the question is open: the run still uses what was confirmed.
+      (t.ui.confirmCommands as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+        t.deps.agents.definitions = () => ({});
+        return 'Run';
+      });
+      const view = await t.manager.whenFinished((await t.manager.start(t.uri)) as string);
+      expect(calls(t)).toHaveLength(1);
+      expect(view?.steps.implement.error).toBeDefined();
+      expect(view?.steps.implement.error).not.toContain("Agent 'coder' not found");
+    });
+
+    it('are not asked about when they ask first or confirmation is off', async () => {
+      const asking = setup({ text, agents: coder({ edits: 'ask', commands: 'ask' }) });
+      await asking.manager.whenFinished((await asking.manager.start(asking.uri)) as string);
+      expect(asking.ui.confirmCommands).not.toHaveBeenCalled();
+
+      const disabled = setup({
+        text,
+        agents: coder({ edits: 'auto', commands: 'auto' }),
+        settings: { confirmCommands: false },
+      });
+      await disabled.manager.whenFinished((await disabled.manager.start(disabled.uri)) as string);
+      expect(disabled.ui.confirmCommands).not.toHaveBeenCalled();
+    });
+  });
+
   it('passes settings, secrets and the process environment to the engine', async () => {
     const text = `version: 1
 name: Env

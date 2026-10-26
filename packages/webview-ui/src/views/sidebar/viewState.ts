@@ -50,7 +50,9 @@ export function parseViewState(raw: unknown): SidebarViewState {
   if (workflow) {
     result.workflowDraft = {
       name: str(workflow.name),
-      template: TEMPLATES.includes(str(workflow.template)) ? (workflow.template as WorkflowTemplateId) : 'blank',
+      template: TEMPLATES.includes(str(workflow.template))
+        ? (workflow.template as WorkflowTemplateId)
+        : 'blank',
     };
   }
   return result;
@@ -62,6 +64,7 @@ export function useSidebarViewState() {
     setViewState(state);
   }, [state]);
   const setAgentDraft = (agentDraft: AgentDraft | undefined) => setState((prev) => ({ ...prev, agentDraft }));
-  const setWorkflowDraft = (workflowDraft: WorkflowDraft | undefined) => setState((prev) => ({ ...prev, workflowDraft }));
+  const setWorkflowDraft = (workflowDraft: WorkflowDraft | undefined) =>
+    setState((prev) => ({ ...prev, workflowDraft }));
   return { ...state, setAgentDraft, setWorkflowDraft };
 }

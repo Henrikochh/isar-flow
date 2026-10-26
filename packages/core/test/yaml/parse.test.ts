@@ -55,7 +55,9 @@ describe('parseWorkflowText', () => {
     const text = 'version: 1\nname: x\nsteps:\n  - id: a\n    type: teleport\n';
     const result = parseWorkflowText(text);
     const d = result.diagnostics.find((x) => x.code === 'unknown-block-type');
-    expect(d?.message).toBe("Unknown block type 'teleport'. Use one of: agent, console, loop, if, break, stop, approval.");
+    expect(d?.message).toBe(
+      "Unknown block type 'teleport'. Use one of: agent, console, loop, if, break, stop, approval.",
+    );
     expect(d?.range?.start.line).toBe(4);
   });
 

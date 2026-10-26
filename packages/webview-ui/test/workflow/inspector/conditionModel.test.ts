@@ -91,13 +91,23 @@ describe('readRules / writeRules', () => {
 
   it('writes a single rule without a group and drops operands that are not needed', () => {
     expect(writeRules({ combinator: 'any', rules: [exit] })).toEqual(exit);
-    expect(writeRules({ combinator: 'any', rules: [exit, { ...approved, to: 'x' }] })).toEqual({ any: [exit, approved] });
+    expect(writeRules({ combinator: 'any', rules: [exit, { ...approved, to: 'x' }] })).toEqual({
+      any: [exit, approved],
+    });
   });
 
   it('keeps ignoreCase only for text operators', () => {
-    const rule = { value: '${{ steps.review.text }}', op: 'contains' as const, to: 'changes', ignoreCase: true };
+    const rule = {
+      value: '${{ steps.review.text }}',
+      op: 'contains' as const,
+      to: 'changes',
+      ignoreCase: true,
+    };
     expect(writeRules({ combinator: 'all', rules: [rule] })).toEqual(rule);
-    expect(writeRules({ combinator: 'all', rules: [{ ...exit, op: 'gt', ignoreCase: true }] })).toEqual({ ...exit, op: 'gt' });
+    expect(writeRules({ combinator: 'all', rules: [{ ...exit, op: 'gt', ignoreCase: true }] })).toEqual({
+      ...exit,
+      op: 'gt',
+    });
   });
 });
 
@@ -113,7 +123,9 @@ describe('expressionToRules', () => {
   });
 
   it('converts function calls, mirrored comparisons and plain references', () => {
-    expect(expressionToRules("contains(steps.review.text, 'LGTM', true) && 3 > loop.iteration && inputs.force")).toEqual({
+    expect(
+      expressionToRules("contains(steps.review.text, 'LGTM', true) && 3 > loop.iteration && inputs.force"),
+    ).toEqual({
       combinator: 'all',
       rules: [
         { value: '${{ steps.review.text }}', op: 'contains', to: 'LGTM', ignoreCase: true },
@@ -174,6 +186,8 @@ describe('rulesToExpression', () => {
   });
 
   it('parenthesizes complex values', () => {
-    expect(rulesToExpression({ combinator: 'all', rules: [{ value: '${{ a || b }}', op: 'isFalse' }] })).toBe('!(a || b)');
+    expect(rulesToExpression({ combinator: 'all', rules: [{ value: '${{ a || b }}', op: 'isFalse' }] })).toBe(
+      '!(a || b)',
+    );
   });
 });

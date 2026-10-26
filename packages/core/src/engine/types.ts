@@ -123,7 +123,13 @@ export type StepOutput = Record<string, unknown> & {
 };
 
 export type RunEvent =
-  | { type: 'run-start'; runId: string; workflowName: string; startedAt: number; inputs: Record<string, unknown> }
+  | {
+      type: 'run-start';
+      runId: string;
+      workflowName: string;
+      startedAt: number;
+      inputs: Record<string, unknown>;
+    }
   | {
       type: 'step-start';
       runId: string;
@@ -147,7 +153,14 @@ export type RunEvent =
       at: number;
     }
   | { type: 'loop-iteration'; runId: string; stepId: string; iteration: number; maxIterations: number }
-  | { type: 'run-end'; runId: string; status: Exclude<RunStatus, 'running'>; error?: string; durationMs: number; usage: Usage };
+  | {
+      type: 'run-end';
+      runId: string;
+      status: Exclude<RunStatus, 'running'>;
+      error?: string;
+      durationMs: number;
+      usage: Usage;
+    };
 
 export interface RunSummary {
   runId: string;

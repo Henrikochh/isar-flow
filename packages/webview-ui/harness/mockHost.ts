@@ -73,6 +73,7 @@ function scenarioWorkflowText(scenario: string): string {
       return LONG_TEXT_WORKFLOW_TEXT;
     case 'nested':
     case 'nested-narrow':
+    case 'nested-run':
       return NESTED_WORKFLOW_TEXT;
     case 'invalid':
       return review.replace('prompt:', 'promt:');
@@ -275,6 +276,10 @@ export function workflowHost(scenario: string, send: Send<HostToWorkflowEditor>)
         type: 'approvalRequest',
         prompt: { requestId: 'approval-1', runId: 'run-live', stepId: 'ship_it', message: 'Merge the reviewed changes into main?' },
       });
+    } else if (scenario === 'nested-run') {
+      // A finished run whose untaken If branches hold skipped cards, a skipped If and blocks inside it.
+      const events = await collectEvents(workflow, createFakeHost());
+      send({ type: 'run', run: viewOf(events), live: true });
     } else if (scenario === 'history') {
       // A past failed run picked from the history: shown read-only, with its summary in the inspector.
       const failed = history.find((run) => run.summary.status === 'failure');

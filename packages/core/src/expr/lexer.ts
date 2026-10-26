@@ -8,7 +8,32 @@ export type Token =
   | { type: 'eof'; start: number };
 
 // Longest operators first so that '===' wins over '==' and '<=' over '<'.
-const OPERATORS = ['===', '!==', '==', '!=', '<=', '>=', '&&', '||', '<', '>', '+', '-', '*', '/', '%', '!', '?', ':', '.', ',', '(', ')', '[', ']'];
+const OPERATORS = [
+  '===',
+  '!==',
+  '==',
+  '!=',
+  '<=',
+  '>=',
+  '&&',
+  '||',
+  '<',
+  '>',
+  '+',
+  '-',
+  '*',
+  '/',
+  '%',
+  '!',
+  '?',
+  ':',
+  '.',
+  ',',
+  '(',
+  ')',
+  '[',
+  ']',
+];
 
 const ESCAPES: Record<string, string> = { n: '\n', t: '\t', r: '\r', '\\': '\\', "'": "'", '"': '"' };
 
@@ -63,7 +88,8 @@ export function tokenize(src: string): Token[] {
     if (isIdentStart(c)) {
       i++;
       // Dashes are allowed inside identifiers (e.g. steps.my-step.text), like GitHub Actions.
-      while (i < src.length && (isIdentPart(src[i]) || (src[i] === '-' && isIdentPart(src[i + 1] ?? '')))) i++;
+      while (i < src.length && (isIdentPart(src[i]) || (src[i] === '-' && isIdentPart(src[i + 1] ?? ''))))
+        i++;
       tokens.push({ type: 'ident', value: src.slice(start, i), start });
       continue;
     }

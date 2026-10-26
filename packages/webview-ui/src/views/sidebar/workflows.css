@@ -274,9 +274,7 @@ body.vscode-high-contrast-light .sb-run::before {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background:
-    linear-gradient(var(--sb-row-bg), var(--sb-row-bg)),
-    var(--if-surface-sunken);
+  background: linear-gradient(var(--sb-row-bg), var(--sb-row-bg)), var(--if-surface-sunken);
 }
 
 .sb-run__name {

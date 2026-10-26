@@ -447,15 +447,21 @@ body.vscode-high-contrast-light .if-btn {
 .if-segmented__item:hover {
   color: var(--if-fg);
 }
+/*
+ * The choice is tinted and ringed with the text color, so it stands out on any theme's input background: a pressed
+ * segment in light themes, a raised one in dark themes, with an edge of at least 3:1 against the track.
+ */
 .if-segmented__item[aria-checked='true'],
 .if-segmented__item[aria-selected='true'] {
-  background: var(--if-surface);
+  background: color-mix(in srgb, var(--if-fg) 8%, var(--if-input-bg));
   color: var(--if-fg);
-  box-shadow: 0 1px 2px var(--if-shadow);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--if-fg) 55%, transparent);
+  /* Muted text is short of 4.5:1 on the tint, so the count takes the label's color (and keeps its lighter weight). */
+  --if-segmented-count: var(--if-fg);
 }
 .if-segmented__count {
   font-weight: 500;
-  color: var(--if-muted);
+  color: var(--if-segmented-count, var(--if-muted));
 }
 /* High contrast: the selected segment gets a ring (inset, so the focus outline stays visible). */
 body.vscode-high-contrast .if-segmented__item[aria-checked='true'],
@@ -463,17 +469,6 @@ body.vscode-high-contrast .if-segmented__item[aria-selected='true'],
 body.vscode-high-contrast-light .if-segmented__item[aria-checked='true'],
 body.vscode-high-contrast-light .if-segmented__item[aria-selected='true'] {
   box-shadow: inset 0 0 0 1px var(--vscode-contrastActiveBorder, var(--if-focus));
-}
-/* Light: on a white track the raised segment barely shows, so the track is tinted and the choice sits on it in white. */
-body.vscode-light .if-segmented {
-  background: color-mix(in srgb, var(--if-fg) 6%, var(--if-input-bg));
-}
-body.vscode-light .if-segmented__item[aria-checked='true'],
-body.vscode-light .if-segmented__item[aria-selected='true'] {
-  background: var(--if-input-bg);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--if-fg) 12%, transparent),
-    0 1px 2px var(--if-shadow);
 }
 
 /* ---------- Chip ---------- */
@@ -498,19 +493,19 @@ body.vscode-light .if-segmented__item[aria-selected='true'] {
 }
 .if-chip--isar {
   background: color-mix(in srgb, var(--if-isar) 18%, transparent);
-  color: var(--if-isar);
+  color: color-mix(in srgb, var(--if-isar) var(--if-ink-strength), var(--if-fg));
 }
 .if-chip--success {
   background: color-mix(in srgb, var(--if-almgruen) 18%, transparent);
-  color: var(--if-almgruen);
+  color: color-mix(in srgb, var(--if-almgruen) var(--if-ink-strength), var(--if-fg));
 }
 .if-chip--warning {
   background: color-mix(in srgb, var(--if-foehn) 18%, transparent);
-  color: var(--if-foehn);
+  color: color-mix(in srgb, var(--if-foehn) var(--if-ink-strength), var(--if-fg));
 }
 .if-chip--error {
   background: color-mix(in srgb, var(--if-alpenrose) 18%, transparent);
-  color: var(--if-alpenrose);
+  color: color-mix(in srgb, var(--if-alpenrose) var(--if-ink-strength), var(--if-fg));
 }
 .if-chip--outline {
   background: transparent;
@@ -548,6 +543,8 @@ body.vscode-high-contrast-light .if-chip--error {
   background: var(--block-wash);
   color: var(--block-color);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--block-color) 30%, transparent);
+  /* Dimmed rows and cards (skipped, not reached, hidden) fade their stones by setting --if-stone-opacity. */
+  opacity: var(--if-stone-opacity, 1);
 }
 .if-stone .codicon {
   font-size: 16px;
@@ -580,6 +577,7 @@ body.vscode-high-contrast-light .if-chip--error {
 body.vscode-high-contrast .if-stone,
 body.vscode-high-contrast-light .if-stone {
   box-shadow: inset 0 0 0 1px var(--block-color);
+  opacity: 1;
 }
 
 /* ---------- Banner ---------- */

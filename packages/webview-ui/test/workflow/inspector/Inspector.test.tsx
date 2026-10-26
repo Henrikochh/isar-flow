@@ -23,7 +23,9 @@ describe('Inspector without a selection', () => {
     expect(sentOps()).toEqual([
       {
         op: 'updateWorkflow',
-        set: { inputs: { task: { type: 'string', description: 'What to build', required: true, multiline: true } } },
+        set: {
+          inputs: { task: { type: 'string', description: 'What to build', required: true, multiline: true } },
+        },
       },
     ]);
   });
@@ -39,7 +41,10 @@ describe('Inspector without a selection', () => {
     fireEvent.change(name, { target: { value: 'branch' } });
     fireEvent.blur(name);
     const [op] = sentOps();
-    expect(op).toMatchObject({ op: 'updateWorkflow', set: { inputs: { task: {}, branch: { type: 'string' } } } });
+    expect(op).toMatchObject({
+      op: 'updateWorkflow',
+      set: { inputs: { task: {}, branch: { type: 'string' } } },
+    });
   });
 
   it('adds environment variables', () => {
@@ -114,7 +119,11 @@ describe('Inspector with a block selected', () => {
     const move = screen.getByRole('button', { name: 'Move to…' });
     fireEvent.click(move);
     const menu = screen.getByRole('menu', { name: 'Move to' });
-    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual([
       'Top levelEnd of the workflow',
       'review_loopEnd of the loop',
       'needs_fixEnd of Then',
@@ -201,7 +210,9 @@ describe('Inspector with a block selected', () => {
   it('switches the answer format to JSON', () => {
     renderInspector({ selection: 'implement' });
     fireEvent.click(screen.getByRole('radio', { name: 'JSON' }));
-    expect(sentOps()).toEqual([{ op: 'updateStep', stepId: 'implement', set: { output: { format: 'json' } } }]);
+    expect(sentOps()).toEqual([
+      { op: 'updateStep', stepId: 'implement', set: { output: { format: 'json' } } },
+    ]);
   });
 
   it('edits JSON fields as rows', () => {
@@ -211,7 +222,11 @@ describe('Inspector with a block selected', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Text' }));
     fireEvent.click(screen.getByText('approved is optional'));
     expect(sentOps()).toEqual([
-      { op: 'updateStep', stepId: 'review', set: { output: { format: 'json', schema: { approved: 'boolean', issues: 'string' } } } },
+      {
+        op: 'updateStep',
+        stepId: 'review',
+        set: { output: { format: 'json', schema: { approved: 'boolean', issues: 'string' } } },
+      },
       {
         op: 'updateStep',
         stepId: 'review',
@@ -244,7 +259,10 @@ describe('Inspector with a block selected', () => {
   });
 
   it('shows advanced values while collapsed and edits retries', () => {
-    const text = REVIEW_LOOP.replace('        run: npm test\n', '        run: npm test\n        timeout: 600\n');
+    const text = REVIEW_LOOP.replace(
+      '        run: npm test\n',
+      '        run: npm test\n        timeout: 600\n',
+    );
     renderInspector({ doc: docFor(text), selection: 'tests' });
     expect(screen.getByText('Timeout 600 s')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
@@ -325,7 +343,10 @@ describe('Inspector with a block selected', () => {
   });
 
   it('copes with fields of the wrong type', () => {
-    const text = REVIEW_LOOP.replace('        run: npm test', '        run: [npm, test]\n        env: oops\n        shell: zsh');
+    const text = REVIEW_LOOP.replace(
+      '        run: npm test',
+      '        run: [npm, test]\n        env: oops\n        shell: zsh',
+    );
     renderInspector({ doc: docFor(text), selection: 'tests' });
     expect(screen.getByLabelText('Command')).toHaveValue('');
     expect(screen.getByLabelText('Shell')).toHaveTextContent('zsh');

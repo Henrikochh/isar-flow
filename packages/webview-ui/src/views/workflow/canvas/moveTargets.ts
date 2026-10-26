@@ -36,7 +36,13 @@ export function moveTargets(model: CanvasModel, stepId: string): MoveTarget[] {
     const index = list.entries.length;
     const alreadyLast = list.info.key === entry.list.key && entry.index === index - 1;
     if (!alreadyLast && !canDrop(item, list.info, index, model)) continue;
-    targets.push({ key: list.info.key, owner, list, target: targetOf(list.info, index), changes: !alreadyLast });
+    targets.push({
+      key: list.info.key,
+      owner,
+      list,
+      target: targetOf(list.info, index),
+      changes: !alreadyLast,
+    });
   }
   return targets;
 }

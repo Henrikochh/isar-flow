@@ -65,7 +65,8 @@ export interface ModelResolver {
   resolve(ref: string): Promise<ChatModel>;
 }
 
-export type ModelErrorKind = 'auth' | 'not-found' | 'rate-limit' | 'server' | 'network' | 'bad-request' | 'aborted' | 'other';
+export type ModelErrorKind =
+  'auth' | 'not-found' | 'rate-limit' | 'server' | 'network' | 'bad-request' | 'aborted' | 'other';
 
 export class ModelError extends Error {
   constructor(

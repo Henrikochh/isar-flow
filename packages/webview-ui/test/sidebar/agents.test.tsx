@@ -67,7 +67,9 @@ describe('Agents tab', () => {
     const user = userEvent.setup();
     renderSidebar({ agents: [] });
     expect(screen.getByText('No agents yet')).toBeInTheDocument();
-    expect(screen.getByText('Agents are reusable AI helpers with a model, instructions and tools.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Agents are reusable AI helpers with a model, instructions and tools.'),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Create agent' }));
     expect(screen.getByRole('form', { name: 'New agent' })).toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toHaveFocus();
@@ -84,7 +86,9 @@ describe('New agent card', () => {
     expect(screen.getByLabelText('Name')).toHaveValue('Reviewer');
     await user.click(screen.getByRole('radio', { name: 'User' }));
     await user.click(screen.getByRole('button', { name: 'Create agent' }));
-    expect(postedOfType('createAgent')).toEqual([{ type: 'createAgent', name: 'Reviewer', scope: 'user', starter: 'reviewer' }]);
+    expect(postedOfType('createAgent')).toEqual([
+      { type: 'createAgent', name: 'Reviewer', scope: 'user', starter: 'reviewer' },
+    ]);
     expect(screen.queryByRole('form', { name: 'New agent' })).not.toBeInTheDocument();
   });
 
@@ -97,7 +101,9 @@ describe('New agent card', () => {
     await user.click(screen.getByRole('radio', { name: 'Blank' }));
     expect(screen.getByLabelText('Name')).toHaveValue('  Translator ');
     await user.type(screen.getByLabelText('Name'), '{Enter}');
-    expect(postedOfType('createAgent')).toEqual([{ type: 'createAgent', name: 'Translator', scope: 'workspace', starter: 'blank' }]);
+    expect(postedOfType('createAgent')).toEqual([
+      { type: 'createAgent', name: 'Translator', scope: 'workspace', starter: 'blank' },
+    ]);
   });
 
   it('explains what is wrong instead of creating an unnamed or clashing agent', async () => {
@@ -108,7 +114,9 @@ describe('New agent card', () => {
     expect(screen.getByText('Enter a name for the agent.')).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Name'), 'coder');
-    expect(screen.getByText('This workspace already has an agent named Coder. Choose another name.')).toBeInTheDocument();
+    expect(
+      screen.getByText('This workspace already has an agent named Coder. Choose another name.'),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Create agent' }));
     expect(postedOfType('createAgent')).toEqual([]);
 
@@ -129,9 +137,19 @@ describe('New agent card', () => {
 
 describe('lenient agent summaries', () => {
   it('renders agents from broken files with fallbacks and a warning', () => {
-    const broken = { id: '', name: '', model: '', tools: undefined, scope: 'workspace', uri: 'file:///w/.isarflow/agents/translator.agent.yaml', valid: false } as unknown as AgentSummary;
+    const broken = {
+      id: '',
+      name: '',
+      model: '',
+      tools: undefined,
+      scope: 'workspace',
+      uri: 'file:///w/.isarflow/agents/translator.agent.yaml',
+      valid: false,
+    } as unknown as AgentSummary;
     const duplicate = { ...AGENTS[0] };
-    renderSidebar({ agents: [AGENTS[0], duplicate, broken, { ...AGENTS[1], shadowed: true, scope: 'user' }] });
+    renderSidebar({
+      agents: [AGENTS[0], duplicate, broken, { ...AGENTS[1], shadowed: true, scope: 'user' }],
+    });
     const row = agentRow(/^translator/);
     expect(row).toHaveTextContent('No model set');
     expect(row).toHaveTextContent('No tools');
@@ -143,9 +161,18 @@ describe('lenient agent summaries', () => {
 
 describe('agent avatars', () => {
   it('never take the alpenrose (error) color, whatever the id', () => {
-    const many = Array.from({ length: 40 }, (_, i): AgentSummary => ({ ...AGENTS[0], id: `agent-${i}`, name: `Agent ${i}`, uri: `file:///a/${i}.agent.yaml` }));
-    renderSidebar({ agents: [...many, { ...AGENTS[0], id: 'translator', name: 'Translator', uri: 'file:///t.agent.yaml' }] });
-    const colors = new Set([...document.querySelectorAll('.sb-list .if-stone')].map((stone) => stone.getAttribute('data-type')));
+    const many = Array.from({ length: 40 }, (_, i): AgentSummary => ({
+      ...AGENTS[0],
+      id: `agent-${i}`,
+      name: `Agent ${i}`,
+      uri: `file:///a/${i}.agent.yaml`,
+    }));
+    renderSidebar({
+      agents: [...many, { ...AGENTS[0], id: 'translator', name: 'Translator', uri: 'file:///t.agent.yaml' }],
+    });
+    const colors = new Set(
+      [...document.querySelectorAll('.sb-list .if-stone')].map((stone) => stone.getAttribute('data-type')),
+    );
     expect(colors.has('stop')).toBe(false);
     expect(colors.size).toBeGreaterThan(2);
   });

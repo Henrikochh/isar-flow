@@ -13,13 +13,19 @@ interface CatalogActions {
 export function modelNote(ref: string, usesTools: boolean, catalog: ModelCatalog): string | undefined {
   if (!ref) return 'Choose the model this agent talks to.';
   const info = catalog.models.find((m) => m.ref === ref);
-  if (info) return usesTools && !info.capabilities.tools ? "This model can't call tools, so the agent's tools won't be used." : undefined;
+  if (info)
+    return usesTools && !info.capabilities.tools
+      ? "This model can't call tools, so the agent's tools won't be used."
+      : undefined;
   if (catalog.loading) return undefined;
   const providerId = ref.split('/')[0];
   const provider = catalog.providers.find((p) => p.id === providerId);
-  if (!provider) return `No endpoint called "${providerId}" is set up. Add an endpoint or choose another model.`;
-  if (provider.status === 'error') return `${provider.label} can't be reached right now, so this model can't be checked.`;
-  if (provider.status === 'ok') return `${provider.label} doesn't list this model. Refresh models or choose another one.`;
+  if (!provider)
+    return `No endpoint called "${providerId}" is set up. Add an endpoint or choose another model.`;
+  if (provider.status === 'error')
+    return `${provider.label} can't be reached right now, so this model can't be checked.`;
+  if (provider.status === 'ok')
+    return `${provider.label} doesn't list this model. Refresh models or choose another one.`;
   return undefined;
 }
 
@@ -57,11 +63,19 @@ function FallbackModels({
   onChange: (list: string[]) => void;
 } & CatalogActions) {
   const available = useMemo(
-    () => ({ ...catalog, models: catalog.models.filter((m) => m.ref !== mainModel && !list.includes(m.ref)) }),
+    () => ({
+      ...catalog,
+      models: catalog.models.filter((m) => m.ref !== mainModel && !list.includes(m.ref)),
+    }),
     [catalog, mainModel, list],
   );
   return (
-    <Field label="Fallback models" labelExtra="Optional" hint="Tried in this order when the main model fails." error={error}>
+    <Field
+      label="Fallback models"
+      labelExtra="Optional"
+      hint="Tried in this order when the main model fails."
+      error={error}
+    >
       {({ id, describedBy, invalid }) => (
         <div className="ag-fallbacks">
           {list.length > 0 ? (
@@ -119,13 +133,20 @@ export function ModelSection({
   update: UpdateAgent;
 } & CatalogActions) {
   const modelIssue = issues.message('model');
-  const note = modelIssue.error || modelIssue.warning ? modelIssue.warning : modelNote(form.model, form.tools.length > 0, catalog);
+  const note =
+    modelIssue.error || modelIssue.warning
+      ? modelIssue.warning
+      : modelNote(form.model, form.tools.length > 0, catalog);
   const setNumber = (key: 'temperature' | 'maxTokens' | 'maxTurns') => (value: number | undefined) =>
     value === undefined ? update({}, [key]) : update({ [key]: value });
 
   return (
     <Section title="Model">
-      <Field label="Main model" error={modelIssue.error} hint={<ModelSummary refText={form.model} catalog={catalog} note={note} />}>
+      <Field
+        label="Main model"
+        error={modelIssue.error}
+        hint={<ModelSummary refText={form.model} catalog={catalog} note={note} />}
+      >
         {({ id, describedBy, invalid }) => (
           <ModelPicker
             id={id}

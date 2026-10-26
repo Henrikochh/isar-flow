@@ -27,7 +27,10 @@ export function focusInspector(): boolean {
  * Enter focuses the inspector, Escape clears. The block actions are shared with the block menu, so focus
  * follows the block after an edit either way.
  */
-export function useCanvasKeyboard(rootRef: RefObject<HTMLElement | null>, openMenu: (stepId: string) => void) {
+export function useCanvasKeyboard(
+  rootRef: RefObject<HTMLElement | null>,
+  openMenu: (stepId: string) => void,
+) {
   const { model, editable, edit } = useEditor();
   const { selection } = useWorkflowState();
   const { select, applyOps, openYaml } = useWorkflowActions();

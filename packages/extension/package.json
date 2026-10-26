@@ -310,7 +310,7 @@
           "type": "boolean",
           "default": true,
           "scope": "application",
-          "description": "Ask before running a workflow whose console commands you have not approved yet. Only your user settings can turn this off."
+          "description": "Ask before running a workflow whose console commands, or agents that edit files or run commands without asking, you have not approved yet. Only your user settings can turn this off."
         },
         "isarFlow.historyLimit": {
           "type": "number",

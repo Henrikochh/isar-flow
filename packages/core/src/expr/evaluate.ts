@@ -20,7 +20,9 @@ function readProperty(object: unknown, key: unknown): unknown {
     return /^\d+$/.test(name) ? object[Number(name)] : undefined;
   }
   if (typeof object === 'object') {
-    return Object.prototype.hasOwnProperty.call(object, name) ? (object as Record<string, unknown>)[name] : undefined;
+    return Object.prototype.hasOwnProperty.call(object, name)
+      ? (object as Record<string, unknown>)[name]
+      : undefined;
   }
   return undefined;
 }
@@ -51,7 +53,9 @@ export function evaluate(expr: Expr, ctx: ExpressionContext): unknown {
       return isTruthy(left) ? left : evaluate(expr.right, ctx);
     }
     case 'conditional':
-      return isTruthy(evaluate(expr.test, ctx)) ? evaluate(expr.consequent, ctx) : evaluate(expr.alternate, ctx);
+      return isTruthy(evaluate(expr.test, ctx))
+        ? evaluate(expr.consequent, ctx)
+        : evaluate(expr.alternate, ctx);
     case 'binary': {
       const left = evaluate(expr.left, ctx);
       const right = evaluate(expr.right, ctx);

@@ -8,8 +8,18 @@ function lineCount(text: string): string {
   return lines === 1 ? '1 line' : `${lines} lines`;
 }
 
-export function InstructionsSection({ value, error, update }: { value: string; error?: string; update: UpdateAgent }) {
-  const draft = useDraft(value, (next) => (next.trim() ? update({ systemPrompt: next }) : update({}, ['systemPrompt'])));
+export function InstructionsSection({
+  value,
+  error,
+  update,
+}: {
+  value: string;
+  error?: string;
+  update: UpdateAgent;
+}) {
+  const draft = useDraft(value, (next) =>
+    next.trim() ? update({ systemPrompt: next }) : update({}, ['systemPrompt']),
+  );
   return (
     <Section title="Instructions">
       <Field

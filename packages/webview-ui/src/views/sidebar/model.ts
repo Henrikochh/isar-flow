@@ -36,7 +36,12 @@ export function fileBaseName(uri: string): string {
 }
 
 export function agentLabel(agent: AgentSummary): string {
-  return text(agent.name) || text(agent.id) || fileBaseName(text(agent.uri)).replace(/\.agent\.ya?ml$/i, '') || 'Unnamed agent';
+  return (
+    text(agent.name) ||
+    text(agent.id) ||
+    fileBaseName(text(agent.uri)).replace(/\.agent\.ya?ml$/i, '') ||
+    'Unnamed agent'
+  );
 }
 
 export function workflowLabel(workflow: WorkflowSummary): string {
@@ -104,7 +109,10 @@ export function slugOf(name: string): string {
 }
 
 /** The workflow's run in progress, if any; the newest one when the host reports several. */
-export function activeRunOf(workflow: WorkflowSummary, activeRuns: readonly ActiveRunSummary[]): ActiveRunSummary | undefined {
+export function activeRunOf(
+  workflow: WorkflowSummary,
+  activeRuns: readonly ActiveRunSummary[],
+): ActiveRunSummary | undefined {
   let newest: ActiveRunSummary | undefined;
   for (const run of activeRuns) {
     if (run?.workflowUri !== workflow.uri) continue;

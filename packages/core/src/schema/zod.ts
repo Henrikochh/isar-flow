@@ -5,20 +5,42 @@ import type { AgentDefinition, Step, Workflow } from './types';
 
 export const STEP_ID_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 
-const ToolNameSchema = z.enum(['readFile', 'listFiles', 'searchText', 'gitDiff', 'editFile', 'writeFile', 'runCommand']);
+const ToolNameSchema = z.enum([
+  'readFile',
+  'listFiles',
+  'searchText',
+  'gitDiff',
+  'editFile',
+  'writeFile',
+  'runCommand',
+]);
 const PermissionSchema = z.enum(['none', 'ask', 'auto']);
 const ModelRefSchema = z
   .string()
   .regex(/^[^/\s]+\/\S+$/, 'Model must look like "<provider>/<model>", e.g. "litellm/gpt-4.1"')
-  .meta({ description: 'Model reference "<provider>/<model>", e.g. "litellm/gpt-4.1" or "vscode/copilot/gpt-4.1".' });
+  .meta({
+    description: 'Model reference "<provider>/<model>", e.g. "litellm/gpt-4.1" or "vscode/copilot/gpt-4.1".',
+  });
 
 const AgentSettingsShape = {
   model: ModelRefSchema.optional(),
-  fallbackModels: z.array(ModelRefSchema).optional().meta({ description: 'Models tried when the main model fails.' }),
-  systemPrompt: z.string().optional().meta({ description: 'Instructions that define how the agent behaves.' }),
+  fallbackModels: z
+    .array(ModelRefSchema)
+    .optional()
+    .meta({ description: 'Models tried when the main model fails.' }),
+  systemPrompt: z
+    .string()
+    .optional()
+    .meta({ description: 'Instructions that define how the agent behaves.' }),
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().int().positive().optional(),
-  maxTurns: z.number().int().min(1).max(200).optional().meta({ description: 'Maximum tool-calling rounds (default 20).' }),
+  maxTurns: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .meta({ description: 'Maximum tool-calling rounds (default 20).' }),
   tools: z.array(ToolNameSchema).optional().meta({ description: 'Built-in tools the agent may use.' }),
   permissions: z
     .strictObject({ edits: PermissionSchema.optional(), commands: PermissionSchema.optional() })
@@ -71,7 +93,10 @@ const StepList: z.ZodType<Step[]> = z.lazy(() => z.array(StepSchema));
 const AgentStepSchema = z.strictObject({
   ...base,
   type: z.literal('agent'),
-  agent: z.union([z.string().min(1), AgentSettingsSchema]).optional().meta({ description: 'Agent id or inline agent settings.' }),
+  agent: z
+    .union([z.string().min(1), AgentSettingsSchema])
+    .optional()
+    .meta({ description: 'Agent id or inline agent settings.' }),
   model: ModelRefSchema.optional(),
   prompt: z.string().meta({ description: 'Task for the agent. Supports ${{ }} templates.' }),
   output: z
@@ -94,8 +119,12 @@ const LoopStepSchema = z
   .strictObject({
     ...base,
     type: z.literal('loop'),
-    until: ConditionSchema.optional().meta({ description: 'Checked after each iteration; the loop ends when true.' }),
-    while: ConditionSchema.optional().meta({ description: 'Checked before each iteration; the loop ends when false.' }),
+    until: ConditionSchema.optional().meta({
+      description: 'Checked after each iteration; the loop ends when true.',
+    }),
+    while: ConditionSchema.optional().meta({
+      description: 'Checked before each iteration; the loop ends when false.',
+    }),
     maxIterations: z.number().int().min(1).max(100).meta({ description: 'Safety limit (1–100).' }),
     onMaxIterations: z.enum(['fail', 'continue']).optional(),
     steps: StepList,

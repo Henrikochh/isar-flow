@@ -20,7 +20,11 @@ describe('workflow mock host', () => {
       ['run-3', 'failure'],
     ]);
     handle({ type: 'selectRun', runId: 'run-3' });
-    expect(sent.at(-1)).toMatchObject({ type: 'run', live: false, run: { runId: 'run-3', status: 'failure' } });
+    expect(sent.at(-1)).toMatchObject({
+      type: 'run',
+      live: false,
+      run: { runId: 'run-3', status: 'failure' },
+    });
     handle({ type: 'selectRun', runId: 'gone' });
     expect(sent.at(-1)).toEqual({ type: 'run', run: null, live: false });
   });
@@ -28,7 +32,10 @@ describe('workflow mock host', () => {
   it("shows the past failed run in the 'history' scenario", async () => {
     const { sent } = await openEditor('history');
     await vi.waitFor(() => expect(sent.some((m) => m.type === 'run')).toBe(true));
-    expect(sent.find((m) => m.type === 'run')).toMatchObject({ live: false, run: { runId: 'run-3', status: 'failure' } });
+    expect(sent.find((m) => m.type === 'run')).toMatchObject({
+      live: false,
+      run: { runId: 'run-3', status: 'failure' },
+    });
   });
 
   it("leaves two blocks without ids in the 'noids' scenario", async () => {

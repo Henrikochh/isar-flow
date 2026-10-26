@@ -14,7 +14,9 @@ describe('TemplateTextArea', () => {
   });
 
   it('marks templates in a mirror behind the editable text', () => {
-    const { container } = render(<TemplateTextArea aria-label="Task" value="Use ${{ inputs.task }}" onChange={() => {}} />);
+    const { container } = render(
+      <TemplateTextArea aria-label="Task" value="Use ${{ inputs.task }}" onChange={() => {}} />,
+    );
     const marks = container.querySelectorAll('mark');
     expect(marks).toHaveLength(1);
     expect(marks[0]).toHaveTextContent('${{ inputs.task }}');

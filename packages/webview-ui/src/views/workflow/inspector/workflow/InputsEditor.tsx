@@ -47,7 +47,8 @@ export function inputRows(inputs: unknown): InputRow[] {
   });
 }
 
-const isBlank = (row: InputRow) => row.name.trim() === '' && row.description.trim() === '' && row.defaultText.trim() === '';
+const isBlank = (row: InputRow) =>
+  row.name.trim() === '' && row.description.trim() === '' && row.defaultText.trim() === '';
 
 function defaultProblem(row: InputRow): string | undefined {
   const text = row.defaultText.trim();
@@ -62,7 +63,8 @@ export function inputProblems(rows: InputRow[]): (string | undefined)[] {
     if (isBlank(row)) return undefined;
     const name = row.name.trim();
     if (name === '') return 'Enter a name. Blocks read the value as inputs.<name>.';
-    if (!STEP_ID_PATTERN.test(name)) return 'Names start with a letter or _ and use only letters, digits, _ and -.';
+    if (!STEP_ID_PATTERN.test(name))
+      return 'Names start with a letter or _ and use only letters, digits, _ and -.';
     if ((counts.get(name) ?? 0) > 1) return `There are two inputs named '${name}'.`;
     return defaultProblem(row);
   });
@@ -72,7 +74,13 @@ export function inputProblems(rows: InputRow[]): (string | undefined)[] {
 export function inputValue(row: InputRow): Record<string, unknown> {
   const text = row.defaultText.trim();
   const fallback =
-    text === '' ? undefined : row.type === 'number' ? Number(text) : row.type === 'boolean' ? text === 'true' : row.defaultText;
+    text === ''
+      ? undefined
+      : row.type === 'number'
+        ? Number(text)
+        : row.type === 'boolean'
+          ? text === 'true'
+          : row.defaultText;
   const values: Record<string, unknown> = {
     type: row.type,
     description: row.description.trim() || undefined,
@@ -89,10 +97,19 @@ export function inputValue(row: InputRow): Record<string, unknown> {
   return out;
 }
 
-export function InputsEditor({ inputs, onCommit }: { inputs: unknown; onCommit: (inputs: Record<string, unknown> | undefined) => void }) {
+export function InputsEditor({
+  inputs,
+  onCommit,
+}: {
+  inputs: unknown;
+  onCommit: (inputs: Record<string, unknown> | undefined) => void;
+}) {
   const draft = useRowsDraft<InputRow>(
     inputRows(inputs),
-    (rows) => onCommit(rows.length ? Object.fromEntries(rows.map((row) => [row.name.trim(), inputValue(row)])) : undefined),
+    (rows) =>
+      onCommit(
+        rows.length ? Object.fromEntries(rows.map((row) => [row.name.trim(), inputValue(row)])) : undefined,
+      ),
     { isBlank, isValid: (rows) => inputProblems(rows).every((p) => p === undefined) },
   );
   const focus = useFocusOnAdd(draft.rows.length);
@@ -119,7 +136,13 @@ export function InputsEditor({ inputs, onCommit }: { inputs: unknown; onCommit: 
                   ariaLabel={`Type of ${label}`}
                   value={row.type}
                   options={TYPES}
-                  onChange={(type) => draft.update(index, { type, defaultText: type === row.type ? row.defaultText : '' }, 'now')}
+                  onChange={(type) =>
+                    draft.update(
+                      index,
+                      { type, defaultText: type === row.type ? row.defaultText : '' },
+                      'now',
+                    )
+                  }
                 />
               </div>
               <IconButton icon="trash" label={`Remove ${label}`} onClick={() => draft.remove(index)} />
@@ -150,9 +173,17 @@ export function InputsEditor({ inputs, onCommit }: { inputs: unknown; onCommit: 
               />
             )}
             <div className="wf-insp-card-checks">
-              <Checkbox checked={row.required} label="Required" onChange={(required) => draft.update(index, { required }, 'now')} />
+              <Checkbox
+                checked={row.required}
+                label="Required"
+                onChange={(required) => draft.update(index, { required }, 'now')}
+              />
               {row.type === 'string' ? (
-                <Checkbox checked={row.multiline} label="Multi-line" onChange={(multiline) => draft.update(index, { multiline }, 'now')} />
+                <Checkbox
+                  checked={row.multiline}
+                  label="Multi-line"
+                  onChange={(multiline) => draft.update(index, { multiline }, 'now')}
+                />
               ) : null}
             </div>
             {problems[index] ? (
@@ -171,7 +202,15 @@ export function InputsEditor({ inputs, onCommit }: { inputs: unknown; onCommit: 
           icon="add"
           onClick={() => {
             focus.markAdded();
-            draft.add({ name: '', type: 'string', description: '', defaultText: '', required: false, multiline: false, original: {} });
+            draft.add({
+              name: '',
+              type: 'string',
+              description: '',
+              defaultText: '',
+              required: false,
+              multiline: false,
+              original: {},
+            });
           }}
         >
           Add input

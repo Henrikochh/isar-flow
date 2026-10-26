@@ -98,7 +98,9 @@ export function Select<T extends string>({
   }, [open]);
 
   useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: 'nearest' });
+    listRef.current
+      ?.querySelector<HTMLElement>(`[data-index="${active}"]`)
+      ?.scrollIntoView({ block: 'nearest' });
   }, [active, open]);
 
   const choose = (option: SelectOption<T> | undefined) => {
@@ -153,7 +155,11 @@ export function Select<T extends string>({
         }}
       >
         {selected?.leading}
-        <span className={['if-select__value', !selected && !value && 'if-select__placeholder'].filter(Boolean).join(' ')}>
+        <span
+          className={['if-select__value', !selected && !value && 'if-select__placeholder']
+            .filter(Boolean)
+            .join(' ')}
+        >
           {renderValue ? renderValue(selected) : selected ? selected.label : value || placeholder}
         </span>
         <i className="codicon codicon-chevron-down if-select__chevron" aria-hidden="true" />
@@ -201,7 +207,9 @@ export function Select<T extends string>({
                     role="option"
                     aria-selected={option.value === value}
                     aria-disabled={option.disabled || undefined}
-                    className={['if-select__option', index === active && 'if-select__option--active'].filter(Boolean).join(' ')}
+                    className={['if-select__option', index === active && 'if-select__option--active']
+                      .filter(Boolean)
+                      .join(' ')}
                     onMouseEnter={() => setActive(index)}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => choose(option)}
@@ -209,10 +217,14 @@ export function Select<T extends string>({
                     {option.leading}
                     <span className="if-select__option-text">
                       <span className="if-select__option-label">{option.label}</span>
-                      {option.description ? <span className="if-select__option-desc">{option.description}</span> : null}
+                      {option.description ? (
+                        <span className="if-select__option-desc">{option.description}</span>
+                      ) : null}
                     </span>
                     {option.meta ? <span className="if-select__option-meta">{option.meta}</span> : null}
-                    {option.value === value ? <i className="codicon codicon-check" aria-hidden="true" /> : null}
+                    {option.value === value ? (
+                      <i className="codicon codicon-check" aria-hidden="true" />
+                    ) : null}
                   </div>
                 </div>
               );

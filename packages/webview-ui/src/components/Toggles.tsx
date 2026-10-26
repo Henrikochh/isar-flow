@@ -13,7 +13,13 @@ export function Switch({
 }) {
   return (
     <label className="if-switch">
-      <input type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <input
+        type="checkbox"
+        role="switch"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+      />
       <span className="if-switch__track" aria-hidden="true" />
       <span>{label}</span>
     </label>
@@ -35,7 +41,12 @@ export function Checkbox({
 }) {
   return (
     <label className="if-check">
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+      />
       <span className="if-check__box" aria-hidden="true">
         <i className="codicon codicon-check" />
       </span>
@@ -74,7 +85,12 @@ export function SegmentedControl<T extends string>({
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const onKeyDown = (event: KeyboardEvent, index: number) => {
-    const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
+    const delta =
+      event.key === 'ArrowRight' || event.key === 'ArrowDown'
+        ? 1
+        : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+          ? -1
+          : 0;
     if (!delta) return;
     event.preventDefault();
     const next = (index + delta + options.length) % options.length;
@@ -83,7 +99,11 @@ export function SegmentedControl<T extends string>({
   };
   const itemRole = role === 'tablist' ? 'tab' : 'radio';
   return (
-    <div className={['if-segmented', full && 'if-segmented--full'].filter(Boolean).join(' ')} role={role} aria-label={label}>
+    <div
+      className={['if-segmented', full && 'if-segmented--full'].filter(Boolean).join(' ')}
+      role={role}
+      aria-label={label}
+    >
       {options.map((option, index) => {
         const selected = option.value === value;
         return (

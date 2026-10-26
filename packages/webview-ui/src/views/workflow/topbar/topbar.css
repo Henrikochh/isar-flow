@@ -112,7 +112,7 @@
   white-space: nowrap;
   --tone: var(--if-almgruen);
   background: color-mix(in srgb, var(--tone) 14%, transparent);
-  color: var(--tone);
+  color: color-mix(in srgb, var(--tone) var(--if-ink-strength), var(--if-fg));
 }
 
 .wf-validity__icon {

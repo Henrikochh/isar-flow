@@ -4,8 +4,18 @@ import type { UpdateAgent } from './agentForm';
 
 const GROUPS: { risk: ToolInfo['risk']; title: string; icon: string; hint: string }[] = [
   { risk: 'read', title: 'Read only', icon: 'eye', hint: 'These tools never change your workspace.' },
-  { risk: 'edit', title: 'Edits files', icon: 'edit', hint: 'What happens depends on the Edit files permission.' },
-  { risk: 'command', title: 'Runs commands', icon: 'terminal', hint: 'What happens depends on the Run commands permission.' },
+  {
+    risk: 'edit',
+    title: 'Edits files',
+    icon: 'edit',
+    hint: 'What happens depends on the Edit files permission.',
+  },
+  {
+    risk: 'command',
+    title: 'Runs commands',
+    icon: 'terminal',
+    hint: 'What happens depends on the Run commands permission.',
+  },
 ];
 
 /** Tools in canonical order; names the schema does not know are kept at the end so nothing is lost. */
@@ -15,7 +25,15 @@ function nextTools(current: string[], tool: ToolName, on: boolean): ToolName[] {
   return [...known, ...(unknown as ToolName[])];
 }
 
-export function ToolsSection({ tools, error, update }: { tools: string[]; error?: string; update: UpdateAgent }) {
+export function ToolsSection({
+  tools,
+  error,
+  update,
+}: {
+  tools: string[];
+  error?: string;
+  update: UpdateAgent;
+}) {
   const enabled = TOOL_NAMES.filter((name) => tools.includes(name)).length;
   return (
     <Section
@@ -36,7 +54,10 @@ export function ToolsSection({ tools, error, update }: { tools: string[]; error?
         {GROUPS.map((group) => (
           <div key={group.risk} className="ag-tool-group" role="group" aria-label={group.title}>
             <div className="ag-tool-group__header">
-              <i className={`codicon codicon-${group.icon} ag-tool-group__icon ag-risk-${group.risk}`} aria-hidden="true" />
+              <i
+                className={`codicon codicon-${group.icon} ag-tool-group__icon ag-risk-${group.risk}`}
+                aria-hidden="true"
+              />
               {/* One run of text, so a wrapped hint lines up under the title instead of the icon. */}
               <span className="ag-tool-group__text">
                 <span className="ag-tool-group__title">{group.title}</span>{' '}

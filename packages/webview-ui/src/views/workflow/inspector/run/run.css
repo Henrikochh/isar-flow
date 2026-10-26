@@ -287,8 +287,13 @@
 .wf-run-river-item:last-child::before {
   bottom: 50%;
 }
+/* Not reached or skipped: the river segment and the stone fade like the canvas's; the title only turns muted. */
 .wf-run-river-item--quiet {
-  opacity: 0.55;
+  --if-stone-opacity: 0.45;
+  --wf-run-row-fg: var(--if-muted);
+}
+.wf-run-river-item--quiet::before {
+  opacity: 0.35;
 }
 .wf-run-river-row {
   position: relative;
@@ -302,7 +307,7 @@
   border: none;
   border-radius: var(--if-radius-m);
   background: transparent;
-  color: var(--if-fg);
+  color: var(--wf-run-row-fg, var(--if-fg));
   text-align: left;
 }
 .wf-run-river-row:hover:not(:disabled) {

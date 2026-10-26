@@ -18,7 +18,9 @@ export function WorkflowPanel({ withHeader = true }: { withHeader?: boolean }) {
 
   const updateWorkflow = (key: string, value: unknown) => {
     const op: WorkflowOp =
-      value === undefined || value === '' ? { op: 'updateWorkflow', set: {}, unset: [key] } : { op: 'updateWorkflow', set: { [key]: value } };
+      value === undefined || value === ''
+        ? { op: 'updateWorkflow', set: {}, unset: [key] }
+        : { op: 'updateWorkflow', set: { [key]: value } };
     actions.applyOps([op]);
   };
 
@@ -60,7 +62,9 @@ export function WorkflowPanel({ withHeader = true }: { withHeader?: boolean }) {
         />
         <hr className="if-divider" />
         <Section title="Inputs">
-          <p className="wf-insp-section-hint">Asked for when the run starts. Blocks read them as inputs.name.</p>
+          <p className="wf-insp-section-hint">
+            Asked for when the run starts. Blocks read them as inputs.name.
+          </p>
           <InputsEditor inputs={workflow.inputs} onCommit={(inputs) => updateWorkflow('inputs', inputs)} />
           <FieldIssues issues={issues.get('inputs')} />
         </Section>
@@ -71,7 +75,9 @@ export function WorkflowPanel({ withHeader = true }: { withHeader?: boolean }) {
             entries={asStringEntries(workflow.env)}
             noun="variable"
             addLabel="Add variable"
-            onCommit={(entries) => updateWorkflow('env', entries.length ? Object.fromEntries(entries) : undefined)}
+            onCommit={(entries) =>
+              updateWorkflow('env', entries.length ? Object.fromEntries(entries) : undefined)
+            }
           />
           <FieldIssues issues={issues.get('env')} />
         </Section>

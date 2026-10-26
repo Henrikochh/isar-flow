@@ -53,7 +53,8 @@ export function SidebarApp() {
       <div className="sb-app">
         <div className="sb-center">
           <EmptyState art={<RiverArt variant="folder" />} title="Open a folder to use Isar Flow">
-            Agents and workflows are saved in the <span className="sb-code">.isarflow</span> folder of your workspace.
+            Agents and workflows are saved in the <span className="sb-code">.isarflow</span> folder of your
+            workspace.
           </EmptyState>
         </div>
       </div>
@@ -81,9 +82,16 @@ export function SidebarApp() {
         />
       </div>
       <div className="sb-body" role="tabpanel" aria-label={tab === 'agents' ? 'Agents' : 'Workflows'}>
-        {state.trusted ? null : <Banner tone="warning">Running is disabled until you trust this workspace.</Banner>}
+        {state.trusted ? null : (
+          <Banner tone="warning">Running is disabled until you trust this workspace.</Banner>
+        )}
         {tab === 'agents' ? (
-          <AgentsPanel agents={state.agents} catalog={state.catalog} draft={view.agentDraft} onDraftChange={view.setAgentDraft} />
+          <AgentsPanel
+            agents={state.agents}
+            catalog={state.catalog}
+            draft={view.agentDraft}
+            onDraftChange={view.setAgentDraft}
+          />
         ) : (
           <WorkflowsPanel state={state} draft={view.workflowDraft} onDraftChange={view.setWorkflowDraft} />
         )}

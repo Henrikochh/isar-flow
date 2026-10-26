@@ -17,7 +17,9 @@ describe('findTemplateExpressions', () => {
 
   it('ignores closing braces inside string literals', () => {
     const text = "${{ contains(inputs.task, '}}') }}";
-    expect(findTemplateExpressions(text)).toEqual([{ expr: "contains(inputs.task, '}}')", start: 0, end: text.length }]);
+    expect(findTemplateExpressions(text)).toEqual([
+      { expr: "contains(inputs.task, '}}')", start: 0, end: text.length },
+    ]);
   });
 
   it('throws on unterminated templates', () => {

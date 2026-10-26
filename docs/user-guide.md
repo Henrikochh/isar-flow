@@ -780,14 +780,27 @@ in the editor, unsaved changes included.
 
 ### Command confirmation
 
-Before a workflow with console blocks runs, Isar Flow lists its commands and asks: **Run** (this time) or
-**Run and remember**. The list shows each block's `run` text plus its shell, folder and environment when set,
-and the workflow `env`. **Run and remember** skips the question for this workflow until any of these change.
-Commands appear as written, with their `${{ }}` templates; the values are filled in when the block runs.
+Before a workflow runs commands or agents that can change your workspace without asking, Isar Flow lists
+them and asks: **Run** (this time) or **Run and remember**.
 
-The confirmation covers console blocks only. What agents do is governed by their
-[permissions](#permissions). `isarFlow.confirmCommands` turns the confirmation off; only your user settings
-can change it, never a workspace.
+- **Console commands**: each block's `run` text plus its shell, folder and environment when set, and the
+  workflow `env`. Commands appear as written, with their `${{ }}` templates; the values are filled in when
+  the block runs.
+- **Agents that act without asking**: agents with `permissions.edits: auto` and the tool `editFile` or
+  `writeFile`, or `permissions.commands: auto` and the tool `runCommand`
+  ([permissions](#permissions)). Each appears once, with the blocks that use it and what it does, for
+  example `agent 'coder' in block 'implement': edits files and runs commands without asking`. Agent files
+  and inline agents both count; a block's model does not matter. Such agents are listed even when the
+  workflow has no console blocks.
+
+When there are both, the commands come first, then the agents under **Agents that act without asking**.
+**Run and remember** skips the question for this workflow until anything in the list changes: a command, its
+shell, folder or environment, or an agent's tools or permissions (for example an agent that only edited
+files now also runs commands, or another block uses it). A workflow without such commands or agents runs
+without asking. The run uses the agent files as they were when you answered.
+
+`isarFlow.confirmCommands` turns the confirmation off; only your user settings can change it, never a
+workspace.
 
 ### Restricted Mode
 
@@ -856,7 +869,7 @@ Pass secrets to commands through `env` rather than in the command line:
 | `isarFlow.vscodeModels`    | `true`  | Offer the language models available in VS Code (for example GitHub Copilot).                                                                      |
 | `isarFlow.defaultShell`    | `auto`  | Shell for console blocks without `shell` and for the agent tools `runCommand` and `gitDiff`: `auto`, `pwsh`, `powershell`, `cmd`, `bash` or `sh`. |
 | `isarFlow.maxTokensPerRun` | `0`     | Stop a run when its agents used more tokens than this. `0` means no limit.                                                                        |
-| `isarFlow.confirmCommands` | `true`  | Ask before running a workflow whose console commands you have not approved yet. Only your user settings can turn this off.                        |
+| `isarFlow.confirmCommands` | `true`  | Ask before running a workflow whose console commands, or agents that act without asking, you have not approved yet. Only your user settings can turn this off. |
 | `isarFlow.historyLimit`    | `50`    | Runs kept per workflow (1–500).                                                                                                                   |
 
 ## 15. Commands
@@ -902,11 +915,12 @@ agents written by others.
     run: git commit -m "$MESSAGE" # pwsh: git commit -m $env:MESSAGE
   ```
 
-- **The command confirmation covers console blocks only**: their run text, shell, folder and environment,
-  plus the workflow environment. Agents with `permissions.commands` or `permissions.edits` set to `auto`
-  run the commands and edits the model chooses without asking, and a workflow from a repository can use
-  such agents. Check agent permissions before running workflows written by others. Try it always asks: it
-  treats `auto` as `ask`.
+- **The confirmation lists what can change your workspace without asking**: console blocks (run text,
+  shell, folder and environment, plus the workflow environment) and agents with `permissions.commands` or
+  `permissions.edits` set to `auto` and a matching tool ([Command confirmation](#command-confirmation)).
+  Once you run such a workflow, those agents run the commands and edits the model chooses without asking,
+  and a workflow from a repository can use such agents. Read the list before running workflows written by
+  others. Try it always asks: it treats `auto` as `ask`.
 - **Secrets.** Every stored secret is available as `secrets.*` to every workflow you run in a trusted
   workspace. Values of 4 or more characters are masked in run events, the terminal, history and approval
   prompts, but a workflow can still pass them to commands or models.

@@ -94,7 +94,10 @@ export function leadingDiagnostic(diagnostics: readonly Diagnostic[]): Diagnosti
 }
 
 /** Parses a number field; '' clears the key, anything unparsable is reported instead of written. */
-export function parseNumberInput(value: string, integer: boolean): { ok: true; value: number | undefined } | { ok: false } {
+export function parseNumberInput(
+  value: string,
+  integer: boolean,
+): { ok: true; value: number | undefined } | { ok: false } {
   const trimmed = value.trim();
   if (trimmed === '') return { ok: true, value: undefined };
   const number = Number(trimmed.replace(',', '.'));

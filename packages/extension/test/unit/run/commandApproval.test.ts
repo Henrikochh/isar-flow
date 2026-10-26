@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { AgentDefinition } from '@isar-flow/core';
 import {
   CommandApprovals,
   confirmCommands,
   consoleCommandsOf,
   hashCommands,
+  unattendedAgentsOf,
 } from '../../../src/run/commandApproval';
 import { FakeMemento, workflowOf } from './fakes';
 
@@ -93,7 +95,149 @@ describe('consoleCommandsOf', () => {
   });
 });
 
+const AGENT_WORKFLOW = `version: 1
+name: Implement
+steps:
+  - id: plan
+    type: agent
+    agent: planner
+    prompt: Plan
+  - id: implement
+    type: agent
+    agent: coder
+    model: other/model
+    prompt: Implement
+  - id: fix
+    type: loop
+    maxIterations: 3
+    steps:
+      - id: review
+        type: agent
+        agent:
+          model: x/y
+          tools: [readFile, runCommand]
+          permissions: { commands: auto }
+        prompt: Review
+      - id: retry
+        type: agent
+        agent: coder
+        prompt: Fix it
+      - id: tidy
+        type: agent
+        agent: tidier
+        prompt: Tidy
+  - id: chat
+    type: agent
+    agent:
+      model: x/y
+    prompt: Hi
+`;
+
+const AGENTS: Record<string, AgentDefinition> = {
+  planner: {
+    name: 'Planner',
+    model: 'x/y',
+    tools: ['readFile', 'editFile', 'runCommand'],
+    permissions: { edits: 'ask', commands: 'none' },
+  },
+  coder: {
+    name: 'Coder',
+    model: 'x/y',
+    tools: ['readFile', 'editFile', 'runCommand'],
+    permissions: { edits: 'auto', commands: 'auto' },
+  },
+  tidier: {
+    name: 'Tidier',
+    model: 'x/y',
+    tools: ['writeFile'],
+    permissions: { edits: 'auto', commands: 'ask' },
+  },
+};
+
+describe('unattendedAgentsOf', () => {
+  it('lists agent files and inline agents that act without asking, once per agent, in document order', () => {
+    expect(unattendedAgentsOf(workflowOf(AGENT_WORKFLOW), AGENTS)).toEqual([
+      "agent 'coder' in blocks 'implement' and 'retry': edits files and runs commands without asking",
+      "inline agent in block 'review': runs commands without asking",
+      "agent 'tidier' in block 'tidy': edits files without asking",
+    ]);
+  });
+
+  it('names every block that uses the agent', () => {
+    const wf = workflowOf(
+      ['a', 'b', 'c']
+        .map((id) => `  - id: ${id}\n    type: agent\n    agent: coder\n    prompt: Go\n`)
+        .join('')
+        .replace(/^/, 'version: 1\nname: x\nsteps:\n'),
+    );
+    expect(unattendedAgentsOf(wf, AGENTS)).toEqual([
+      "agent 'coder' in blocks 'a', 'b' and 'c': edits files and runs commands without asking",
+    ]);
+  });
+
+  it('needs both the auto level and a tool it allows', () => {
+    const only = (agent: Partial<AgentDefinition>) =>
+      unattendedAgentsOf(
+        workflowOf(
+          'version: 1\nname: x\nsteps:\n  - id: a\n    type: agent\n    agent: coder\n    prompt: Go\n',
+        ),
+        { coder: { name: 'Coder', model: 'x/y', ...agent } },
+      );
+    expect(
+      only({ tools: ['readFile', 'gitDiff'], permissions: { edits: 'auto', commands: 'auto' } }),
+    ).toEqual([]);
+    expect(only({ tools: ['editFile', 'writeFile', 'runCommand'] })).toEqual([]);
+    expect(
+      only({ tools: ['editFile', 'runCommand'], permissions: { edits: 'ask', commands: 'none' } }),
+    ).toEqual([]);
+    expect(only({ tools: ['runCommand'], permissions: { edits: 'auto' } })).toEqual([]);
+    expect(only({ tools: ['editFile'], permissions: { commands: 'auto' } })).toEqual([]);
+    expect(only({ tools: ['runCommand'], permissions: { edits: 'auto', commands: 'auto' } })).toEqual([
+      "agent 'coder' in block 'a': runs commands without asking",
+    ]);
+    expect(only({ tools: ['writeFile'], permissions: { edits: 'auto' } })).toEqual([
+      "agent 'coder' in block 'a': edits files without asking",
+    ]);
+  });
+
+  it('skips agents that are not defined and returns nothing for workflows without agents', () => {
+    expect(unattendedAgentsOf(workflowOf(AGENT_WORKFLOW), {})).toEqual([
+      "inline agent in block 'review': runs commands without asking",
+    ]);
+    expect(unattendedAgentsOf(workflowOf(WORKFLOW), AGENTS)).toEqual([]);
+  });
+
+  it("changes when an agent's permissions or tools change", () => {
+    const wf = workflowOf(AGENT_WORKFLOW);
+    const before = unattendedAgentsOf(wf, AGENTS);
+    const commandsOnly = unattendedAgentsOf(wf, {
+      ...AGENTS,
+      coder: { ...AGENTS.coder, permissions: { edits: 'ask', commands: 'auto' } },
+    });
+    const withoutRunCommand = unattendedAgentsOf(wf, {
+      ...AGENTS,
+      coder: { ...AGENTS.coder, tools: ['readFile', 'editFile'] },
+    });
+    expect(commandsOnly).not.toEqual(before);
+    expect(withoutRunCommand).not.toEqual(before);
+    expect(withoutRunCommand).not.toEqual(commandsOnly);
+    expect(hashCommands([], commandsOnly)).not.toBe(hashCommands([], before));
+  });
+});
+
 describe('hashCommands', () => {
+  it('keeps the hash of a command list without agents, so earlier approvals still apply', () => {
+    expect(hashCommands(['npm ci'], [])).toBe(hashCommands(['npm ci']));
+  });
+
+  it('covers the agents that act without asking', () => {
+    const agents = ["agent 'coder' in block 'a': edits files without asking"];
+    expect(hashCommands(['npm ci'], agents)).not.toBe(hashCommands(['npm ci']));
+    expect(hashCommands(['npm ci'], agents)).toBe(hashCommands(['npm ci'], [...agents]));
+    expect(hashCommands([], agents)).not.toBe(hashCommands(agents));
+    expect(hashCommands(['npm ci'], agents)).not.toBe(hashCommands(['npm ci', ...agents]));
+  });
+
   it('is a stable sha256 hex digest', () => {
     const hash = hashCommands(['npm ci', 'npm test']);
     expect(hash).toMatch(/^[0-9a-f]{64}$/);
@@ -199,5 +343,88 @@ describe('confirmCommands', () => {
     await confirmCommands({ ...base(ask), commands: ['npm test', 'npm test'] });
     const detail = (ask.mock.calls[0] as unknown as [string, string])[1];
     expect(detail.match(/npm test/g)).toHaveLength(1);
+  });
+
+  describe('with agents that act without asking', () => {
+    const CODER = "agent 'coder' in block 'implement': edits files and runs commands without asking";
+    const REVIEW = "inline agent in block 'review': runs commands without asking";
+
+    it('asks about the agents of a workflow without console blocks', async () => {
+      const ask = vi.fn(async () => 'Run');
+      expect(await confirmCommands({ ...base(ask), commands: [], agents: [CODER, REVIEW] })).toBe(true);
+      const [message, detail, buttons] = ask.mock.calls[0] as unknown as [string, string, string[]];
+      expect(message).toBe("Run 'Build and test'? These agents can change your workspace without asking:");
+      expect(detail).toBe(
+        `• ${CODER}\n• ${REVIEW}\n\n"Run and remember" skips this question until anything listed here changes.`,
+      );
+      expect(buttons).toEqual(['Run', 'Run and remember']);
+    });
+
+    it('lists the commands first, then the agents', async () => {
+      const ask = vi.fn(async () => 'Run');
+      await confirmCommands({ ...base(ask), agents: [CODER] });
+      const [message, detail] = ask.mock.calls[0] as unknown as [string, string];
+      expect(message).toBe(
+        "Run 'Build and test'? It runs these commands and lets agents change your workspace without asking:",
+      );
+      expect(detail).toBe(
+        [
+          '• npm ci',
+          '• npm test',
+          '',
+          'Agents that act without asking:',
+          `• ${CODER}`,
+          '',
+          '"Run and remember" skips this question until anything listed here changes.',
+        ].join('\n'),
+      );
+    });
+
+    it('keeps the commands-only question when no agent acts without asking', async () => {
+      const ask = vi.fn(async () => 'Run');
+      await confirmCommands({ ...base(ask), agents: [] });
+      const [message, detail] = ask.mock.calls[0] as unknown as [string, string];
+      expect(message).toBe("Run 'Build and test'? It runs these commands in your workspace:");
+      expect(detail).toBe(
+        '• npm ci\n• npm test\n\n"Run and remember" skips this question until the commands change.',
+      );
+    });
+
+    it('remembers commands and agents together and asks again when the agents change', async () => {
+      const ask = vi.fn(async () => 'Run and remember');
+      const options = { ...base(ask), agents: [CODER] };
+      expect(await confirmCommands(options)).toBe(true);
+      expect(options.approvals.isApproved(options.workflowUri, hashCommands(options.commands, [CODER]))).toBe(
+        true,
+      );
+      expect(await confirmCommands(options)).toBe(true);
+      expect(ask).toHaveBeenCalledTimes(1);
+
+      const editsOnly = "agent 'coder' in block 'implement': edits files without asking";
+      expect(await confirmCommands({ ...options, agents: [editsOnly] })).toBe(true);
+      expect(ask).toHaveBeenCalledTimes(2);
+    });
+
+    it('asks again when an agent that acts without asking joins approved commands', async () => {
+      const ask = vi.fn(async () => 'Run and remember');
+      const options = base(ask);
+      await confirmCommands(options);
+      expect(await confirmCommands(options)).toBe(true);
+      expect(ask).toHaveBeenCalledTimes(1);
+      expect(await confirmCommands({ ...options, agents: [CODER] })).toBe(true);
+      expect(ask).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns false when dismissed and skips the question when disabled', async () => {
+      expect(await confirmCommands({ ...base(async () => undefined), commands: [], agents: [CODER] })).toBe(
+        false,
+      );
+      const ask = vi.fn(async () => undefined);
+      expect(await confirmCommands({ ...base(ask), commands: [], agents: [CODER], enabled: false })).toBe(
+        true,
+      );
+      expect(await confirmCommands({ ...base(ask), commands: [], agents: [] })).toBe(true);
+      expect(ask).not.toHaveBeenCalled();
+    });
   });
 });

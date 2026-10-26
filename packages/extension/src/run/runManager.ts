@@ -6,6 +6,7 @@ import {
   reduceRunEvent,
   runWorkflow,
   validateWorkflow,
+  type AgentDefinition,
   type RunEvent,
   type RunOptions,
   type RunView,
@@ -14,7 +15,7 @@ import {
 } from '@isar-flow/core';
 import type { ActiveRun, RunManager, RunManagerDeps } from '../contracts';
 import { createApprovalBroker, type RunApprovalBroker } from './approvals';
-import { CommandApprovals, confirmCommands, consoleCommandsOf } from './commandApproval';
+import { CommandApprovals, confirmCommands, consoleCommandsOf, unattendedAgentsOf } from './commandApproval';
 import { createEngineHost } from './engineHost';
 import { errorMessage, formatDuration, formatElapsed } from './format';
 import { createFileHistoryStore, createRunHistory, type FileRunHistory } from './history';
@@ -246,7 +247,12 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     return run.view;
   };
 
-  const launch = async (uri: vscode.Uri, workflow: Workflow, inputs: Record<string, unknown>) => {
+  const launch = async (
+    uri: vscode.Uri,
+    workflow: Workflow,
+    inputs: Record<string, unknown>,
+    agents: Record<string, AgentDefinition>,
+  ) => {
     const workflowUri = uri.toString();
     const runId = newRunId();
     const workspaceRoot = ui.workspaceRoot(uri);
@@ -301,7 +307,7 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
       runId,
       inputs,
       host,
-      agents: deps.agents.definitions(),
+      agents,
       signal: controller.signal,
       env: stringEnv(options.env ?? process.env),
       secrets: secretValues,
@@ -353,16 +359,20 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
         const values = inputs ?? (await ui.promptInputs(workflow));
         if (!values) return undefined;
 
+        // One snapshot for the question and the run: an agent file changed while the question is open
+        // must not run with permissions nobody confirmed.
+        const agents = deps.agents.definitions();
         const confirmed = await confirmCommands({
           workflowUri,
           workflowName: workflow.name,
           commands: consoleCommandsOf(workflow),
+          agents: unattendedAgentsOf(workflow, agents),
           approvals: commandApprovals,
           enabled: ui.setting('confirmCommands', true, uri),
           ask: (message, detail, buttons) => Promise.resolve(ui.confirmCommands(message, detail, buttons)),
         });
         if (!confirmed || disposed) return undefined;
-        return await launch(uri, workflow, values);
+        return await launch(uri, workflow, values, agents);
       } catch (error) {
         log.error(
           `Could not start ${fileName(uri)}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,

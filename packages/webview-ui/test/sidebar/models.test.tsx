@@ -22,9 +22,13 @@ describe('Models section', () => {
   it('gives provider names and errors that may be cut off a tooltip with the full text', () => {
     renderSidebar();
     const litellm = screen.getByRole('button', { name: /LiteLLM.*5 models/ });
-    expect(within(litellm).getByTitle('LiteLLM (localhost:4000)')).toHaveTextContent('LiteLLM (localhost:4000)');
+    expect(within(litellm).getByTitle('LiteLLM (localhost:4000)')).toHaveTextContent(
+      'LiteLLM (localhost:4000)',
+    );
     const ollama = screen.getByRole('button', { name: /Ollama.*Not reachable/ });
-    expect(within(ollama).getByTitle('Cannot reach http://localhost:11434/v1. Is the server running?')).toBeInTheDocument();
+    expect(
+      within(ollama).getByTitle('Cannot reach http://localhost:11434/v1. Is the server running?'),
+    ).toBeInTheDocument();
   });
 
   it('opens the provider settings when a row is clicked', async () => {

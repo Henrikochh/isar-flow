@@ -99,7 +99,9 @@ export function expressionProblem(text: string): string | null {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const offset = (error as { offset?: number }).offset;
-      return sources.length === 1 && typeof offset === 'number' ? `${message} (column ${offset + 1})` : message;
+      return sources.length === 1 && typeof offset === 'number'
+        ? `${message} (column ${offset + 1})`
+        : message;
     }
   }
   return null;
@@ -173,7 +175,11 @@ export function readRules(condition: unknown): RuleSet | null {
   if (typeof condition === 'string') return expressionToRules(condition);
   if (!isRecord(condition)) return null;
   if (isRule(condition)) return { combinator: 'all', rules: [condition as Rule] };
-  const combinator: Combinator | null = Array.isArray(condition.all) ? 'all' : Array.isArray(condition.any) ? 'any' : null;
+  const combinator: Combinator | null = Array.isArray(condition.all)
+    ? 'all'
+    : Array.isArray(condition.any)
+      ? 'any'
+      : null;
   if (!combinator) return null;
   const items = condition[combinator] as unknown[];
   if (!items.every(isRule)) return null;
@@ -237,7 +243,9 @@ export function printExpression(expr: Expr, parent = 0): string {
       const object = printExpression(expr.object, 9);
       if (!expr.computed && expr.property.kind === 'literal') {
         const name = String(expr.property.value);
-        return IDENTIFIER.test(name) || /^\d+$/.test(name) ? `${object}.${name}` : `${object}[${quote(name)}]`;
+        return IDENTIFIER.test(name) || /^\d+$/.test(name)
+          ? `${object}.${name}`
+          : `${object}[${quote(name)}]`;
       }
       return `${object}[${printExpression(expr.property)}]`;
     }
@@ -306,7 +314,8 @@ function leafToRule(expr: Expr): Rule | null {
     }
     return null;
   }
-  if (expr.kind === 'ident' || expr.kind === 'member') return { value: toTemplate(printExpression(expr)), op: 'isTrue' };
+  if (expr.kind === 'ident' || expr.kind === 'member')
+    return { value: toTemplate(printExpression(expr)), op: 'isTrue' };
   return null;
 }
 

@@ -25,7 +25,12 @@ describe('applyTryItEvent', () => {
 
   it('starts a new answer after a tool row so the order stays readable', () => {
     let entries = [user('Hi'), { role: 'agent', text: 'Let me look.' } as TranscriptEntry];
-    entries = applyTryItEvent(entries, { type: 'tool', name: 'readFile', args: '{"path":"src/app.ts"}', result: 'a\nb\nc' });
+    entries = applyTryItEvent(entries, {
+      type: 'tool',
+      name: 'readFile',
+      args: '{"path":"src/app.ts"}',
+      result: 'a\nb\nc',
+    });
     entries = applyTryItEvent(entries, { type: 'text', text: 'Done.' });
     expect(entries.slice(1)).toEqual([
       { role: 'agent', text: 'Let me look.' },
@@ -37,7 +42,12 @@ describe('applyTryItEvent', () => {
   it('completes a pending tool row when the result arrives', () => {
     let entries = applyTryItEvent([user('Hi')], { type: 'tool', name: 'gitDiff', args: '{}' });
     expect(entries[1]).toEqual({ role: 'tool', tool: 'gitDiff', text: '', meta: undefined });
-    entries = applyTryItEvent(entries, { type: 'tool', name: 'gitDiff', args: '{}', result: '1 file changed' });
+    entries = applyTryItEvent(entries, {
+      type: 'tool',
+      name: 'gitDiff',
+      args: '{}',
+      result: '1 file changed',
+    });
     expect(entries).toHaveLength(2);
     expect(entries[1].meta).toBe('1 file changed');
   });
@@ -50,19 +60,37 @@ describe('applyTryItEvent', () => {
       result: 'oldText was not found',
       isError: true,
     });
-    expect(entries[1]).toEqual({ role: 'error', tool: 'editFile', text: 'a.ts', meta: 'failed: oldText was not found' });
+    expect(entries[1]).toEqual({
+      role: 'error',
+      tool: 'editFile',
+      text: 'a.ts',
+      meta: 'failed: oldText was not found',
+    });
   });
 
   it('closes the answer with the model and token count on done', () => {
     let entries = applyTryItEvent([user('Hi')], { type: 'text', text: 'Hello' });
-    entries = applyTryItEvent(entries, { type: 'done', model: 'litellm/gpt-4.1', usage: { inputTokens: 4210, outputTokens: 96 } });
+    entries = applyTryItEvent(entries, {
+      type: 'done',
+      model: 'litellm/gpt-4.1',
+      usage: { inputTokens: 4210, outputTokens: 96 },
+    });
     expect(entries[1]).toEqual({ role: 'agent', text: 'Hello', meta: 'litellm/gpt-4.1 · 4.3k tokens' });
     expect(metaParts(entries[1].meta!)).toEqual(['litellm/gpt-4.1', '4.3k tokens']);
   });
 
   it('adds a meta-only answer when the turn ended without text', () => {
-    let entries = applyTryItEvent([user('Hi')], { type: 'tool', name: 'gitDiff', args: '{}', result: 'clean' });
-    entries = applyTryItEvent(entries, { type: 'done', model: 'm/x', usage: { inputTokens: 1, outputTokens: 2 } });
+    let entries = applyTryItEvent([user('Hi')], {
+      type: 'tool',
+      name: 'gitDiff',
+      args: '{}',
+      result: 'clean',
+    });
+    entries = applyTryItEvent(entries, {
+      type: 'done',
+      model: 'm/x',
+      usage: { inputTokens: 1, outputTokens: 2 },
+    });
     expect(entries[2]).toEqual({ role: 'agent', text: '', meta: 'm/x · 3 tokens' });
   });
 
@@ -80,7 +108,11 @@ describe('transcript helpers', () => {
   });
 
   it('stops the open answer or adds a stopped marker', () => {
-    expect(stopTurn([user('Hi'), { role: 'agent', text: 'Par' }])[1]).toEqual({ role: 'agent', text: 'Par', meta: STOPPED_META });
+    expect(stopTurn([user('Hi'), { role: 'agent', text: 'Par' }])[1]).toEqual({
+      role: 'agent',
+      text: 'Par',
+      meta: STOPPED_META,
+    });
     expect(stopTurn([user('Hi')])[1]).toEqual({ role: 'agent', text: '', meta: STOPPED_META });
   });
 
@@ -106,7 +138,11 @@ describe('transcript helpers', () => {
     expect(readTranscript(undefined)).toEqual([]);
     expect(readTranscript({ tryIt: { messages: 'nope' } })).toEqual([]);
     expect(
-      readTranscript({ tryIt: { messages: [{ role: 'user', text: 'ok' }, { role: 'bot', text: 'x' }, null, { role: 'agent' }] } }),
+      readTranscript({
+        tryIt: {
+          messages: [{ role: 'user', text: 'ok' }, { role: 'bot', text: 'x' }, null, { role: 'agent' }],
+        },
+      }),
     ).toEqual([{ role: 'user', text: 'ok' }]);
   });
 

@@ -83,7 +83,7 @@ describe('comparison and logic', () => {
   it('treats null and undefined as equal to each other only', () => {
     expect(ev('nothing == null')).toBe(true);
     expect(ev('steps.missing == null')).toBe(true);
-    expect(ev("empty == null")).toBe(false);
+    expect(ev('empty == null')).toBe(false);
   });
 
   it('compares booleans with their string form', () => {

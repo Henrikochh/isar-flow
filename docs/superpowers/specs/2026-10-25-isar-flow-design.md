@@ -37,7 +37,7 @@ visual editor are two views of the same document and stay in sync in both direct
 | 14 | Console | Captured output mirrored live into a pseudoterminal; default shell: `pwsh` → `powershell` on Windows, `$SHELL`/`bash` → `sh` elsewhere |
 | 15 | "Generatable both sides" | Two-way canvas ⇄ YAML sync in v1; AI generation of workflows later |
 | 16 | Triggers | Manual (canvas, CodeLens, command palette, sidebar); engine stays CLI-ready (no `vscode` import in core) |
-| 17 | Safety | `maxIterations` required (default 5); optional token budget per run; console commands need one-time confirmation per workflow content hash; Workspace Trust required to run |
+| 17 | Safety | `maxIterations` required (default 5); optional token budget per run; console commands and agents that edit/run commands without asking need one-time confirmation per content hash; Workspace Trust required to run |
 | 18 | Project | Name **Isar Flow**, folder `isar-flow`, npm workspaces, TypeScript, React + Vite, English UI |
 
 ## 3. Architecture
@@ -240,7 +240,14 @@ isEmpty isNotEmpty isTrue isFalse`. `ignoreCase` applies to string operators.
 - Events: `run-start`, `step-start`, `step-log`, `step-end`, `loop-iteration`, `run-end`.
 - Cancellation via `AbortSignal` (kills process trees, aborts HTTP streams).
 - Before a run: schema + semantic validation must pass; workflow inputs are requested via a dialog;
-  if the console commands' content hash is not yet approved for this workspace, show them and ask.
+  if the content hash of the console commands and of the agents that act without asking is not yet approved
+  for this workspace, show them and ask. Agents that act without asking are agent blocks whose agent (agent
+  file by id from the agent store, or inline settings; the block's model override is irrelevant) has
+  `permissions.commands: auto` with `runCommand`, or `permissions.edits: auto` with `editFile` or
+  `writeFile`. They are part of the question and the hash even without console blocks, as one line per agent
+  in document order (e.g. "agent 'coder' in block 'implement': edits files and runs commands without
+  asking"), so a remembered approval stops applying when an agent's tools or permissions change. The run
+  uses the agent definitions the question was computed from.
 - Runs require a trusted workspace (`capabilities.untrustedWorkspaces.supported = "limited"`: in Restricted
   Mode workflows and agents can be viewed and edited, but nothing runs).
 - Run history: last 50 runs per workflow in workspace storage (events + outputs, trimmed to 1 MB each).

@@ -100,7 +100,12 @@ function Entry({ entry, live }: { entry: TranscriptEntry; live: boolean }) {
   );
 }
 
-function AgentTurn({ entries, live, agentId, agentName }: { entries: TranscriptEntry[]; live: boolean } & AgentIdentity) {
+function AgentTurn({
+  entries,
+  live,
+  agentId,
+  agentName,
+}: { entries: TranscriptEntry[]; live: boolean } & AgentIdentity) {
   const last = entries[entries.length - 1];
   const busy = last && (last.role === 'agent' || (last.tool !== undefined && last.meta === undefined));
   return (

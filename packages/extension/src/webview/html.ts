@@ -11,7 +11,10 @@ export function createNonce(): string {
 }
 
 function escapeHtml(text: string): string {
-  return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+  return text.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  );
 }
 
 export function webviewOptions(extensionUri: vscode.Uri): vscode.WebviewOptions {
@@ -31,7 +34,14 @@ export interface WebviewHtmlParts {
 }
 
 /** Pure HTML builder (unit-tested); see renderWebviewHtml for the VS Code wiring. */
-export function buildWebviewHtml({ cspSource, scriptUri, styleUri, nonce, view, title }: WebviewHtmlParts): string {
+export function buildWebviewHtml({
+  cspSource,
+  scriptUri,
+  styleUri,
+  nonce,
+  view,
+  title,
+}: WebviewHtmlParts): string {
   const csp = [
     "default-src 'none'",
     `img-src ${cspSource} data:`,
@@ -56,7 +66,12 @@ export function buildWebviewHtml({ cspSource, scriptUri, styleUri, nonce, view, 
 }
 
 /** HTML for an Isar Flow webview; the React bundle picks the view from `<body data-view>`. */
-export function renderWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri, view: WebviewKind, title: string): string {
+export function renderWebviewHtml(
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
+  view: WebviewKind,
+  title: string,
+): string {
   const base = vscode.Uri.joinPath(extensionUri, 'media', 'webview');
   return buildWebviewHtml({
     cspSource: webview.cspSource,

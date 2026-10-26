@@ -37,7 +37,14 @@ export function WorkflowsPanel({
       <Section
         title="Workflows"
         actions={
-          <Button ref={newRef} size="s" icon="add" aria-label="New workflow" aria-expanded={draft !== undefined} onClick={open}>
+          <Button
+            ref={newRef}
+            size="s"
+            icon="add"
+            aria-label="New workflow"
+            aria-expanded={draft !== undefined}
+            onClick={open}
+          >
             New
           </Button>
         }
@@ -59,7 +66,12 @@ export function WorkflowsPanel({
           <ul className="sb-list" aria-label="Workflows">
             {workflows.map((workflow, index) => (
               <li key={keys[index]}>
-                <WorkflowRow workflow={workflow} run={activeRunOf(workflow, activeRuns)} trusted={state.trusted} now={now} />
+                <WorkflowRow
+                  workflow={workflow}
+                  run={activeRunOf(workflow, activeRuns)}
+                  trusted={state.trusted}
+                  now={now}
+                />
               </li>
             ))}
           </ul>

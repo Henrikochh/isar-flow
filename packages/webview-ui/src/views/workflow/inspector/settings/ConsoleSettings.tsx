@@ -39,7 +39,11 @@ export function ConsoleSettings(props: SettingsProps) {
             describedBy={describedBy}
             invalid={invalid}
             value={shell}
-            options={SHELLS.some((s) => s.value === shell) ? SHELLS : [...SHELLS, { value: shell, label: shell, description: 'Unknown shell' }]}
+            options={
+              SHELLS.some((s) => s.value === shell)
+                ? SHELLS
+                : [...SHELLS, { value: shell, label: shell, description: 'Unknown shell' }]
+            }
             onChange={(value) => setOrUnset(update, 'shell', value === 'auto' ? undefined : value)}
           />
         )}
@@ -60,7 +64,9 @@ export function ConsoleSettings(props: SettingsProps) {
           entries={asStringEntries(step.env)}
           noun="variable"
           addLabel="Add variable"
-          onCommit={(entries) => setOrUnset(update, 'env', entries.length ? Object.fromEntries(entries) : undefined)}
+          onCommit={(entries) =>
+            setOrUnset(update, 'env', entries.length ? Object.fromEntries(entries) : undefined)
+          }
         />
       </Group>
 

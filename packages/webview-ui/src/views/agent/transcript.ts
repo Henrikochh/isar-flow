@@ -64,7 +64,9 @@ function isOpenAnswer(entry: TranscriptEntry | undefined): entry is TranscriptEn
 function parseArgs(args: string): Record<string, unknown> | undefined {
   try {
     const value: unknown = JSON.parse(args);
-    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : undefined;
   } catch {
     return undefined;
   }
@@ -94,10 +96,13 @@ export function applyTryItEvent(entries: TranscriptEntry[], event: TryItEvent): 
     case 'tool': {
       const text = toolCallDetail(event.name, event.args);
       const meta =
-        event.result === undefined ? undefined : summarizeToolResult({ content: event.result, isError: event.isError });
+        event.result === undefined
+          ? undefined
+          : summarizeToolResult({ content: event.result, isError: event.isError });
       const row: TranscriptEntry = { role: event.isError ? 'error' : 'tool', tool: event.name, text, meta };
       // A finished call completes the pending row the host announced for it.
-      const pending = last?.role === 'tool' && last.tool === event.name && last.text === text && last.meta === undefined;
+      const pending =
+        last?.role === 'tool' && last.tool === event.name && last.text === text && last.meta === undefined;
       return pending ? [...entries.slice(0, -1), row] : [...entries, row];
     }
     case 'done':

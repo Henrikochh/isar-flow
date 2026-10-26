@@ -144,12 +144,24 @@ export function TryItPanel({
         <div className="ag-tryit__empty">
           <span className="ag-tryit__source" aria-hidden="true" />
           <AgentStone id={agentId} name={agentName} size="l" />
-          <p className="ag-tryit__empty-text">Ask the agent something to see how it responds with the current settings.</p>
+          <p className="ag-tryit__empty-text">
+            Ask the agent something to see how it responds with the current settings.
+          </p>
         </div>
       ) : (
-        <TranscriptView entries={tryIt.entries} streaming={tryIt.streaming} agentId={agentId} agentName={agentName} />
+        <TranscriptView
+          entries={tryIt.entries}
+          streaming={tryIt.streaming}
+          agentId={agentId}
+          agentName={agentName}
+        />
       )}
-      <Composer streaming={tryIt.streaming} disabledReason={disabledReason} onAsk={tryIt.ask} onStop={tryIt.stop} />
+      <Composer
+        streaming={tryIt.streaming}
+        disabledReason={disabledReason}
+        onAsk={tryIt.ask}
+        onStop={tryIt.stop}
+      />
     </aside>
   );
 }

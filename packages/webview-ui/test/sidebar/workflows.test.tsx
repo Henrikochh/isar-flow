@@ -98,7 +98,9 @@ describe('Workflows tab', () => {
     renderSidebar({ tab: 'workflows' });
     const runs = screen.getByRole('list', { name: 'Recent runs' });
     await user.click(within(runs).getByRole('button', { name: /Fix failing tests/ }));
-    expect(postedOfType('openRun')).toEqual([{ type: 'openRun', runId: RECENT_RUNS[1].runId, workflowUri: RECENT_RUNS[1].workflowUri }]);
+    expect(postedOfType('openRun')).toEqual([
+      { type: 'openRun', runId: RECENT_RUNS[1].runId, workflowUri: RECENT_RUNS[1].workflowUri },
+    ]);
     expect(runs).toHaveTextContent("Loop 'fix_loop' reached its limit");
   });
 
@@ -113,7 +115,13 @@ describe('Workflows tab', () => {
   });
 
   it('falls back to the file name for workflows without a name', () => {
-    const nameless = { uri: 'file:///w/tools/cleanup.workflow.yaml', name: '', relativePath: 'tools/cleanup.workflow.yaml', valid: true, stepCount: 0 } as WorkflowSummary;
+    const nameless = {
+      uri: 'file:///w/tools/cleanup.workflow.yaml',
+      name: '',
+      relativePath: 'tools/cleanup.workflow.yaml',
+      valid: true,
+      stepCount: 0,
+    } as WorkflowSummary;
     renderSidebar({ tab: 'workflows', workflows: [nameless, nameless] });
     expect(screen.getAllByRole('button', { name: /^cleanup/ })).toHaveLength(2);
     expect(screen.getAllByText('Not run yet')).toHaveLength(2);
@@ -121,7 +129,13 @@ describe('Workflows tab', () => {
   });
 
   it('shows the block count of a workflow that has not run as its own chip', () => {
-    const fresh = { uri: 'file:///w/fresh.workflow.yaml', name: 'Fresh', relativePath: 'fresh.workflow.yaml', valid: true, stepCount: 3 } as WorkflowSummary;
+    const fresh = {
+      uri: 'file:///w/fresh.workflow.yaml',
+      name: 'Fresh',
+      relativePath: 'fresh.workflow.yaml',
+      valid: true,
+      stepCount: 3,
+    } as WorkflowSummary;
     renderSidebar({ tab: 'workflows', workflows: [fresh], recentRuns: [] });
     expect(screen.getByText('Not run yet')).toBeInTheDocument();
     expect(screen.getByText('3 blocks')).toHaveClass('if-chip');
@@ -141,14 +155,18 @@ describe('New workflow card', () => {
     await user.type(screen.getByLabelText('Name'), 'Fix flaky tests');
     await user.click(within(templates).getByRole('radio', { name: /Test and fix/ }));
     await user.click(screen.getByRole('button', { name: 'Create workflow' }));
-    expect(postedOfType('createWorkflow')).toEqual([{ type: 'createWorkflow', name: 'Fix flaky tests', template: 'test-fix' }]);
+    expect(postedOfType('createWorkflow')).toEqual([
+      { type: 'createWorkflow', name: 'Fix flaky tests', template: 'test-fix' },
+    ]);
   });
 
   it('moves between templates with arrow keys', async () => {
     const user = userEvent.setup();
     renderSidebar({ tab: 'workflows' });
     await user.click(screen.getByRole('button', { name: 'New workflow' }));
-    within(screen.getByRole('radiogroup', { name: 'Template' })).getByRole('radio', { name: /Blank/ }).focus();
+    within(screen.getByRole('radiogroup', { name: 'Template' }))
+      .getByRole('radio', { name: /Blank/ })
+      .focus();
     await user.keyboard('{ArrowDown}');
     const review = screen.getByRole('radio', { name: /Review loop/ });
     expect(review).toBeChecked();
@@ -162,7 +180,9 @@ describe('New workflow card', () => {
     await user.click(screen.getByRole('button', { name: 'Create workflow' }));
     expect(screen.getByText('Enter a name for the workflow.')).toBeInTheDocument();
     await user.type(screen.getByLabelText('Name'), 'fix failing tests');
-    expect(screen.getByText('A workflow named Fix failing tests already exists. Choose another name.')).toBeInTheDocument();
+    expect(
+      screen.getByText('A workflow named Fix failing tests already exists. Choose another name.'),
+    ).toBeInTheDocument();
     expect(postedOfType('createWorkflow')).toEqual([]);
   });
 });

@@ -9,7 +9,12 @@ function config(user: unknown, workspace: unknown) {
     get: <T>(key: string, fallback?: T) => (key === 'providers' ? (effective as T) : fallback) as T,
     inspect: <T>(key: string) =>
       key === 'providers'
-        ? { key: `isarFlow.${key}`, defaultValue: [] as T, globalValue: user as T, workspaceValue: workspace as T }
+        ? {
+            key: `isarFlow.${key}`,
+            defaultValue: [] as T,
+            globalValue: user as T,
+            workspaceValue: workspace as T,
+          }
         : undefined,
   };
 }
@@ -41,7 +46,8 @@ describe('model settings and workspace trust', () => {
       log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as vscode.LogOutputChannel,
       getConfig,
       lm: { selectChatModels: async () => [], onDidChangeChatModels: () => ({ dispose: () => undefined }) },
-      createClient: () => ({ listModels: async () => [], model: () => Promise.reject(new Error('unused')) }) as never,
+      createClient: () =>
+        ({ listModels: async () => [], model: () => Promise.reject(new Error('unused')) }) as never,
     });
     await registry.refresh();
     expect(getConfig).toHaveBeenCalledTimes(1);

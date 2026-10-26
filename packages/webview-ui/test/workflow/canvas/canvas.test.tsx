@@ -1,6 +1,12 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { applyWorkflowOps, reduceRunEvent, type RunEvent, type RunView, type WorkflowOp } from '@isar-flow/core';
+import {
+  applyWorkflowOps,
+  reduceRunEvent,
+  type RunEvent,
+  type RunView,
+  type WorkflowOp,
+} from '@isar-flow/core';
 import { AGENTS, CATALOG } from '../../../harness/fixtures';
 import {
   card,
@@ -249,7 +255,9 @@ describe('block menu and Move to', () => {
     expect(screen.queryByRole('menu', { name: 'Block actions' })).not.toBeInTheDocument();
 
     fireEvent.contextMenu(card(container, 'tests'));
-    fireEvent.click(within(screen.getByRole('menu', { name: 'Block actions' })).getByRole('menuitem', { name: /Delete/ }));
+    fireEvent.click(
+      within(screen.getByRole('menu', { name: 'Block actions' })).getByRole('menuitem', { name: /Delete/ }),
+    );
     expect(postedOps()).toEqual([
       { op: 'duplicateStep', stepId: 'tests' },
       { op: 'deleteStep', stepId: 'tests' },
@@ -272,7 +280,9 @@ describe('block menu and Move to', () => {
   it('lists every list the block can move to, never one inside itself', () => {
     const { container } = renderEditor();
     fireEvent.contextMenu(card(container, 'implement'));
-    fireEvent.click(within(screen.getByRole('menu', { name: 'Block actions' })).getByRole('menuitem', { name: /Move to/ }));
+    fireEvent.click(
+      within(screen.getByRole('menu', { name: 'Block actions' })).getByRole('menuitem', { name: /Move to/ }),
+    );
     expect(items(screen.getByRole('menu', { name: 'Move to' }))).toEqual([
       ['Top levelEnd of the workflow', false],
       ['review_loopEnd of the loop', false],
@@ -282,15 +292,21 @@ describe('block menu and Move to', () => {
 
     fireEvent.keyDown(screen.getByRole('menu', { name: 'Move to' }), { key: 'Escape' });
     fireEvent.contextMenu(card(container, 'review_loop'));
-    fireEvent.click(within(screen.getByRole('menu', { name: 'Block actions' })).getByRole('menuitem', { name: /Move to/ }));
+    fireEvent.click(
+      within(screen.getByRole('menu', { name: 'Block actions' })).getByRole('menuitem', { name: /Move to/ }),
+    );
     // The loop is last at the top level already and cannot go into its own body or the If inside it.
-    expect(items(screen.getByRole('menu', { name: 'Move to' }))).toEqual([['Top levelAlready the last block here', true]]);
+    expect(items(screen.getByRole('menu', { name: 'Move to' }))).toEqual([
+      ['Top levelAlready the last block here', true],
+    ]);
   });
 
   it('moves the block to the end of the chosen list', () => {
     const { container } = renderEditor();
     fireEvent.contextMenu(card(container, 'implement'));
-    fireEvent.click(within(screen.getByRole('menu', { name: 'Block actions' })).getByRole('menuitem', { name: /Move to/ }));
+    fireEvent.click(
+      within(screen.getByRole('menu', { name: 'Block actions' })).getByRole('menuitem', { name: /Move to/ }),
+    );
     clearPosted();
     fireEvent.click(within(screen.getByRole('menu', { name: 'Move to' })).getAllByRole('menuitem')[3]);
     expect(postedOps()).toEqual([
@@ -305,7 +321,9 @@ describe('block menu and Move to', () => {
       'version: 1\nname: W\nsteps:\n  - id: outer\n    type: loop\n    maxIterations: 2\n    steps:\n      - id: leave\n        type: break\n      - id: check\n        type: if\n        condition: "${{ true }}"\n';
     const { container } = renderEditor(docFor(text));
     fireEvent.contextMenu(card(container, 'leave'));
-    fireEvent.click(within(screen.getByRole('menu', { name: 'Block actions' })).getByRole('menuitem', { name: /Move to/ }));
+    fireEvent.click(
+      within(screen.getByRole('menu', { name: 'Block actions' })).getByRole('menuitem', { name: /Move to/ }),
+    );
     expect(items(screen.getByRole('menu', { name: 'Move to' })).map(([label]) => label)).toEqual([
       'outerEnd of the loop',
       'checkEnd of Then',
@@ -314,7 +332,9 @@ describe('block menu and Move to', () => {
   });
 
   it('has no menu for blocks without an id', () => {
-    const { container } = renderEditor(docFor('version: 1\nname: W\nsteps:\n  - type: console\n    run: ls\n'));
+    const { container } = renderEditor(
+      docFor('version: 1\nname: W\nsteps:\n  - type: console\n    run: ls\n'),
+    );
     const broken = container.querySelector<HTMLElement>('[data-wf-card]');
     fireEvent.contextMenu(broken as HTMLElement);
     expect(screen.queryByRole('menu', { name: 'Block actions' })).not.toBeInTheDocument();
@@ -322,11 +342,18 @@ describe('block menu and Move to', () => {
 });
 
 describe('following a live run', () => {
-  const start = (stepId: string): RunEvent => ({ type: 'step-start', runId: 'r', stepId, stepType: 'agent', at: 2 });
+  const start = (stepId: string): RunEvent => ({
+    type: 'step-start',
+    runId: 'r',
+    stepId,
+    stepType: 'agent',
+    at: 2,
+  });
   const runningAt = (stepId: string): RunView | null =>
-    [{ type: 'run-start', runId: 'r', workflowName: 'w', startedAt: 1, inputs: {} } as RunEvent, start(stepId)].reduce<
-      RunView | null
-    >((view, event) => reduceRunEvent(view, event), null);
+    [
+      { type: 'run-start', runId: 'r', workflowName: 'w', startedAt: 1, inputs: {} } as RunEvent,
+      start(stepId),
+    ].reduce<RunView | null>((view, event) => reduceRunEvent(view, event), null);
   const scrolled = () => vi.mocked(Element.prototype.scrollIntoView);
   const canvas = () => screen.getByRole('region', { name: 'Workflow canvas' });
 

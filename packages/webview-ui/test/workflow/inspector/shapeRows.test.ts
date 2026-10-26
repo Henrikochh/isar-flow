@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { rowProblems, rowsToShape, shapeToRows, withKind } from '../../../src/views/workflow/inspector/shapeRows';
+import {
+  rowProblems,
+  rowsToShape,
+  shapeToRows,
+  withKind,
+} from '../../../src/views/workflow/inspector/shapeRows';
 
 describe('shapeRows', () => {
   it('reads compact shapes, including both optional markers', () => {
-    expect(shapeToRows({ approved: 'boolean', issues: 'string[]', 'notes?': 'string', score: 'number?' })).toEqual([
+    expect(
+      shapeToRows({ approved: 'boolean', issues: 'string[]', 'notes?': 'string', score: 'number?' }),
+    ).toEqual([
       { key: 'approved', kind: 'boolean', optional: false, spec: 'boolean' },
       { key: 'issues', kind: 'list', optional: false, spec: 'string[]' },
       { key: 'notes', kind: 'string', optional: true, spec: 'string' },
@@ -31,10 +38,12 @@ describe('shapeRows', () => {
 
   it('reports empty and duplicate names', () => {
     const base = { kind: 'string' as const, optional: false, spec: 'string' };
-    expect(rowProblems([{ ...base, key: 'a' }, { ...base, key: '' }, { ...base, key: 'a' }])).toEqual([
-      "The field 'a' is listed twice.",
-      'Enter a field name.',
-      "The field 'a' is listed twice.",
-    ]);
+    expect(
+      rowProblems([
+        { ...base, key: 'a' },
+        { ...base, key: '' },
+        { ...base, key: 'a' },
+      ]),
+    ).toEqual(["The field 'a' is listed twice.", 'Enter a field name.', "The field 'a' is listed twice."]);
   });
 });

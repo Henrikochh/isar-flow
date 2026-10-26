@@ -61,7 +61,9 @@ export function createModelRegistry(deps: ModelRegistryDeps): ModelRegistry {
  * workspace defines with the id of one of the user's endpoints would otherwise receive its stored API key.
  */
 export function readModelSettings(
-  config: Pick<vscode.WorkspaceConfiguration, 'get' | 'inspect'> = vscode.workspace.getConfiguration('isarFlow'),
+  config: Pick<vscode.WorkspaceConfiguration, 'get' | 'inspect'> = vscode.workspace.getConfiguration(
+    'isarFlow',
+  ),
   trusted: boolean = vscode.workspace.isTrusted,
 ): ModelSettings {
   let providers: unknown;

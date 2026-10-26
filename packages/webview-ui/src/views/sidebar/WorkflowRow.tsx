@@ -39,7 +39,12 @@ export function WorkflowRow({
 
   return (
     <div className="sb-row">
-      <button type="button" className="sb-row__main" onClick={() => uri && send({ type: 'openWorkflow', uri })} title={workflow.description || undefined}>
+      <button
+        type="button"
+        className="sb-row__main"
+        onClick={() => uri && send({ type: 'openWorkflow', uri })}
+        title={workflow.description || undefined}
+      >
         <span className={run ? 'sb-tile sb-tile--running' : 'sb-tile'} aria-hidden="true">
           <i className="codicon codicon-pulse" />
         </span>
@@ -93,7 +98,15 @@ export function WorkflowRow({
   );
 }
 
-function RunLine({ workflow, run, now }: { workflow: WorkflowSummary; run: ActiveRunSummary | undefined; now: number }) {
+function RunLine({
+  workflow,
+  run,
+  now,
+}: {
+  workflow: WorkflowSummary;
+  run: ActiveRunSummary | undefined;
+  now: number;
+}) {
   if (run) {
     return (
       <>

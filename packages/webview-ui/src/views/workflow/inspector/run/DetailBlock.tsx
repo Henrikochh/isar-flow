@@ -3,7 +3,15 @@ import { IconButton } from '../../../../components';
 import { useWorkflowActions } from '../../store';
 
 /** Collapsible code block for the rendered prompt / command of a run; shows its first line while closed. */
-export function DetailBlock({ label, text, defaultOpen }: { label: string; text: string; defaultOpen: boolean }) {
+export function DetailBlock({
+  label,
+  text,
+  defaultOpen,
+}: {
+  label: string;
+  text: string;
+  defaultOpen: boolean;
+}) {
   const actions = useWorkflowActions();
   const [open, setOpen] = useState(defaultOpen);
   const bodyId = useId();
@@ -18,7 +26,10 @@ export function DetailBlock({ label, text, defaultOpen }: { label: string; text:
           aria-controls={bodyId}
           onClick={() => setOpen((value) => !value)}
         >
-          <i className={`codicon codicon-chevron-${open ? 'down' : 'right'} wf-insp-chevron`} aria-hidden="true" />
+          <i
+            className={`codicon codicon-chevron-${open ? 'down' : 'right'} wf-insp-chevron`}
+            aria-hidden="true"
+          />
           <span className="wf-detail-label">{label}</span>
           {open ? null : <span className="wf-detail-preview">{firstLine}</span>}
         </button>

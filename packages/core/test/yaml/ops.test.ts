@@ -24,7 +24,11 @@ function ids(text: string): unknown {
   const wf = parseWorkflowText(text).workflow as Workflow;
   const shape = (steps: Workflow['steps']): unknown =>
     steps.map((s) =>
-      s.type === 'loop' ? { [s.id]: shape(s.steps) } : s.type === 'if' ? { [s.id]: { then: shape(s.then), else: shape(s.else ?? []) } } : s.id,
+      s.type === 'loop'
+        ? { [s.id]: shape(s.steps) }
+        : s.type === 'if'
+          ? { [s.id]: { then: shape(s.then), else: shape(s.else ?? []) } }
+          : s.id,
     );
   return shape(wf.steps);
 }
@@ -66,7 +70,10 @@ describe('insertStep', () => {
       target: { parentId: 'check', slot: 'else', index: 0 },
       step: { id: 'leave', type: 'break' },
     });
-    expect(ids(out)).toEqual(['implement', { review_loop: ['tests', 'review', { check: { then: [], else: ['leave'] } }] }]);
+    expect(ids(out)).toEqual([
+      'implement',
+      { review_loop: ['tests', 'review', { check: { then: [], else: ['leave'] } }] },
+    ]);
   });
 
   it('turns an empty flow sequence into a block sequence', () => {
@@ -97,12 +104,20 @@ describe('insertStep', () => {
   it('rejects duplicate ids and unknown parents', () => {
     expect(
       applyWorkflowOps(base, [
-        { op: 'insertStep', target: { parentId: null, slot: 'steps', index: 0 }, step: { id: 'tests', type: 'break' } },
+        {
+          op: 'insertStep',
+          target: { parentId: null, slot: 'steps', index: 0 },
+          step: { id: 'tests', type: 'break' },
+        },
       ]).error,
     ).toMatch(/already exists/);
     expect(
       applyWorkflowOps(base, [
-        { op: 'insertStep', target: { parentId: 'nope', slot: 'steps', index: 0 }, step: { id: 'x', type: 'break' } },
+        {
+          op: 'insertStep',
+          target: { parentId: 'nope', slot: 'steps', index: 0 },
+          step: { id: 'x', type: 'break' },
+        },
       ]).error,
     ).toMatch(/not found/);
   });
@@ -119,13 +134,21 @@ describe('insertStep', () => {
 
 describe('moveStep', () => {
   it('moves within the same list using pre-move insertion indexes', () => {
-    const out = apply(base, { op: 'moveStep', stepId: 'implement', target: { parentId: null, slot: 'steps', index: 2 } });
+    const out = apply(base, {
+      op: 'moveStep',
+      stepId: 'implement',
+      target: { parentId: null, slot: 'steps', index: 2 },
+    });
     expect(ids(out)).toEqual([{ review_loop: ['tests', 'review'] }, 'implement']);
     expect(out).toContain('# First, let the coder implement the task.');
   });
 
   it('moves between containers', () => {
-    const out = apply(base, { op: 'moveStep', stepId: 'tests', target: { parentId: null, slot: 'steps', index: 0 } });
+    const out = apply(base, {
+      op: 'moveStep',
+      stepId: 'tests',
+      target: { parentId: null, slot: 'steps', index: 0 },
+    });
     expect(ids(out)).toEqual(['tests', 'implement', { review_loop: ['review'] }]);
   });
 
@@ -186,12 +209,16 @@ describe('updateStep, renameStep, updateWorkflow', () => {
       set: { name: 'Unit tests', timeout: 300 },
       unset: ['continueOnError'],
     });
-    expect(out).toContain('- id: tests\n        name: Unit tests\n        type: console\n        run: npm test\n        timeout: 300\n');
+    expect(out).toContain(
+      '- id: tests\n        name: Unit tests\n        type: console\n        run: npm test\n        timeout: 300\n',
+    );
     expect(out).not.toContain('continueOnError');
   });
 
   it('refuses to change ids through updateStep', () => {
-    expect(applyWorkflowOps(base, [{ op: 'updateStep', stepId: 'tests', set: { id: 'x' } }]).error).toMatch(/renameStep/);
+    expect(applyWorkflowOps(base, [{ op: 'updateStep', stepId: 'tests', set: { id: 'x' } }]).error).toMatch(
+      /renameStep/,
+    );
   });
 
   it('renames and rewrites references', () => {
@@ -204,8 +231,12 @@ describe('updateStep, renameStep, updateWorkflow', () => {
   });
 
   it('validates new ids on rename', () => {
-    expect(applyWorkflowOps(base, [{ op: 'renameStep', stepId: 'tests', newId: 'review' }]).error).toMatch(/already exists/);
-    expect(applyWorkflowOps(base, [{ op: 'renameStep', stepId: 'tests', newId: '9x' }]).error).toMatch(/start with/);
+    expect(applyWorkflowOps(base, [{ op: 'renameStep', stepId: 'tests', newId: 'review' }]).error).toMatch(
+      /already exists/,
+    );
+    expect(applyWorkflowOps(base, [{ op: 'renameStep', stepId: 'tests', newId: '9x' }]).error).toMatch(
+      /start with/,
+    );
   });
 
   it('updates workflow fields', () => {
@@ -227,11 +258,18 @@ describe('helpers', () => {
   it('nextStepId picks the smallest free number', () => {
     const wf = parseWorkflowText(base).workflow as Workflow;
     expect(nextStepId(wf, 'agent')).toBe('agent_1');
-    expect(nextStepId({ ...wf, steps: [...wf.steps, { id: 'agent_1', type: 'break' }] }, 'agent')).toBe('agent_2');
+    expect(nextStepId({ ...wf, steps: [...wf.steps, { id: 'agent_1', type: 'break' }] }, 'agent')).toBe(
+      'agent_2',
+    );
   });
 
   it('createDefaultStep produces schema-shaped blocks', () => {
-    expect(createDefaultStep('loop', 'loop_1')).toEqual({ id: 'loop_1', type: 'loop', maxIterations: 5, steps: [] });
+    expect(createDefaultStep('loop', 'loop_1')).toEqual({
+      id: 'loop_1',
+      type: 'loop',
+      maxIterations: 5,
+      steps: [],
+    });
     expect(createDefaultStep('if', 'if_1')).toMatchObject({ type: 'if', then: [], else: [] });
   });
 

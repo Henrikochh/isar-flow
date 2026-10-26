@@ -57,11 +57,18 @@ const FUNCTIONS: Record<string, { fn: Fn; signature: string; description: string
   },
   lower: { signature: 'lower(text)', description: 'Lowercase text.', fn: (text) => str(text).toLowerCase() },
   upper: { signature: 'upper(text)', description: 'Uppercase text.', fn: (text) => str(text).toUpperCase() },
-  trim: { signature: 'trim(text)', description: 'Text without surrounding whitespace.', fn: (text) => str(text).trim() },
+  trim: {
+    signature: 'trim(text)',
+    description: 'Text without surrounding whitespace.',
+    fn: (text) => str(text).trim(),
+  },
   head: {
     signature: 'head(text, n)',
     description: 'First n lines of a text.',
-    fn: (text, n) => splitLines(str(text)).slice(0, Math.max(0, toNumber(n))).join('\n'),
+    fn: (text, n) =>
+      splitLines(str(text))
+        .slice(0, Math.max(0, toNumber(n)))
+        .join('\n'),
   },
   tail: {
     signature: 'tail(text, n)',
@@ -71,7 +78,11 @@ const FUNCTIONS: Record<string, { fn: Fn; signature: string; description: string
       return count === 0 ? '' : splitLines(str(text)).slice(-count).join('\n');
     },
   },
-  lines: { signature: 'lines(text)', description: 'List of lines in a text.', fn: (text) => splitLines(str(text)) },
+  lines: {
+    signature: 'lines(text)',
+    description: 'List of lines in a text.',
+    fn: (text) => splitLines(str(text)),
+  },
   json: {
     signature: 'json(text)',
     description: 'Parses JSON text into a value.',
@@ -92,14 +103,20 @@ const FUNCTIONS: Record<string, { fn: Fn; signature: string; description: string
     signature: 'join(list, separator?)',
     description: 'Joins list items into one text.',
     fn: (list, separator) =>
-      Array.isArray(list) ? list.map((item) => str(item)).join(separator == null ? ', ' : str(separator)) : str(list),
+      Array.isArray(list)
+        ? list.map((item) => str(item)).join(separator == null ? ', ' : str(separator))
+        : str(list),
   },
   default: {
     signature: 'default(value, fallback)',
     description: 'The value, or the fallback when it is empty.',
     fn: (value, fallback) => (value == null || value === '' ? fallback : value),
   },
-  number: { signature: 'number(value)', description: 'Converts to a number.', fn: (value) => toNumber(value) },
+  number: {
+    signature: 'number(value)',
+    description: 'Converts to a number.',
+    fn: (value) => toNumber(value),
+  },
   string: { signature: 'string(value)', description: 'Converts to text.', fn: (value) => str(value) },
 };
 

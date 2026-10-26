@@ -1,5 +1,11 @@
 import { useMemo } from 'react';
-import { availableVariables, listBlocks, type OutputType, type StepType, type VariableInfo } from '@isar-flow/core';
+import {
+  availableVariables,
+  listBlocks,
+  type OutputType,
+  type StepType,
+  type VariableInfo,
+} from '@isar-flow/core';
 import { useWorkflowState } from '../store';
 import { isStepType } from './model';
 

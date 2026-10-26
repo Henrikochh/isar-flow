@@ -85,8 +85,10 @@
   --sb-row-bg: var(--if-hover);
   --sb-reveal: 1;
 }
+/* Hidden (shadowed) agents: the stone fades and the name turns muted; the Hidden chip says why. Text keeps 4.5:1. */
 .sb-row--dimmed {
-  opacity: 0.62;
+  --if-stone-opacity: 0.45;
+  --sb-title-color: var(--if-muted);
 }
 
 .sb-row__main {
@@ -122,7 +124,7 @@
   min-width: 0;
   font-weight: 600;
   line-height: 20px;
-  color: var(--if-fg);
+  color: var(--sb-title-color, var(--if-fg));
 }
 
 .sb-row__name {
@@ -196,9 +198,7 @@
   gap: 2px;
   padding-left: 14px;
   border-radius: 6px;
-  background:
-    linear-gradient(var(--sb-row-bg), var(--sb-row-bg)),
-    var(--if-surface-sunken);
+  background: linear-gradient(var(--sb-row-bg), var(--sb-row-bg)), var(--if-surface-sunken);
   -webkit-mask-image: linear-gradient(to right, transparent, #000 14px);
   mask-image: linear-gradient(to right, transparent, #000 14px);
   opacity: var(--sb-reveal, 0);
@@ -294,11 +294,7 @@
   background: var(--if-surface-sunken);
 }
 
-/* ---------- high contrast: no dimming (the Hidden chip says it); hover shows an outline instead of a fill ---------- */
-body.vscode-high-contrast .sb-row--dimmed,
-body.vscode-high-contrast-light .sb-row--dimmed {
-  opacity: 1;
-}
+/* ---------- high contrast: hover shows an outline instead of a fill ---------- */
 body.vscode-high-contrast .sb-row:hover,
 body.vscode-high-contrast-light .sb-row:hover {
   outline: 1px dashed var(--vscode-contrastActiveBorder, var(--if-focus));

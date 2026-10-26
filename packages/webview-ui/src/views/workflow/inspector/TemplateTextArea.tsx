@@ -55,7 +55,12 @@ export const TemplateTextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(f
     <div className="wf-hl">
       <div
         ref={mirrorRef}
-        className={['if-textarea', code && 'if-textarea--code', 'wf-hl-mirror', scrolls && 'wf-hl-mirror--scroll']
+        className={[
+          'if-textarea',
+          code && 'if-textarea--code',
+          'wf-hl-mirror',
+          scrolls && 'wf-hl-mirror--scroll',
+        ]
           .filter(Boolean)
           .join(' ')}
         aria-hidden="true"

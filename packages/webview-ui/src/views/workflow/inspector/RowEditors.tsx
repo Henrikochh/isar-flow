@@ -68,7 +68,11 @@ export function KeyValueEditor({
               onChange={(event) => draft.update(index, { value: event.target.value })}
               onBlur={draft.flush}
             />
-            <IconButton icon="trash" label={`Remove ${noun} ${row.key || index + 1}`} onClick={() => draft.remove(index)} />
+            <IconButton
+              icon="trash"
+              label={`Remove ${noun} ${row.key || index + 1}`}
+              onClick={() => draft.remove(index)}
+            />
           </div>
           {problems[index] ? (
             <div className="if-field__error">
@@ -79,10 +83,15 @@ export function KeyValueEditor({
         </div>
       ))}
       <div>
-        <Button size="s" variant="ghost" icon="add" onClick={() => {
+        <Button
+          size="s"
+          variant="ghost"
+          icon="add"
+          onClick={() => {
             focus.markAdded();
             draft.add({ key: '', value: '' });
-          }}>
+          }}
+        >
           {addLabel}
         </Button>
       </div>
@@ -125,14 +134,23 @@ export function ListEditor({
             onChange={(event) => draft.update(index, { value: event.target.value })}
             onBlur={draft.flush}
           />
-          <IconButton icon="trash" label={`Remove ${noun} ${row.value || index + 1}`} onClick={() => draft.remove(index)} />
+          <IconButton
+            icon="trash"
+            label={`Remove ${noun} ${row.value || index + 1}`}
+            onClick={() => draft.remove(index)}
+          />
         </div>
       ))}
       <div>
-        <Button size="s" variant="ghost" icon="add" onClick={() => {
+        <Button
+          size="s"
+          variant="ghost"
+          icon="add"
+          onClick={() => {
             focus.markAdded();
             draft.add({ value: '' });
-          }}>
+          }}
+        >
           {addLabel}
         </Button>
       </div>

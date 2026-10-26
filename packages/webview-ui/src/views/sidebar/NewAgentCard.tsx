@@ -38,7 +38,9 @@ function nameError(draft: AgentDraft, agents: readonly AgentSummary[]): string |
   if (!name) return 'Enter a name for the agent.';
   const slug = slugOf(name);
   const clash = agents.find(
-    (agent) => agent.scope === draft.scope && (agentLabel(agent).toLowerCase() === name.toLowerCase() || (slug !== '' && agent.id === slug)),
+    (agent) =>
+      agent.scope === draft.scope &&
+      (agentLabel(agent).toLowerCase() === name.toLowerCase() || (slug !== '' && agent.id === slug)),
   );
   if (!clash) return undefined;
   return draft.scope === 'user'
@@ -109,12 +111,24 @@ export function NewAgentCard({
       </Field>
       <div className="if-field">
         <span className="if-field__label">Starter</span>
-        <SegmentedControl label="Starter" full value={draft.starter} options={STARTER_OPTIONS} onChange={pickStarter} />
+        <SegmentedControl
+          label="Starter"
+          full
+          value={draft.starter}
+          options={STARTER_OPTIONS}
+          onChange={pickStarter}
+        />
         <span className="if-field__hint">{STARTER_HINTS[draft.starter]}</span>
       </div>
       <div className="if-field">
         <span className="if-field__label">Scope</span>
-        <SegmentedControl label="Scope" full value={draft.scope} options={SCOPE_OPTIONS} onChange={(scope) => onChange({ ...draft, scope })} />
+        <SegmentedControl
+          label="Scope"
+          full
+          value={draft.scope}
+          options={SCOPE_OPTIONS}
+          onChange={(scope) => onChange({ ...draft, scope })}
+        />
         <span className="if-field__hint">{SCOPE_HINTS[draft.scope]}</span>
       </div>
       <div className="sb-create__actions">

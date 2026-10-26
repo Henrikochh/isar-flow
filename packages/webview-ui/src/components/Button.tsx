@@ -12,10 +12,22 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = 'secondary', size = 'm', icon, loading, className, children, type = 'button', disabled, ...rest },
+  {
+    variant = 'secondary',
+    size = 'm',
+    icon,
+    loading,
+    className,
+    children,
+    type = 'button',
+    disabled,
+    ...rest
+  },
   ref,
 ) {
-  const classes = ['if-btn', `if-btn--${variant}`, size === 's' && 'if-btn--s', className].filter(Boolean).join(' ');
+  const classes = ['if-btn', `if-btn--${variant}`, size === 's' && 'if-btn--s', className]
+    .filter(Boolean)
+    .join(' ');
   return (
     <button ref={ref} type={type} className={classes} disabled={disabled || loading} {...rest}>
       {loading ? <Spinner /> : icon ? <i className={`codicon codicon-${icon}`} aria-hidden="true" /> : null}
@@ -36,11 +48,24 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
   { icon, label, active, size = 'm', className, type = 'button', ...rest },
   ref,
 ) {
-  const classes = ['if-icon-btn', active && 'if-icon-btn--active', size === 'l' && 'if-icon-btn--l', className]
+  const classes = [
+    'if-icon-btn',
+    active && 'if-icon-btn--active',
+    size === 'l' && 'if-icon-btn--l',
+    className,
+  ]
     .filter(Boolean)
     .join(' ');
   return (
-    <button ref={ref} type={type} className={classes} aria-label={label} title={label} aria-pressed={active} {...rest}>
+    <button
+      ref={ref}
+      type={type}
+      className={classes}
+      aria-label={label}
+      title={label}
+      aria-pressed={active}
+      {...rest}
+    >
       <i className={`codicon codicon-${icon}`} aria-hidden="true" />
     </button>
   );

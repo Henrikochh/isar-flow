@@ -65,6 +65,11 @@
   --if-river: color-mix(in srgb, var(--if-isar) 62%, transparent);
   --if-river-width: 3px;
   --if-wash-strength: 16%;
+  /*
+   * Text in a palette color on a wash of that color (toned chips, badges, pills) takes this much of the tone and
+   * the rest from --if-fg, so it keeps 4.5:1 on its wash: color-mix(in srgb, var(--tone) var(--if-ink-strength), var(--if-fg)).
+   */
+  --if-ink-strength: 100%;
 
   --if-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --if-duration: 160ms;
@@ -85,6 +90,7 @@ body.vscode-light {
   --if-almgruen: #2f7d3b;
   --if-on-isar: #ffffff;
   --if-wash-strength: 11%;
+  --if-ink-strength: 72%;
   --if-river: color-mix(in srgb, var(--if-isar) 55%, transparent);
 }
 

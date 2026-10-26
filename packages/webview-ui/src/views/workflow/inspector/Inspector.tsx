@@ -55,7 +55,8 @@ export function Inspector() {
   }, [runId]);
 
   // Keeps the panel (and its slide-in) stable when the selected block is only renamed.
-  const panelKey = selection && alias.current?.to === selection ? alias.current.from : (selection ?? 'workflow');
+  const panelKey =
+    selection && alias.current?.to === selection ? alias.current.from : (selection ?? 'workflow');
   const asideRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (asideRef.current) asideRef.current.scrollTop = 0;
@@ -105,7 +106,11 @@ export function Inspector() {
             ]}
           />
         </div>
-        {workflowTab === 'run' ? <RunSummary run={run} live={runLive} workflow={workflow} /> : <WorkflowPanel withHeader={false} />}
+        {workflowTab === 'run' ? (
+          <RunSummary run={run} live={runLive} workflow={workflow} />
+        ) : (
+          <WorkflowPanel withHeader={false} />
+        )}
       </>
     );
   } else {
@@ -166,7 +171,11 @@ function BlockPanel({
           </div>
         ) : null}
       </div>
-      {showOutput ? <RunOutput block={block} stepId={stepId} run={run} /> : <BlockSettings block={block} stepId={stepId} />}
+      {showOutput ? (
+        <RunOutput block={block} stepId={stepId} run={run} />
+      ) : (
+        <BlockSettings block={block} stepId={stepId} />
+      )}
     </>
   );
 }

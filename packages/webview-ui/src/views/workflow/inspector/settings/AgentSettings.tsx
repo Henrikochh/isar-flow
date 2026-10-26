@@ -59,12 +59,20 @@ export function AgentSettings(props: SettingsProps) {
       label: agentId,
       description: loading ? 'Loading agents…' : 'No agent file with this id',
       leading: loading ? undefined : (
-        <i className="codicon codicon-warning wf-insp-option-icon wf-insp-option-icon--warn" aria-hidden="true" />
+        <i
+          className="codicon codicon-warning wf-insp-option-icon wf-insp-option-icon--warn"
+          aria-hidden="true"
+        />
       ),
     });
   }
   if (inline) {
-    options.push({ value: INLINE_AGENT, label: 'Inline agent settings', description: 'Defined in this block in the YAML', disabled: true });
+    options.push({
+      value: INLINE_AGENT,
+      label: 'Inline agent settings',
+      description: 'Defined in this block in the YAML',
+      disabled: true,
+    });
   }
 
   // Without an agent or a model, validation reports agent-missing at the Agent field.
@@ -76,32 +84,43 @@ export function AgentSettings(props: SettingsProps) {
 
   return (
     <>
-      <Field label="Agent" {...issueProps(props.issues.get('agent'), undefined, inline ? 'This block defines its agent inline. Edit it in YAML.' : undefined)}>
+      <Field
+        label="Agent"
+        {...issueProps(
+          props.issues.get('agent'),
+          undefined,
+          inline ? 'This block defines its agent inline. Edit it in YAML.' : undefined,
+        )}
+      >
         {({ id, describedBy, invalid }) => (
           <div className="wf-insp-inline">
             <div className="wf-insp-grow">
-            <Select
-              id={id}
-              describedBy={describedBy}
-              invalid={invalid}
-              value={inline ? INLINE_AGENT : (agentId ?? NO_AGENT)}
-              options={options}
-              searchable={options.length > 7}
-              onChange={(value) => {
-                if (value === NO_AGENT) update({}, ['agent']);
-                else if (value !== INLINE_AGENT) update({ agent: value });
-              }}
-              footer={
-                <div className="wf-insp-select-footer">
-                  <Button size="s" variant="ghost" icon="add" onClick={() => actions.createAgent()}>
-                    New agent
-                  </Button>
-                </div>
-              }
-            />
+              <Select
+                id={id}
+                describedBy={describedBy}
+                invalid={invalid}
+                value={inline ? INLINE_AGENT : (agentId ?? NO_AGENT)}
+                options={options}
+                searchable={options.length > 7}
+                onChange={(value) => {
+                  if (value === NO_AGENT) update({}, ['agent']);
+                  else if (value !== INLINE_AGENT) update({ agent: value });
+                }}
+                footer={
+                  <div className="wf-insp-select-footer">
+                    <Button size="s" variant="ghost" icon="add" onClick={() => actions.createAgent()}>
+                      New agent
+                    </Button>
+                  </div>
+                }
+              />
             </div>
             {agent ? (
-              <IconButton icon="go-to-file" label={`Open ${agent.name}`} onClick={() => actions.openAgent(agent.id)} />
+              <IconButton
+                icon="go-to-file"
+                label={`Open ${agent.name}`}
+                onClick={() => actions.openAgent(agent.id)}
+              />
             ) : null}
           </div>
         )}
@@ -152,13 +171,18 @@ export function AgentSettings(props: SettingsProps) {
       </Group>
 
       {format === 'json' ? (
-        <Group label="JSON fields" description="The agent is asked to answer in this shape. Later blocks read the fields.">
+        <Group
+          label="JSON fields"
+          description="The agent is asked to answer in this shape. Later blocks read the fields."
+        >
           <JsonFieldsEditor
             schema={output?.schema}
             issues={issues.get('output')}
             onShowYaml={() => actions.openYaml(stepId)}
             onCommit={(shape) =>
-              update({ output: Object.keys(shape).length ? { format: 'json', schema: shape } : { format: 'json' } })
+              update({
+                output: Object.keys(shape).length ? { format: 'json', schema: shape } : { format: 'json' },
+              })
             }
           />
         </Group>
@@ -170,11 +194,17 @@ export function AgentSettings(props: SettingsProps) {
           label="Remember the conversation between loop iterations"
           onChange={(checked) => setOrUnset(update, 'session', checked ? 'continue' : undefined)}
         />
-        {isInsideLoop(block) ? null : <div className="if-field__hint wf-insp-switch-hint">Only has an effect inside a loop.</div>}
+        {isInsideLoop(block) ? null : (
+          <div className="if-field__hint wf-insp-switch-hint">Only has an effect inside a loop.</div>
+        )}
         <FieldIssues issues={issues.get('session')} />
       </div>
 
-      <Group label="Context files" description="Files matching these patterns are attached to the task." issues={issues.get('context')}>
+      <Group
+        label="Context files"
+        description="Files matching these patterns are attached to the task."
+        issues={issues.get('context')}
+      >
         <ListEditor
           values={asStringList(context?.files)}
           noun="File pattern"

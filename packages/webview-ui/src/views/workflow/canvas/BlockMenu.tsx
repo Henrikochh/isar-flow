@@ -91,9 +91,22 @@ export function BlockMenu({
   onClose: () => void;
 }) {
   return (
-    <Popover open={request !== null} anchorRef={anchorRef} onClose={onClose} label="Block actions" role="none" width={264}>
+    <Popover
+      open={request !== null}
+      anchorRef={anchorRef}
+      onClose={onClose}
+      label="Block actions"
+      role="none"
+      width={264}
+    >
       {request ? (
-        <BlockMenuContent key={request.seq} stepId={request.stepId} workflow={workflow} actions={actions} onClose={onClose} />
+        <BlockMenuContent
+          key={request.seq}
+          stepId={request.stepId}
+          workflow={workflow}
+          actions={actions}
+          onClose={onClose}
+        />
       ) : null}
     </Popover>
   );

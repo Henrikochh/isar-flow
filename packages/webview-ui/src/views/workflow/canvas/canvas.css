@@ -470,6 +470,37 @@
   border-color: var(--if-border-strong);
 }
 
+/* Break: a compact pill on the river. Before the state rules below, which it shares with the cards. */
+.wf-pill {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px 0 6px;
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-pill);
+  background: var(--if-surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--if-shadow) 60%, transparent);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color var(--if-duration) var(--if-ease),
+    opacity var(--if-duration) var(--if-ease);
+}
+
+.wf-pill:hover {
+  border-color: var(--if-border-strong);
+}
+
+.wf-pill__label {
+  font-family: var(--if-font-display);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .wf-card:focus-visible,
 .wf-pill:focus-visible,
 .wf-loop__head:focus-visible {
@@ -512,11 +543,23 @@
   }
 }
 
+/*
+ * Skipped (in an If branch the run did not take): the frame goes hollow and dashed, the stone fades and the title
+ * turns muted. Text is never faded, so it keeps 4.5:1; the status glyph says "Skipped".
+ */
 .wf-card--skipped,
-.wf-pill--skipped,
-.wf-loop--skipped,
+.wf-pill--skipped {
+  --if-stone-opacity: 0.45;
+  border-style: dashed;
+  border-color: var(--if-border-strong);
+  background: transparent;
+  box-shadow: none;
+  color: var(--if-muted);
+}
+
+/* A skipped If: its header and lane blocks are skipped cards; the gravel bank fades with the arms. */
 .wf-if--skipped {
-  opacity: 0.55;
+  --wf-bank-opacity: 0.45;
 }
 
 .wf-card--dragging,
@@ -720,7 +763,7 @@
   padding: 0 7px 0 5px;
   border-radius: var(--if-radius-pill);
   background: color-mix(in srgb, var(--tone) 16%, transparent);
-  color: var(--tone);
+  color: color-mix(in srgb, var(--tone) var(--if-ink-strength), var(--if-fg));
   font-size: var(--if-text-xs);
   font-weight: 700;
 }
@@ -751,37 +794,6 @@
   pointer-events: none;
 }
 
-/* Break: a compact pill on the river */
-.wf-pill {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 12px 0 6px;
-  border: 1px solid var(--if-border);
-  border-radius: var(--if-radius-pill);
-  background: var(--if-surface);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--if-shadow) 60%, transparent);
-  cursor: pointer;
-  user-select: none;
-  transition:
-    border-color var(--if-duration) var(--if-ease),
-    opacity var(--if-duration) var(--if-ease);
-}
-
-.wf-pill:hover {
-  border-color: var(--if-border-strong);
-}
-
-.wf-pill__label {
-  font-family: var(--if-font-display);
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
 /* ---------- Loop: frame, header and eddy ---------- */
 
 .wf-loop {
@@ -804,6 +816,13 @@
 
 .wf-loop--running {
   border-color: color-mix(in srgb, var(--if-enzian) 65%, transparent);
+}
+
+/* Skipped (see the cards): a dashed frame, a faded stone and a muted title; the blocks inside are skipped cards. */
+.wf-loop--skipped {
+  --if-stone-opacity: 0.45;
+  border-style: dashed;
+  color: var(--if-muted);
 }
 
 .wf-loop__head {
@@ -887,6 +906,8 @@
   position: sticky;
   right: 12px;
   flex: none;
+  /* As tall as the header, so the header color covers the summary line too, not only the chips' own row. */
+  align-self: stretch;
   margin-left: auto;
   display: flex;
   align-items: center;
@@ -919,7 +940,8 @@
   padding: 0 8px;
   border-radius: var(--if-radius-pill);
   background: color-mix(in srgb, var(--if-enzian) 16%, transparent);
-  color: var(--if-enzian);
+  /* On the loop head's own enzian wash, so it leans further to the text color than other toned chips. */
+  color: color-mix(in srgb, var(--if-enzian) min(var(--if-ink-strength), 80%), var(--if-fg));
   font-size: var(--if-text-xs);
   font-weight: 700;
   white-space: nowrap;
@@ -1239,6 +1261,7 @@
   bottom: 30px;
   left: calc(50% - 15px);
   width: 30px;
+  opacity: var(--wf-bank-opacity, 1);
 }
 
 .wf-bank__shape {
@@ -1359,7 +1382,6 @@ body.vscode-high-contrast .wf-canvas,
 body.vscode-high-contrast-light .wf-canvas {
   --wf-river-solid: var(--if-isar);
 }
-
 
 body.vscode-high-contrast .wf-card,
 body.vscode-high-contrast-light .wf-card,

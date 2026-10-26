@@ -61,13 +61,20 @@ describe('SidebarApp', () => {
 
   it('shows the restricted-mode banner and disables running', () => {
     renderSidebar({ trusted: false, tab: 'workflows' });
-    expect(screen.getByRole('status')).toHaveTextContent('Running is disabled until you trust this workspace.');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Running is disabled until you trust this workspace.',
+    );
     expect(screen.getByRole('button', { name: 'Run Review until approved' })).toBeDisabled();
   });
 
   it('survives a host state with missing lists', () => {
     render(<SidebarApp />);
-    const partial = { ...makeState(), agents: undefined, workflows: undefined, recentRuns: undefined } as unknown as ReturnType<typeof makeState>;
+    const partial = {
+      ...makeState(),
+      agents: undefined,
+      workflows: undefined,
+      recentRuns: undefined,
+    } as unknown as ReturnType<typeof makeState>;
     sendState(partial);
     expect(screen.getByText('No agents yet')).toBeInTheDocument();
   });

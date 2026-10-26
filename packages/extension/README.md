@@ -200,15 +200,18 @@ before you run them.
 
 - **Workspace Trust**: workflows and agents can be viewed and edited in Restricted Mode, but nothing runs,
   and only your user model endpoints are used.
-- **Console commands**: before a workflow runs commands you have not approved yet, Isar Flow lists them (with
-  their shell, folder and environment) and asks. A changed command needs approval again. Only your user
-  settings can turn this off (`isarFlow.confirmCommands`).
+- **Run confirmation**: before a workflow runs console commands or agents that can change your workspace
+  without asking, and you have not approved them yet, Isar Flow lists them and asks. The list shows commands
+  with their shell, folder and environment, and agents with `edits` or `commands` set to `auto` (and a tool
+  that uses it) with what they may do. A changed command or a change to such an agent's tools or permissions
+  needs approval again. Only your user settings can turn this off (`isarFlow.confirmCommands`).
 - **Templates are not escaped**: `${{ }}` values (inputs, block outputs including model answers, env and
   secrets) are pasted into a console block's command line, folder and environment as they are, and the
   confirmation shows the template, not the rendered command. Pass user input and agent output through `env`
   and quote it in the shell instead of putting it into the command line.
-- **Agent permissions**: the command confirmation covers console blocks only. Agents with `edits` or
-  `commands` set to `auto` act without asking, and a workflow from a repository can use such agents.
+- **Agent permissions**: once you run a workflow, agents with `edits` or `commands` set to `auto` act without
+  asking, and a workflow from a repository can use such agents. Read the confirmation list before you run
+  workflows written by others.
 - **Agent tools** only reach files inside the workflow's workspace folder, checked after resolving links,
   junctions and Windows short names; nothing inside `.git` can be written. Within that folder agents can
   read every file, including `.env` files, and send it to the model provider.
@@ -230,7 +233,7 @@ before you run them.
 | `isarFlow.vscodeModels`    | `true`  | Offer the language models available in VS Code.                                                                     |
 | `isarFlow.defaultShell`    | `auto`  | Shell for console blocks without `shell` and for agent commands: PowerShell on Windows, your login shell elsewhere. |
 | `isarFlow.maxTokensPerRun` | `0`     | Stop a run after this many tokens. `0` means no limit.                                                              |
-| `isarFlow.confirmCommands` | `true`  | Ask before running console commands you have not approved. User settings only.                                      |
+| `isarFlow.confirmCommands` | `true`  | Ask before running console commands or agents that act without asking, until you approve them. User settings only. |
 | `isarFlow.historyLimit`    | `50`    | Runs kept per workflow (1–500).                                                                                     |
 
 ## Troubleshooting

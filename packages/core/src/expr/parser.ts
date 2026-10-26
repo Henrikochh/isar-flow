@@ -132,7 +132,8 @@ class Parser {
       case 'string':
         return { kind: 'literal', value: t.value, start: t.start };
       case 'ident': {
-        if (t.value === 'true' || t.value === 'false') return { kind: 'literal', value: t.value === 'true', start: t.start };
+        if (t.value === 'true' || t.value === 'false')
+          return { kind: 'literal', value: t.value === 'true', start: t.start };
         if (t.value === 'null') return { kind: 'literal', value: null, start: t.start };
         if (this.isPunct('(')) {
           this.next();

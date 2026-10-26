@@ -27,7 +27,11 @@ describe('ConditionBuilder rules', () => {
     renderInspector({ selection: 'review_loop' });
     choose('Rule 1 operator', 'is empty');
     expect(sentOps()).toEqual([
-      { op: 'updateStep', stepId: 'review_loop', set: { until: { all: [{ value: EXIT.value, op: 'isEmpty' }, APPROVED] } } },
+      {
+        op: 'updateStep',
+        stepId: 'review_loop',
+        set: { until: { all: [{ value: EXIT.value, op: 'isEmpty' }, APPROVED] } },
+      },
     ]);
   });
 
@@ -40,7 +44,11 @@ describe('ConditionBuilder rules', () => {
     fireEvent.blur(operand);
     expect(sentOps()).toEqual([
       { op: 'updateStep', stepId: 'review_loop', set: { until: { all: [{ ...EXIT, to: 2 }, APPROVED] } } },
-      { op: 'updateStep', stepId: 'review_loop', set: { until: { all: [{ ...EXIT, to: 'flaky' }, APPROVED] } } },
+      {
+        op: 'updateStep',
+        stepId: 'review_loop',
+        set: { until: { all: [{ ...EXIT, to: 'flaky' }, APPROVED] } },
+      },
     ]);
   });
 
@@ -112,7 +120,11 @@ describe('ConditionBuilder rules', () => {
     expect(sentOps()).toEqual([]);
     choose('Rule 1 value', /^tests › exitCode/);
     expect(sentOps()).toEqual([
-      { op: 'updateStep', stepId: 'needs_fix', set: { condition: { value: '${{ steps.tests.exitCode }}', op: 'gte', to: 1 } } },
+      {
+        op: 'updateStep',
+        stepId: 'needs_fix',
+        set: { condition: { value: '${{ steps.tests.exitCode }}', op: 'gte', to: 1 } },
+      },
     ]);
   });
 });
@@ -158,7 +170,9 @@ describe('ConditionBuilder expressions', () => {
   it('prefills the expression editor from rules without writing', () => {
     renderInspector({ selection: 'review_loop' });
     fireEvent.click(screen.getByRole('radio', { name: 'Expression' }));
-    expect(screen.getByLabelText('Expression')).toHaveValue('steps.tests.exitCode == 0 && steps.review.json.approved');
+    expect(screen.getByLabelText('Expression')).toHaveValue(
+      'steps.tests.exitCode == 0 && steps.review.json.approved',
+    );
     expect(sentOps()).toEqual([]);
   });
 
@@ -182,7 +196,9 @@ describe('ConditionBuilder expressions', () => {
     );
     renderInspector({ doc: docFor(text), selection: 'review_loop' });
     expect(screen.getByText('This condition has nested groups. Edit it in YAML.')).toBeInTheDocument();
-    expect(screen.getByText(/tests\.exitCode = 0 and \(review\.json\.approved is true or loop\.iteration > 3\)/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/tests\.exitCode = 0 and \(review\.json\.approved is true or loop\.iteration > 3\)/),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open YAML' }));
     expect(posted()).toContainEqual({ type: 'openYaml', stepId: 'review_loop' });
   });

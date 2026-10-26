@@ -9,13 +9,38 @@ export interface StepTypeInfo {
 }
 
 export const STEP_TYPE_INFO: Record<StepType, StepTypeInfo> = {
-  agent: { type: 'agent', label: 'Agent', description: 'Give an agent a task and use its answer.', container: false },
-  console: { type: 'console', label: 'Console', description: 'Run a command and capture its output.', container: false },
-  loop: { type: 'loop', label: 'Loop', description: 'Repeat blocks until a condition is met.', container: true },
-  if: { type: 'if', label: 'If / else', description: 'Branch on exit codes or answer contents.', container: true },
+  agent: {
+    type: 'agent',
+    label: 'Agent',
+    description: 'Give an agent a task and use its answer.',
+    container: false,
+  },
+  console: {
+    type: 'console',
+    label: 'Console',
+    description: 'Run a command and capture its output.',
+    container: false,
+  },
+  loop: {
+    type: 'loop',
+    label: 'Loop',
+    description: 'Repeat blocks until a condition is met.',
+    container: true,
+  },
+  if: {
+    type: 'if',
+    label: 'If / else',
+    description: 'Branch on exit codes or answer contents.',
+    container: true,
+  },
   break: { type: 'break', label: 'Break', description: 'Leave the surrounding loop.', container: false },
   stop: { type: 'stop', label: 'Stop', description: 'End the run as succeeded or failed.', container: false },
-  approval: { type: 'approval', label: 'Approval', description: 'Pause until you approve or reject.', container: false },
+  approval: {
+    type: 'approval',
+    label: 'Approval',
+    description: 'Pause until you approve or reject.',
+    container: false,
+  },
 };
 
 export const STEP_TYPES = Object.keys(STEP_TYPE_INFO) as StepType[];
@@ -28,10 +53,11 @@ export interface StepChildList {
 /** Nested step lists of a container block (empty for leaf blocks). */
 export function stepChildren(step: Step): StepChildList[] {
   if (step.type === 'loop') return [{ slot: 'steps', steps: step.steps ?? [] }];
-  if (step.type === 'if') return [
-    { slot: 'then', steps: step.then ?? [] },
-    { slot: 'else', steps: step.else ?? [] },
-  ];
+  if (step.type === 'if')
+    return [
+      { slot: 'then', steps: step.then ?? [] },
+      { slot: 'else', steps: step.else ?? [] },
+    ];
   return [];
 }
 

@@ -8,6 +8,7 @@
  *
  * Output: packages/webview-ui/visual-output/<view>-<name or scenario>-<theme>.png
  * A shot with `act` interacts with the page (e.g. opens a menu) before the screenshot; `name` tells it apart.
+ * Locale and time zone are pinned (en-US, Europe/Zurich) so dates and times read the same on every machine.
  */
 import { mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
@@ -37,6 +38,9 @@ const SHOTS = [
   { view: 'sidebar', scenario: 'newworkflow', width: 340, height: 900 },
   { view: 'sidebar', scenario: 'narrow-messy', width: 240, height: 1000 },
   { view: 'sidebar', scenario: 'narrow-messy-workflows', width: 240, height: 820 },
+  // Very long agent and workflow names, ids and paths at the narrowest width.
+  { view: 'sidebar', scenario: 'narrow-long', width: 240, height: 900 },
+  { view: 'sidebar', scenario: 'narrow-long-workflows', width: 240, height: 900 },
   { view: 'workflow', scenario: 'default', width: 1440, height: 900 },
   { view: 'workflow', scenario: 'selected', width: 1440, height: 900 },
   { view: 'workflow', scenario: 'running', width: 1440, height: 900 },
@@ -66,9 +70,13 @@ const SHOTS = [
   // Loops in loops and in If lanes, an If in an If, an empty loop: eddies, lanes and placeholders together.
   { view: 'workflow', scenario: 'nested', width: 1440, height: 1700 },
   { view: 'workflow', scenario: 'nested-narrow', width: 900, height: 1100 },
+  // A finished run of the nested workflow: skipped cards and a skipped If on the canvas, quiet rows in the summary.
+  { view: 'workflow', scenario: 'nested-run', width: 1440, height: 1700 },
   { view: 'agent', scenario: 'default', width: 1280, height: 860 },
   { view: 'agent', scenario: 'tryit', width: 1280, height: 860 },
   { view: 'agent', scenario: 'new', width: 1280, height: 860 },
+  // A long name, description, model, fallback models and "Used by" paths.
+  { view: 'agent', scenario: 'long', width: 1280, height: 860 },
   {
     view: 'agent',
     scenario: 'noperms',
@@ -83,7 +91,13 @@ const shotName = (shot) => `${shot.view}-${shot.name ?? shot.scenario}`;
 const shots = SHOTS.filter((s) => !only || shotName(s).includes(only));
 
 await mkdir(outDir, { recursive: true });
-const server = await createServer({ root, configFile: resolve(root, 'vite.config.ts'), server: { port: 0, strictPort: false }, logLevel: 'error' });
+// No file watching: an edit elsewhere in the repo (core is served from source) must not reload a page mid-shot.
+const server = await createServer({
+  root,
+  configFile: resolve(root, 'vite.config.ts'),
+  server: { port: 0, strictPort: false, watch: null, hmr: false },
+  logLevel: 'error',
+});
 await server.listen();
 const base = server.resolvedUrls.local[0];
 const browser = await chromium.launch();
@@ -92,7 +106,12 @@ const errors = [];
 try {
   for (const shot of shots) {
     for (const theme of themes) {
-      const page = await browser.newPage({ viewport: { width: shot.width, height: shot.height }, deviceScaleFactor: 1 });
+      const page = await browser.newPage({
+        viewport: { width: shot.width, height: shot.height },
+        deviceScaleFactor: 1,
+        locale: 'en-US',
+        timezoneId: 'Europe/Zurich',
+      });
       page.on('pageerror', (e) => errors.push(`${shot.view}/${shot.scenario}/${theme}: ${e.message}`));
       page.on('console', (m) => m.type() === 'error' && errors.push(`${shot.view}/${shot.scenario}/${theme}: ${m.text()}`));
       // The sidebar shows relative times; pin the clock just after the fixtures' "now" so they read the same every run.
@@ -100,7 +119,7 @@ try {
       const url = `${base}harness/index.html?view=${shot.view}&scenario=${shot.scenario}&theme=${theme}&bare=1`;
       await page.goto(url, { waitUntil: 'networkidle' });
       await page.waitForSelector('body[data-harness-ready="true"]', { timeout: 15000 }).catch(() => {});
-      await page.evaluate(() => document.fonts.ready);
+      await page.evaluate(() => Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5000))]));
       await page.waitForTimeout(400);
       if (shot.act) {
         await shot.act(page);

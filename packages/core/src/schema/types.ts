@@ -2,7 +2,8 @@ import type { Condition } from '../conditions';
 
 export type StepType = 'agent' | 'console' | 'loop' | 'if' | 'break' | 'stop' | 'approval';
 
-export type ToolName = 'readFile' | 'listFiles' | 'searchText' | 'gitDiff' | 'editFile' | 'writeFile' | 'runCommand';
+export type ToolName =
+  'readFile' | 'listFiles' | 'searchText' | 'gitDiff' | 'editFile' | 'writeFile' | 'runCommand';
 
 export type PermissionLevel = 'none' | 'ask' | 'auto';
 

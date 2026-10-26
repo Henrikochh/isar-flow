@@ -1,5 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { type BlockNode, collectStepIds, STEP_ID_PATTERN, STEP_TYPE_INFO, type Workflow } from '@isar-flow/core';
+import {
+  type BlockNode,
+  collectStepIds,
+  STEP_ID_PATTERN,
+  STEP_TYPE_INFO,
+  type Workflow,
+} from '@isar-flow/core';
 import { IconButton, Popover, Stone, TextInput } from '../../../components';
 import { MoveToMenu } from '../canvas/MoveToMenu';
 import { useWorkflowActions, useWorkflowState } from '../store';
@@ -9,11 +15,16 @@ import { asString, blockIssues, blockTitle, isRecord, isStepType } from './model
 import { setOrUnset, useStepUpdate } from './settings/common';
 
 /** Problem with a new block id, or undefined when it can be used. */
-export function idProblem(text: string, currentId: string, workflow: Workflow | null | undefined): string | undefined {
+export function idProblem(
+  text: string,
+  currentId: string,
+  workflow: Workflow | null | undefined,
+): string | undefined {
   const id = text.trim();
   if (id === '') return 'Enter an id. Other blocks use it to read this block’s outputs.';
   if (!STEP_ID_PATTERN.test(id)) return 'Ids start with a letter or _ and use only letters, digits, _ and -.';
-  if (id !== currentId && collectStepIds(workflow).includes(id)) return `Another block already uses the id '${id}'.`;
+  if (id !== currentId && collectStepIds(workflow).includes(id))
+    return `Another block already uses the id '${id}'.`;
   return undefined;
 }
 
@@ -54,7 +65,11 @@ export function BlockHeader({
             />
             <div className="wf-insp-head-actions">
               <MoveButton stepId={stepId} workflow={doc?.workflow} />
-              <IconButton icon="copy" label="Duplicate" onClick={() => actions.applyOps([{ op: 'duplicateStep', stepId }])} />
+              <IconButton
+                icon="copy"
+                label="Duplicate"
+                onClick={() => actions.applyOps([{ op: 'duplicateStep', stepId }])}
+              />
               <IconButton icon="go-to-file" label="Show in YAML" onClick={() => actions.openYaml(stepId)} />
               <IconButton
                 icon="trash"
@@ -94,7 +109,15 @@ function MoveButton({ stepId, workflow }: { stepId: string; workflow: Workflow |
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       />
-      <Popover open={open} anchorRef={ref} onClose={() => setOpen(false)} label="Move to" role="none" placement="bottom-end" width={264}>
+      <Popover
+        open={open}
+        anchorRef={ref}
+        onClose={() => setOpen(false)}
+        label="Move to"
+        role="none"
+        placement="bottom-end"
+        width={264}
+      >
         <MoveToMenu
           workflow={workflow}
           stepId={stepId}
@@ -134,7 +157,15 @@ function ParentLink({ block }: { block: BlockNode }) {
   );
 }
 
-function IdField({ id, workflow, onRename }: { id: string; workflow: Workflow | null | undefined; onRename: (newId: string) => void }) {
+function IdField({
+  id,
+  workflow,
+  onRename,
+}: {
+  id: string;
+  workflow: Workflow | null | undefined;
+  onRename: (newId: string) => void;
+}) {
   const [text, setText] = useState(id);
   const inputId = useId();
   // Enter commits and the following blur must not send the same rename again.

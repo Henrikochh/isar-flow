@@ -4,7 +4,9 @@ import * as vscode from 'vscode';
  * Typed message channel to one webview. Messages posted before the webview reported `ready` are dropped
  * by VS Code, so callers send full state in response to `ready` and incremental updates afterwards.
  */
-export class Messenger<In extends { type: string }, Out extends { type: string }> implements vscode.Disposable {
+export class Messenger<In extends { type: string }, Out extends { type: string }>
+  implements vscode.Disposable
+{
   private readonly disposables: vscode.Disposable[] = [];
   private ready = false;
 
@@ -20,7 +22,9 @@ export class Messenger<In extends { type: string }, Out extends { type: string }
         try {
           await handler(message);
         } catch (error) {
-          this.log?.error(`Webview message '${message.type}' failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
+          this.log?.error(
+            `Webview message '${message.type}' failed: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+          );
           void vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
         }
       }),

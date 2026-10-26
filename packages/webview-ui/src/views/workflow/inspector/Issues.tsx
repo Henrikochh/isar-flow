@@ -44,8 +44,14 @@ export function FieldIssues({ issues }: { issues: readonly Diagnostic[] | undefi
   return (
     <div className="wf-insp-field-issues">
       {issues.map((issue, index) => (
-        <div key={`${issue.code}:${index}`} className={issue.severity === 'error' ? 'if-field__error' : 'wf-insp-warning'}>
-          <i className={`codicon codicon-${issue.severity === 'error' ? 'error' : 'warning'} wf-insp-warning-icon`} aria-hidden="true" />
+        <div
+          key={`${issue.code}:${index}`}
+          className={issue.severity === 'error' ? 'if-field__error' : 'wf-insp-warning'}
+        >
+          <i
+            className={`codicon codicon-${issue.severity === 'error' ? 'error' : 'warning'} wf-insp-warning-icon`}
+            aria-hidden="true"
+          />
           <span>{issue.message}</span>
         </div>
       ))}

@@ -28,7 +28,12 @@ export function TemplatePicker({
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const onKeyDown = (event: KeyboardEvent, index: number) => {
-    const delta = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 0;
+    const delta =
+      event.key === 'ArrowDown' || event.key === 'ArrowRight'
+        ? 1
+        : event.key === 'ArrowUp' || event.key === 'ArrowLeft'
+          ? -1
+          : 0;
     if (!delta) return;
     event.preventDefault();
     const next = (index + delta + TEMPLATE_OPTIONS.length) % TEMPLATE_OPTIONS.length;

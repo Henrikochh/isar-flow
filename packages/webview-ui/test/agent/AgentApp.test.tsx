@@ -1,7 +1,15 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentApp } from '../../src/views/agent/AgentApp';
-import { agentDoc, CATALOG, clearPosted, fromHost, posted, postedOfType, REVIEWER_AGENT_TEXT } from './helpers';
+import {
+  agentDoc,
+  CATALOG,
+  clearPosted,
+  fromHost,
+  posted,
+  postedOfType,
+  REVIEWER_AGENT_TEXT,
+} from './helpers';
 
 function renderEditor(text = REVIEWER_AGENT_TEXT, overrides: Parameters<typeof agentDoc>[1] = {}) {
   const view = render(<AgentApp />);
@@ -130,19 +138,28 @@ describe('AgentApp', () => {
     renderEditor();
     const edits = screen.getByRole('radiogroup', { name: 'Edit files' });
     expect(within(edits).getByRole('radio', { name: 'Never' })).toBeDisabled();
-    expect(screen.getByText('Turn on Edit files or Write files under Tools to use this.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Turn on Edit files or Write files under Tools to use this.'),
+    ).toBeInTheDocument();
 
     const withEdits = REVIEWER_AGENT_TEXT.replace('gitDiff]', 'gitDiff, writeFile]');
     fromHost({ type: 'document', doc: agentDoc(withEdits) });
-    const ask = within(screen.getByRole('radiogroup', { name: 'Edit files' })).getByRole('radio', { name: 'Ask' });
+    const ask = within(screen.getByRole('radiogroup', { name: 'Edit files' })).getByRole('radio', {
+      name: 'Ask',
+    });
     expect(ask).toBeEnabled();
     fireEvent.click(ask);
     expect(updates()).toEqual([{ type: 'update', set: { permissions: { edits: 'ask', commands: 'none' } } }]);
-    expect(within(screen.getByRole('radiogroup', { name: 'Run commands' })).getByRole('radio', { name: 'Never' })).toBeDisabled();
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Run commands' })).getByRole('radio', { name: 'Never' }),
+    ).toBeDisabled();
   });
 
   it('shows unset permissions as Ask, the level the tool host applies, and writes any level chosen', () => {
-    const unset = REVIEWER_AGENT_TEXT.replace('gitDiff]', 'gitDiff, runCommand]').replace(/permissions:\n.*\n.*\n/, '');
+    const unset = REVIEWER_AGENT_TEXT.replace('gitDiff]', 'gitDiff, runCommand]').replace(
+      /permissions:\n.*\n.*\n/,
+      '',
+    );
     renderEditor(unset);
     const commands = screen.getByRole('radiogroup', { name: 'Run commands' });
     expect(within(commands).getByRole('radio', { name: 'Ask' })).toBeChecked();
@@ -155,7 +172,10 @@ describe('AgentApp', () => {
       { type: 'update', set: { permissions: { commands: 'auto' } } },
     ]);
 
-    fromHost({ type: 'document', doc: agentDoc(unset.replace('tools:', 'permissions:\n  commands: ask\ntools:')) });
+    fromHost({
+      type: 'document',
+      doc: agentDoc(unset.replace('tools:', 'permissions:\n  commands: ask\ntools:')),
+    });
     expect(screen.queryByText('Not set — asks each time')).not.toBeInTheDocument();
     expect(screen.getByText('VS Code asks you before each command.')).toBeInTheDocument();
   });
@@ -185,7 +205,11 @@ describe('AgentApp', () => {
 
   it('warns when the model is not offered by its provider', () => {
     renderEditor(REVIEWER_AGENT_TEXT.replace('model: vscode/copilot/gpt-4.1', 'model: litellm/gpt-9'));
-    expect(screen.getByText("LiteLLM (localhost:4000) doesn't list this model. Refresh models or choose another one.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "LiteLLM (localhost:4000) doesn't list this model. Refresh models or choose another one.",
+      ),
+    ).toBeInTheDocument();
     // The picker already shows the bare reference, so the summary under it does not repeat it.
     const section = screen.getByRole('heading', { name: 'Model' }).closest('section') as HTMLElement;
     expect(within(section).getAllByText('litellm/gpt-9')).toHaveLength(1);
@@ -211,7 +235,12 @@ describe('AgentApp', () => {
   });
 
   it('shows schema problems in a banner and at their fields', () => {
-    renderEditor(REVIEWER_AGENT_TEXT.replace('temperature: 0.2', 'temperature: 3').replace('edits: none', 'edits: sometimes'));
+    renderEditor(
+      REVIEWER_AGENT_TEXT.replace('temperature: 0.2', 'temperature: 3').replace(
+        'edits: none',
+        'edits: sometimes',
+      ),
+    );
     const banner = screen.getAllByRole('alert')[0];
     expect(banner).toHaveTextContent("'temperature' must be at most 2");
     expect(banner).toHaveTextContent('One more problem is marked below.');
@@ -230,7 +259,9 @@ describe('AgentApp', () => {
 
     fromHost({
       type: 'document',
-      doc: agentDoc('name: 42\nmodel: true\ntools: readFile\nfallbackModels: [1, a/b]\npermissions: always\n'),
+      doc: agentDoc(
+        'name: 42\nmodel: true\ntools: readFile\nfallbackModels: [1, a/b]\npermissions: always\n',
+      ),
     });
     expect(screen.getByRole('textbox', { name: 'Agent name' })).toHaveValue('42');
     expect(screen.getByText('0 of 7 on')).toBeInTheDocument();
@@ -247,8 +278,12 @@ describe('AgentApp', () => {
 
   it('lists the workflows that use the agent and opens one on click', () => {
     renderEditor();
-    fireEvent.click(screen.getByRole('button', { name: 'Open workflow .isarflow/workflows/review-loop.workflow.yaml' }));
-    expect(posted()).toEqual([{ type: 'openWorkflow', path: '.isarflow/workflows/review-loop.workflow.yaml' }]);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Open workflow .isarflow/workflows/review-loop.workflow.yaml' }),
+    );
+    expect(posted()).toEqual([
+      { type: 'openWorkflow', path: '.isarflow/workflows/review-loop.workflow.yaml' },
+    ]);
     expect(screen.getByText('agent: reviewer')).toBeInTheDocument();
     fromHost({ type: 'document', doc: agentDoc(REVIEWER_AGENT_TEXT, { usedBy: [] }) });
     expect(screen.getByText('No workflow uses this agent yet.')).toBeInTheDocument();

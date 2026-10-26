@@ -107,7 +107,11 @@ export function AgentApp() {
                 onRefresh={refreshModels}
                 onAddProvider={addProvider}
               />
-              <InstructionsSection value={form.systemPrompt} error={issues.message('systemPrompt').error} update={update} />
+              <InstructionsSection
+                value={form.systemPrompt}
+                error={issues.message('systemPrompt').error}
+                update={update}
+              />
               <ToolsSection tools={form.tools} error={issues.message('tools').error} update={update} />
               <PermissionsSection form={form} issues={issues} update={update} />
               <UsedBySection id={doc.id} usedBy={doc.usedBy} onOpen={openWorkflow} />

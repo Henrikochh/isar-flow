@@ -35,11 +35,7 @@ export interface ComparisonCondition {
 }
 
 export type Condition =
-  | string
-  | { all: Condition[] }
-  | { any: Condition[] }
-  | { not: Condition }
-  | ComparisonCondition;
+  string | { all: Condition[] } | { any: Condition[] } | { not: Condition } | ComparisonCondition;
 
 export interface ConditionOpInfo {
   op: ConditionOp;
@@ -111,7 +107,9 @@ function evaluateComparison(cond: ComparisonCondition, ctx: ExpressionContext): 
   const ls = () => stringifyValue(fold(stringifyValue(left), ic));
   const rs = () => stringifyValue(fold(stringifyValue(right), ic));
   const contains = () =>
-    Array.isArray(left) ? left.some((item) => looseEquals(fold(item, ic), fold(right, ic))) : ls().includes(rs());
+    Array.isArray(left)
+      ? left.some((item) => looseEquals(fold(item, ic), fold(right, ic)))
+      : ls().includes(rs());
   const matches = () => compileRegex(right, ic ? 'i' : '').test(stringifyValue(left));
 
   switch (cond.op) {

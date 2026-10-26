@@ -1,5 +1,12 @@
 import { useMemo, useState } from 'react';
-import { type Condition, CONDITION_OPS, type ConditionOp, describeCondition, type Diagnostic, type StepType } from '@isar-flow/core';
+import {
+  type Condition,
+  CONDITION_OPS,
+  type ConditionOp,
+  describeCondition,
+  type Diagnostic,
+  type StepType,
+} from '@isar-flow/core';
 import { Banner, Button, SegmentedControl, Select, type SelectOption } from '../../../components';
 import { useWorkflowActions } from '../store';
 import {
@@ -56,7 +63,14 @@ function summarize(condition: unknown): string {
 }
 
 /** Rules / Expression editor for loop and if conditions. */
-export function ConditionBuilder({ stepId, condition, onChange, summaryPrefix, accent, issues }: ConditionBuilderProps) {
+export function ConditionBuilder({
+  stepId,
+  condition,
+  onChange,
+  summaryPrefix,
+  accent,
+  issues,
+}: ConditionBuilderProps) {
   const actions = useWorkflowActions();
   const [mode, setMode] = useState<Mode>(() => initialMode(condition));
   const [startOver, setStartOver] = useState(false);
@@ -69,7 +83,11 @@ export function ConditionBuilder({ stepId, condition, onChange, summaryPrefix, a
       : summarize(condition);
 
   const expressionValue =
-    typeof condition === 'string' ? expressionText(condition) : ruleSet ? (rulesToExpression(ruleSet) ?? '') : '';
+    typeof condition === 'string'
+      ? expressionText(condition)
+      : ruleSet
+        ? (rulesToExpression(ruleSet) ?? '')
+        : '';
 
   return (
     <div className="wf-cond" data-type={accent}>
@@ -167,9 +185,20 @@ interface PendingRule {
   ignoreCase?: boolean;
 }
 
-const OPERATORS: SelectOption<ConditionOp>[] = CONDITION_OPS.map((info) => ({ value: info.op, label: info.label }));
+const OPERATORS: SelectOption<ConditionOp>[] = CONDITION_OPS.map((info) => ({
+  value: info.op,
+  label: info.label,
+}));
 
-function RuleList({ stepId, ruleSet, onChange }: { stepId: string; ruleSet: RuleSet; onChange: (set: RuleSet) => void }) {
+function RuleList({
+  stepId,
+  ruleSet,
+  onChange,
+}: {
+  stepId: string;
+  ruleSet: RuleSet;
+  onChange: (set: RuleSet) => void;
+}) {
   const { variables } = useVariables(stepId);
   const [pending, setPending] = useState<PendingRule | null>(null);
   const [preferred, setPreferred] = useState<Combinator>(ruleSet.combinator);
@@ -189,7 +218,8 @@ function RuleList({ stepId, ruleSet, onChange }: { stepId: string; ruleSet: Rule
   );
   const typeOf = (value: unknown) => variables.find((v) => toTemplate(v.expression) === value)?.type;
 
-  const commit = (rules: Rule[], nextCombinator = combinator) => onChange({ combinator: nextCombinator, rules });
+  const commit = (rules: Rule[], nextCombinator = combinator) =>
+    onChange({ combinator: nextCombinator, rules });
 
   const total = ruleSet.rules.length + (showPending ? 1 : 0);
   const joiner = combinator === 'all' ? 'and' : 'or';
@@ -241,7 +271,8 @@ function RuleList({ stepId, ruleSet, onChange }: { stepId: string; ruleSet: Rule
               }
               // Booleans read best as "is true"; switch the untouched default operator for them.
               const type = typeOf(patch.value);
-              if (type === 'boolean' && next.op === 'eq' && (next.to === undefined || next.to === '')) next.op = 'isTrue';
+              if (type === 'boolean' && next.op === 'eq' && (next.to === undefined || next.to === ''))
+                next.op = 'isTrue';
               setPending(null);
               commit([...ruleSet.rules, { ...next, value: patch.value }]);
             }}

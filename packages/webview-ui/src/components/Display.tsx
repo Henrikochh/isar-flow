@@ -21,7 +21,9 @@ export function Chip({
   code?: boolean;
   title?: string;
 }) {
-  const classes = ['if-chip', tone !== 'neutral' && `if-chip--${tone}`, code && 'if-chip--code'].filter(Boolean).join(' ');
+  const classes = ['if-chip', tone !== 'neutral' && `if-chip--${tone}`, code && 'if-chip--code']
+    .filter(Boolean)
+    .join(' ');
   return (
     <span className={classes} title={title}>
       {icon ? <i className={`codicon codicon-${icon}`} aria-hidden="true" /> : null}
@@ -31,9 +33,22 @@ export function Chip({
 }
 
 /** Colored tile with the block type's icon. */
-export function Stone({ type, size = 'm', title }: { type: StepType; size?: 's' | 'm' | 'l'; title?: string }) {
+export function Stone({
+  type,
+  size = 'm',
+  title,
+}: {
+  type: StepType;
+  size?: 's' | 'm' | 'l';
+  title?: string;
+}) {
   return (
-    <span className={`if-stone if-stone--${size}`} data-type={type} title={title} aria-hidden={title ? undefined : true}>
+    <span
+      className={`if-stone if-stone--${size}`}
+      data-type={type}
+      title={title}
+      aria-hidden={title ? undefined : true}
+    >
       <i className={`codicon codicon-${BLOCK_ICONS[type]}`} />
     </span>
   );
@@ -135,8 +150,17 @@ export function statusLabel(status: StepStatus): string {
 
 export function StatusGlyph({ status }: { status: StepStatus }) {
   return (
-    <span className={`if-status if-status--${status}`} title={STATUS_LABELS[status]} role="img" aria-label={STATUS_LABELS[status]}>
-      {status === 'running' ? <Spinner /> : <i className={`codicon codicon-${STATUS_ICONS[status]}`} aria-hidden="true" />}
+    <span
+      className={`if-status if-status--${status}`}
+      title={STATUS_LABELS[status]}
+      role="img"
+      aria-label={STATUS_LABELS[status]}
+    >
+      {status === 'running' ? (
+        <Spinner />
+      ) : (
+        <i className={`codicon codicon-${STATUS_ICONS[status]}`} aria-hidden="true" />
+      )}
     </span>
   );
 }

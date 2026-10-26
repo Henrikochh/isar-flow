@@ -73,7 +73,11 @@ export function NewWorkflowCard({
         <span className="if-field__label" id={templateLabelId}>
           Template
         </span>
-        <TemplatePicker labelledBy={templateLabelId} value={draft.template} onChange={(template) => onChange({ ...draft, template })} />
+        <TemplatePicker
+          labelledBy={templateLabelId}
+          value={draft.template}
+          onChange={(template) => onChange({ ...draft, template })}
+        />
       </div>
       <div className="sb-create__actions">
         <Button type="submit" variant="primary" icon="add">

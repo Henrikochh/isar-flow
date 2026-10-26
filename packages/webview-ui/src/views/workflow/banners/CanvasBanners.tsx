@@ -62,14 +62,19 @@ function MissingIdsBanner({ missing, invalid }: { missing: number; invalid: numb
     <Banner
       tone="warning"
       actions={
-        <Button size="s" variant="secondary" icon="wand" onClick={() => applyOps([{ op: 'assignMissingIds' }])}>
+        <Button
+          size="s"
+          variant="secondary"
+          icon="wand"
+          onClick={() => applyOps([{ op: 'assignMissingIds' }])}
+        >
           Add ids
         </Button>
       }
     >
       <span className="wf-banner-message">
-        {count === 1 ? `1 block has ${what}.` : `${count} blocks have ${what}.`} Blocks need ids before they can be
-        edited or referenced.
+        {count === 1 ? `1 block has ${what}.` : `${count} blocks have ${what}.`} Blocks need ids before they
+        can be edited or referenced.
       </span>
     </Banner>
   );

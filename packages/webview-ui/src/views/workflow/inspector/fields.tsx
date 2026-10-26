@@ -104,7 +104,10 @@ export function TextField({
   const Area = withPicker ? TemplateTextArea : TextArea;
 
   const remember = (el: HTMLInputElement | HTMLTextAreaElement) => {
-    selection.current = { start: el.selectionStart ?? el.value.length, end: el.selectionEnd ?? el.value.length };
+    selection.current = {
+      start: el.selectionStart ?? el.value.length,
+      end: el.selectionEnd ?? el.value.length,
+    };
   };
 
   const insert = (variable: VariableInfo) => {
@@ -190,7 +193,19 @@ export interface NumberFieldProps {
 }
 
 /** Number input that validates range locally and commits `undefined` when cleared. */
-export function NumberField({ label, value, onCommit, min, max, integer, required, placeholder, hint, issues, suffix }: NumberFieldProps) {
+export function NumberField({
+  label,
+  value,
+  onCommit,
+  min,
+  max,
+  integer,
+  required,
+  placeholder,
+  hint,
+  issues,
+  suffix,
+}: NumberFieldProps) {
   const text = value === undefined ? '' : String(value);
   const problem = (raw: string): string | undefined => {
     const range = min !== undefined && max !== undefined ? ` from ${min} to ${max}` : '';
@@ -198,8 +213,10 @@ export function NumberField({ label, value, onCommit, min, max, integer, require
     const n = Number(raw);
     if (!Number.isFinite(n)) return 'Enter a number.';
     if (integer && !Number.isInteger(n)) return 'Enter a whole number.';
-    if (min !== undefined && n < min) return max !== undefined ? `Use a value from ${min} to ${max}.` : `Use ${min} or more.`;
-    if (max !== undefined && n > max) return min !== undefined ? `Use a value from ${min} to ${max}.` : `Use ${max} or less.`;
+    if (min !== undefined && n < min)
+      return max !== undefined ? `Use a value from ${min} to ${max}.` : `Use ${min} or more.`;
+    if (max !== undefined && n > max)
+      return min !== undefined ? `Use a value from ${min} to ${max}.` : `Use ${max} or less.`;
     return undefined;
   };
   const draft = useDraft(text, (raw) => {

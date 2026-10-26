@@ -38,7 +38,11 @@ export function NumberField({
   });
 
   return (
-    <Field label={label} hint={hint} error={typo ? (integer ? 'Enter a whole number.' : 'Enter a number.') : error}>
+    <Field
+      label={label}
+      hint={hint}
+      error={typo ? (integer ? 'Enter a whole number.' : 'Enter a number.') : error}
+    >
       {({ id, describedBy, invalid }) => (
         <TextInput
           id={id}

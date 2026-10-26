@@ -20,7 +20,13 @@ function makeRun(overrides: Partial<RunView> = {}): RunView {
         executions: 1,
         durationMs: 1700,
         detail: 'Implement the following task in this repository:\nAdd voucher codes\n',
-        output: { status: 'success', text: 'Added voucher support.', model: 'litellm/claude-sonnet', usage: { inputTokens: 18_400, outputTokens: 1_250 }, turns: 4 },
+        output: {
+          status: 'success',
+          text: 'Added voucher support.',
+          model: 'litellm/claude-sonnet',
+          usage: { inputTokens: 18_400, outputTokens: 1_250 },
+          turns: 4,
+        },
         logs: [
           { stream: 'tool', text: 'readFile src/checkout.ts → 214 lines\n' },
           { stream: 'agent', text: 'Added voucher support.' },
@@ -69,9 +75,14 @@ describe('Run output tab', () => {
     expect(screen.getByText('Exit code 1')).toBeInTheDocument();
     expect(screen.getByText('Command exited with code 1')).toBeInTheDocument();
     const log = screen.getByRole('log', { name: 'Output' });
-    expect(within(log).getByText('✗ applies the voucher once', { exact: false })).toHaveClass('wf-log-line--err');
+    expect(within(log).getByText('✗ applies the voucher once', { exact: false })).toHaveClass(
+      'wf-log-line--err',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Copy output' }));
-    expect(posted()).toContainEqual({ type: 'copyToClipboard', text: '> vitest run\n ✗ applies the voucher once\n' });
+    expect(posted()).toContainEqual({
+      type: 'copyToClipboard',
+      text: '> vitest run\n ✗ applies the voucher once\n',
+    });
   });
 
   it('switches between settings and run output', () => {
@@ -108,7 +119,9 @@ describe('Run output tab', () => {
 
   it('answers a pending approval', () => {
     const text = `${REVIEW_LOOP}  - id: ship_it\n    type: approval\n    message: Merge?\n`;
-    const run = makeRun({ steps: { ship_it: { status: 'running', executions: 1, detail: 'Merge?', logs: [] } } });
+    const run = makeRun({
+      steps: { ship_it: { status: 'running', executions: 1, detail: 'Merge?', logs: [] } },
+    });
     renderInspector({
       doc: docFor(text),
       selection: 'ship_it',
@@ -118,7 +131,12 @@ describe('Run output tab', () => {
     });
     fireEvent.change(screen.getByLabelText('Comment'), { target: { value: 'Ship it' } });
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-    expect(posted()).toContainEqual({ type: 'approval', requestId: 'req-1', approved: true, comment: 'Ship it' });
+    expect(posted()).toContainEqual({
+      type: 'approval',
+      requestId: 'req-1',
+      approved: true,
+      comment: 'Ship it',
+    });
   });
 });
 
@@ -141,7 +159,10 @@ describe('Run summary', () => {
   });
 
   it('closes a past run', () => {
-    renderInspector({ run: makeRun({ status: 'failure', durationMs: 61_000, error: 'Loop limit reached' }), runLive: false });
+    renderInspector({
+      run: makeRun({ status: 'failure', durationMs: 61_000, error: 'Loop limit reached' }),
+      runLive: false,
+    });
     expect(screen.getByText('Loop limit reached')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(posted()).toContainEqual({ type: 'selectRun', runId: null });

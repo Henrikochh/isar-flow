@@ -1,7 +1,24 @@
 import { describeOutputShape, type Diagnostic, type OutputShape } from '@isar-flow/core';
-import { Banner, Button, Checkbox, IconButton, Select, type SelectOption, TextInput } from '../../../../components';
+import {
+  Banner,
+  Button,
+  Checkbox,
+  IconButton,
+  Select,
+  type SelectOption,
+  TextInput,
+} from '../../../../components';
 import { FieldIssues } from '../Issues';
-import { FIELD_KINDS, type FieldKind, describeSpec, rowProblems, rowsToShape, type ShapeRow, shapeToRows, withKind } from '../shapeRows';
+import {
+  FIELD_KINDS,
+  type FieldKind,
+  describeSpec,
+  rowProblems,
+  rowsToShape,
+  type ShapeRow,
+  shapeToRows,
+  withKind,
+} from '../shapeRows';
 import { useFocusOnAdd } from '../useFocusOnAdd';
 import { useRowsDraft } from '../useRowsDraft';
 
@@ -48,10 +65,14 @@ function ShapeRowsEditor({
   onCommit: (shape: Record<string, unknown>) => void;
   issues?: readonly Diagnostic[];
 }) {
-  const draft = useRowsDraft<ShapeRow>(source, (rows) => onCommit(rowsToShape(rows.map((r) => ({ ...r, key: r.key.trim() })))), {
-    isBlank: isBlankRow,
-    isValid: (rows) => rowProblems(rows.filter((r) => !isBlankRow(r))).every((p) => p === undefined),
-  });
+  const draft = useRowsDraft<ShapeRow>(
+    source,
+    (rows) => onCommit(rowsToShape(rows.map((r) => ({ ...r, key: r.key.trim() })))),
+    {
+      isBlank: isBlankRow,
+      isValid: (rows) => rowProblems(rows.filter((r) => !isBlankRow(r))).every((p) => p === undefined),
+    },
+  );
   const focus = useFocusOnAdd(draft.rows.length);
   const complete = draft.rows.filter((r) => !isBlankRow(r));
   const problems = rowProblems(complete);
@@ -69,8 +90,16 @@ function ShapeRowsEditor({
         <p className="wf-insp-note">No fields yet. The answer can be any JSON value.</p>
       )}
       {draft.rows.map((row, index) => {
-        const options: SelectOption<KindValue>[] = FIELD_KINDS.map((k) => ({ value: k.value, label: k.label }));
-        if (row.kind === 'custom') options.push({ value: 'custom', label: describeSpec(row.spec), description: 'Kept as written in the YAML' });
+        const options: SelectOption<KindValue>[] = FIELD_KINDS.map((k) => ({
+          value: k.value,
+          label: k.label,
+        }));
+        if (row.kind === 'custom')
+          options.push({
+            value: 'custom',
+            label: describeSpec(row.spec),
+            description: 'Kept as written in the YAML',
+          });
         const problem = problemOf(row);
         const name = row.key.trim() || `field ${index + 1}`;
         return (

@@ -41,7 +41,9 @@ beforeEach(() => {
 describe('Try it', () => {
   it('shows the empty state until something is asked', () => {
     renderEditor();
-    expect(screen.getByText('Ask the agent something to see how it responds with the current settings.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Ask the agent something to see how it responds with the current settings.'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Clear conversation' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });
@@ -69,9 +71,15 @@ describe('Try it', () => {
   it('streams text, tool rows and the answer meta into the transcript', () => {
     renderEditor();
     ask('Review the voucher changes');
-    fromHost({ type: 'tryItEvent', event: { type: 'tool', name: 'readFile', args: '{"path":"src/checkout.ts"}' } });
+    fromHost({
+      type: 'tryItEvent',
+      event: { type: 'tool', name: 'readFile', args: '{"path":"src/checkout.ts"}' },
+    });
     expect(screen.getByRole('status', { name: 'Running readFile' })).toBeInTheDocument();
-    fromHost({ type: 'tryItEvent', event: { type: 'tool', name: 'readFile', args: '{"path":"src/checkout.ts"}', result: 'a\nb' } });
+    fromHost({
+      type: 'tryItEvent',
+      event: { type: 'tool', name: 'readFile', args: '{"path":"src/checkout.ts"}', result: 'a\nb' },
+    });
     fromHost({ type: 'tryItEvent', event: { type: 'text', text: 'Looks ' } });
     fromHost({ type: 'tryItEvent', event: { type: 'text', text: 'good.' } });
 
@@ -82,7 +90,11 @@ describe('Try it', () => {
 
     fromHost({
       type: 'tryItEvent',
-      event: { type: 'done', model: 'vscode/copilot/gpt-4.1', usage: { inputTokens: 4000, outputTokens: 300 } },
+      event: {
+        type: 'done',
+        model: 'vscode/copilot/gpt-4.1',
+        usage: { inputTokens: 4000, outputTokens: 300 },
+      },
     });
     // Model and tokens are separate spans, not one "A · B" string.
     expect(log().getByText('vscode/copilot/gpt-4.1')).toBeInTheDocument();
@@ -124,8 +136,13 @@ describe('Try it', () => {
   it('shows errors and ends the answer', () => {
     renderEditor();
     ask('Hello');
-    fromHost({ type: 'tryItEvent', event: { type: 'error', message: 'Cannot reach http://localhost:4000. Is LiteLLM running?' } });
-    expect(screen.getByRole('alert')).toHaveTextContent('Cannot reach http://localhost:4000. Is LiteLLM running?');
+    fromHost({
+      type: 'tryItEvent',
+      event: { type: 'error', message: 'Cannot reach http://localhost:4000. Is LiteLLM running?' },
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Cannot reach http://localhost:4000. Is LiteLLM running?',
+    );
     expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument();
   });
 
@@ -147,7 +164,9 @@ describe('Try it', () => {
     host.state = { tryIt: { messages: TRANSCRIPT_FIXTURE } };
     renderEditor();
     fireEvent.click(screen.getByRole('button', { name: 'Clear conversation' }));
-    expect(screen.getByText('Ask the agent something to see how it responds with the current settings.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Ask the agent something to see how it responds with the current settings.'),
+    ).toBeInTheDocument();
     expect(transcript()).toEqual([]);
   });
 
@@ -166,7 +185,10 @@ describe('Try it', () => {
   it('shows a tool call and its result on separate lines', () => {
     renderEditor();
     ask('Review');
-    fromHost({ type: 'tryItEvent', event: { type: 'tool', name: 'gitDiff', args: '{}', result: '3 files changed' } });
+    fromHost({
+      type: 'tryItEvent',
+      event: { type: 'tool', name: 'gitDiff', args: '{}', result: '3 files changed' },
+    });
     const result = panel().getByText('3 files changed');
     expect(result).toHaveClass('ag-tool-row__result');
     expect(result.closest('.ag-tool-row__call')).toBeNull();
@@ -178,9 +200,19 @@ describe('Try it', () => {
     const json = '{\n  "approved": false,\n\t"issues": []\n}';
     fromHost({ type: 'tryItEvent', event: { type: 'text', text: json } });
     const lines = [...document.querySelectorAll<HTMLElement>('.ag-code-line')];
-    expect(lines.map((line) => line.textContent)).toEqual(['{', '  "approved": false,', '\t"issues": []', '}']);
+    expect(lines.map((line) => line.textContent)).toEqual([
+      '{',
+      '  "approved": false,',
+      '\t"issues": []',
+      '}',
+    ]);
     // Each line hangs two columns past its own indent (tabs count as two).
-    expect(lines.map((line) => line.style.getPropertyValue('--ag-hang'))).toEqual(['2ch', '4ch', '4ch', '2ch']);
+    expect(lines.map((line) => line.style.getPropertyValue('--ag-hang'))).toEqual([
+      '2ch',
+      '4ch',
+      '4ch',
+      '2ch',
+    ]);
     expect(lines[3].querySelector('.ag-caret')).not.toBeNull();
   });
 

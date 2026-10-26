@@ -35,9 +35,18 @@ export function LogViewer({
         <span className="wf-log-title">{label}</span>
         <span className="wf-log-count">
           {lines.length === 1 ? '1 line' : `${lines.length} lines`}
-          {errors ? <span className="wf-log-count-err">{errors === 1 ? '1 error line' : `${errors} error lines`}</span> : null}
+          {errors ? (
+            <span className="wf-log-count-err">
+              {errors === 1 ? '1 error line' : `${errors} error lines`}
+            </span>
+          ) : null}
         </span>
-        <IconButton icon="copy" label="Copy output" disabled={text === ''} onClick={() => actions.copy(text)} />
+        <IconButton
+          icon="copy"
+          label="Copy output"
+          disabled={text === ''}
+          onClick={() => actions.copy(text)}
+        />
       </div>
       <div
         ref={bodyRef}
@@ -50,12 +59,21 @@ export function LogViewer({
           follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_SLACK;
         }}
       >
-        {truncated ? <div className="wf-log-note">Earlier lines were dropped to keep the view fast.</div> : null}
+        {truncated ? (
+          <div className="wf-log-note">Earlier lines were dropped to keep the view fast.</div>
+        ) : null}
         {lines.length === 0 ? (
           <div className="wf-log-note">{running ? 'Waiting for output…' : 'No output.'}</div>
         ) : (
           lines.map((line, index) => (
-            <div key={index} className={line.stream === 'stderr' ? 'wf-log-line wf-log-line--err' : `wf-log-line wf-log-line--${line.stream}`}>
+            <div
+              key={index}
+              className={
+                line.stream === 'stderr'
+                  ? 'wf-log-line wf-log-line--err'
+                  : `wf-log-line wf-log-line--${line.stream}`
+              }
+            >
               {line.text.replace(/\r?\n$/, '') || ' '}
             </div>
           ))

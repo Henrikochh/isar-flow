@@ -17,9 +17,15 @@ function repeatMode(step: Record<string, unknown>): RepeatMode {
 /** Starting condition when a fixed loop becomes conditional: wait for the first block of the body to succeed. */
 function starterCondition(block: BlockNode, mode: 'until' | 'while'): Condition {
   const body = isRecord(block.step) ? (block.step as { steps?: unknown }).steps : undefined;
-  const first = Array.isArray(body) ? body.find((s) => isRecord(s) && typeof s.id === 'string' && s.id !== '') : undefined;
+  const first = Array.isArray(body)
+    ? body.find((s) => isRecord(s) && typeof s.id === 'string' && s.id !== '')
+    : undefined;
   if (isRecord(first)) {
-    return { value: toTemplate(`steps.${String(first.id)}.status`), op: mode === 'until' ? 'eq' : 'neq', to: 'success' };
+    return {
+      value: toTemplate(`steps.${String(first.id)}.status`),
+      op: mode === 'until' ? 'eq' : 'neq',
+      to: 'success',
+    };
   }
   return { value: toTemplate('loop.iteration'), op: mode === 'until' ? 'gte' : 'lt', to: 3 };
 }
@@ -76,7 +82,11 @@ export function LoopSettings({ block, step, stepId, update, issues }: SettingsPr
         max={100}
         integer
         required
-        hint={mode === 'fixed' ? 'The blocks run this many times unless a Break block leaves the loop earlier.' : undefined}
+        hint={
+          mode === 'fixed'
+            ? 'The blocks run this many times unless a Break block leaves the loop earlier.'
+            : undefined
+        }
         issues={issues.get('maxIterations')}
         onCommit={(value) => {
           if (value !== undefined) update({ maxIterations: value });
@@ -88,7 +98,9 @@ export function LoopSettings({ block, step, stepId, update, issues }: SettingsPr
           <SegmentedControl<'fail' | 'continue'>
             label="When the limit is reached"
             value={onMax}
-            onChange={(value) => (value === 'continue' ? update({ onMaxIterations: 'continue' }) : update({}, ['onMaxIterations']))}
+            onChange={(value) =>
+              value === 'continue' ? update({ onMaxIterations: 'continue' }) : update({}, ['onMaxIterations'])
+            }
             options={[
               { value: 'fail', label: 'Fail the run' },
               { value: 'continue', label: 'Continue' },

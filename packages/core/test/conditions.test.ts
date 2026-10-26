@@ -39,13 +39,21 @@ describe('comparison operators', () => {
 
   it('honours ignoreCase for string operators', () => {
     expect(check({ value: '${{ steps.review.text }}', op: 'contains', to: 'changes' })).toBe(false);
-    expect(check({ value: '${{ steps.review.text }}', op: 'contains', to: 'changes', ignoreCase: true })).toBe(true);
-    expect(check({ value: '${{ steps.review.text }}', op: 'eq', to: 'changes REQUESTED', ignoreCase: true })).toBe(true);
-    expect(check({ value: '${{ steps.tests.output }}', op: 'matches', to: 'fail src', ignoreCase: true })).toBe(true);
+    expect(
+      check({ value: '${{ steps.review.text }}', op: 'contains', to: 'changes', ignoreCase: true }),
+    ).toBe(true);
+    expect(
+      check({ value: '${{ steps.review.text }}', op: 'eq', to: 'changes REQUESTED', ignoreCase: true }),
+    ).toBe(true);
+    expect(
+      check({ value: '${{ steps.tests.output }}', op: 'matches', to: 'fail src', ignoreCase: true }),
+    ).toBe(true);
   });
 
   it('renders templates inside the operand', () => {
-    expect(check({ value: 'exit ${{ steps.tests.exitCode }}', op: 'eq', to: 'exit ${{ 0 + 1 }}' })).toBe(true);
+    expect(check({ value: 'exit ${{ steps.tests.exitCode }}', op: 'eq', to: 'exit ${{ 0 + 1 }}' })).toBe(
+      true,
+    );
   });
 });
 
@@ -77,16 +85,25 @@ describe('expression form', () => {
 
 describe('describeCondition', () => {
   it('summarizes structured conditions for block cards', () => {
-    expect(describeCondition({ value: '${{ steps.tests.exitCode }}', op: 'neq', to: 0 })).toBe('tests.exitCode ≠ 0');
+    expect(describeCondition({ value: '${{ steps.tests.exitCode }}', op: 'neq', to: 0 })).toBe(
+      'tests.exitCode ≠ 0',
+    );
     expect(describeCondition({ value: '${{ steps.review.text }}', op: 'contains', to: 'LGTM' })).toBe(
       'review.text contains "LGTM"',
     );
-    expect(describeCondition({ value: '${{ steps.lint.output }}', op: 'isEmpty' })).toBe('lint.output is empty');
+    expect(describeCondition({ value: '${{ steps.lint.output }}', op: 'isEmpty' })).toBe(
+      'lint.output is empty',
+    );
     expect(
       describeCondition({
         all: [
           { value: '${{ steps.tests.exitCode }}', op: 'eq', to: 0 },
-          { any: [{ value: '${{ steps.review.json.approved }}', op: 'isTrue' }, { not: '${{ inputs.strict }}' }] },
+          {
+            any: [
+              { value: '${{ steps.review.json.approved }}', op: 'isTrue' },
+              { not: '${{ inputs.strict }}' },
+            ],
+          },
         ],
       }),
     ).toBe('tests.exitCode = 0 and (review.json.approved is true or not inputs.strict)');

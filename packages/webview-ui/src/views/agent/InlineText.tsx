@@ -17,7 +17,16 @@ export interface InlineTextProps {
  * Text that reads like a heading and edits in place. Commits like every form field (idle and blur);
  * Enter finishes, Escape restores the value from before editing started.
  */
-export function InlineText({ value, onCommit, label, placeholder, className, required, invalid, describedBy }: InlineTextProps) {
+export function InlineText({
+  value,
+  onCommit,
+  label,
+  placeholder,
+  className,
+  required,
+  invalid,
+  describedBy,
+}: InlineTextProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const committed = useRef(value);
   const draft = useDraft(value, (next) => {

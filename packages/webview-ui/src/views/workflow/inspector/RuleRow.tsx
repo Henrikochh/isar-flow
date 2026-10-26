@@ -56,7 +56,11 @@ export function RuleRow({
   const n = index + 1;
   const hasValue = rule.value !== undefined;
   const operand = needsOperand(rule.op);
-  const typed = typeof rule.to === 'number' || typeof rule.to === 'boolean' || valueType === 'number' || valueType === 'boolean';
+  const typed =
+    typeof rule.to === 'number' ||
+    typeof rule.to === 'boolean' ||
+    valueType === 'number' ||
+    valueType === 'boolean';
   const caseToggle = TEXT_OPS.has(rule.op) && !(typed && (rule.op === 'eq' || rule.op === 'neq'));
   return (
     <li className={joiner ? 'wf-cond-item wf-cond-item--joined' : 'wf-cond-item'}>
@@ -84,7 +88,11 @@ export function RuleRow({
             />
           </div>
           {canRemove ? (
-            <IconButton icon="close" label={pending ? 'Discard new rule' : `Remove rule ${n}`} onClick={onRemove} />
+            <IconButton
+              icon="close"
+              label={pending ? 'Discard new rule' : `Remove rule ${n}`}
+              onClick={onRemove}
+            />
           ) : null}
         </div>
         <div className="wf-cond-line">
