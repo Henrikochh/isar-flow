@@ -17,6 +17,7 @@ import type {
   RunRecordSummary,
   RunView,
   ShellName,
+  ToolHost,
   ToolName,
   WorkflowSummary,
   WorkflowTemplateId,
@@ -88,6 +89,9 @@ export interface ToolHostOptions {
   prompt: PermissionPrompt;
   defaultShell: ShellName;
 }
+
+/** Creates a tool host whose "allow for this run" answers are scoped to `runId`. */
+export type ToolHostFactory = (runId: string) => ToolHost;
 
 /* ---------- models (src/models) ---------- */
 
@@ -195,5 +199,24 @@ export interface Services {
   workflows: WorkflowStore;
   models: ModelRegistry;
   runs: RunManager;
+  /** Tool hosts for agents (workspace-bounded, permission-gated). */
+  tools: ToolHostFactory;
   output: vscode.LogOutputChannel;
+}
+
+/**
+ * Process-level dependencies injected into the run manager (src/run) so it never imports the runner or
+ * tool modules directly; src/extension.ts passes the real implementations, tests pass fakes.
+ */
+export interface RunManagerDeps {
+  context: vscode.ExtensionContext;
+  models: ModelRegistry;
+  agents: AgentStore;
+  log: vscode.LogOutputChannel;
+  runCommand: RunConsoleCommand;
+  tools: ToolHostFactory;
+  /** Returns the shared mirror terminal for a workflow (created on first use). */
+  terminalFor(workflowName: string): RunTerminal;
+  /** Reads files matching workspace-relative globs for `context.files` (capped). */
+  readContextFiles(globs: string[], signal: AbortSignal): Promise<{ path: string; content: string }[]>;
 }
