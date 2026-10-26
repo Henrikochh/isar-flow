@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { StepStatus, StepType } from '@isar-flow/core';
-import { agentColorType, BLOCK_ICONS, initialsOf } from '../blockMeta';
+import { BLOCK_ICONS, initialsOf } from '../blockMeta';
 
 export function Spinner({ label }: { label?: string }) {
   return <span className="if-spinner" role={label ? 'status' : undefined} aria-label={label} />;
@@ -39,10 +39,19 @@ export function Stone({ type, size = 'm', title }: { type: StepType; size?: 's' 
   );
 }
 
+/** Avatar colors, named by the block type that carries them. Alpenrose is left out: a red avatar reads as an error. */
+const AVATAR_COLORS: StepType[] = ['agent', 'loop', 'if', 'approval', 'console'];
+
+function avatarColor(id: string): StepType {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
 /** Agent avatar: initials on a tile colored deterministically from the agent id. */
 export function AgentStone({ id, name, size = 'm' }: { id: string; name: string; size?: 's' | 'm' | 'l' }) {
   return (
-    <span className={`if-stone if-stone--${size}`} data-type={agentColorType(id)} aria-hidden="true">
+    <span className={`if-stone if-stone--${size}`} data-type={avatarColor(id)} aria-hidden="true">
       <span className="if-stone__initials">{initialsOf(name || id)}</span>
     </span>
   );

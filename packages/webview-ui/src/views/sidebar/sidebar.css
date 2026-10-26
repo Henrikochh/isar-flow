@@ -1,0 +1,306 @@
+/*
+ * Sidebar (view "sidebar", 240–400 px). Rows are quiet native list items; the river shows up only in the
+ * workflow tiles, the recent-runs stream and the empty-state art.
+ * Selectors stay flat; state reaches children through custom properties (--sb-row-bg, --sb-reveal).
+ */
+
+.sb-app {
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  container-type: inline-size;
+}
+
+/* ---------- tabs ---------- */
+.sb-tabs {
+  --sb-gutter: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 10px var(--sb-gutter) 8px;
+  background: var(--if-surface-sunken);
+  transition: box-shadow var(--if-duration) var(--if-ease);
+}
+.sb-tabs--raised {
+  box-shadow: 0 6px 6px -6px var(--vscode-scrollbar-shadow, var(--if-shadow));
+}
+
+/* ---------- panel body ---------- */
+.sb-body {
+  --sb-gutter: 12px;
+  --sb-bleed: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 6px var(--sb-gutter) 32px;
+}
+@container (min-width: 360px) {
+  .sb-tabs,
+  .sb-body {
+    --sb-gutter: 16px;
+  }
+}
+
+.sb-section-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.sb-note {
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+
+.sb-code {
+  font-family: var(--if-font-code);
+  font-size: 0.95em;
+  overflow-wrap: anywhere;
+}
+
+.sb-center {
+  min-height: 100%;
+  padding: 14vh 12px 24px;
+}
+
+/* ---------- list rows ---------- */
+.sb-list {
+  list-style: none;
+  margin: 0 calc(-1 * var(--sb-bleed));
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sb-row {
+  --sb-row-bg: transparent;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  border-radius: 8px;
+  background: var(--sb-row-bg);
+}
+.sb-row:hover,
+.sb-row:focus-within {
+  --sb-row-bg: var(--if-hover);
+  --sb-reveal: 1;
+}
+.sb-row--dimmed {
+  opacity: 0.62;
+}
+
+.sb-row__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.sb-row__main:focus-visible {
+  outline-offset: -1px;
+}
+
+.sb-row__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sb-row__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--if-fg);
+}
+
+.sb-row__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sb-row__code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  line-height: 18px;
+  color: var(--if-muted);
+}
+
+/* PathText drops whole leading folders to fit; the ellipsis only cuts a file name that is too long alone. */
+.sb-path {
+  position: relative;
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  line-height: 18px;
+  color: var(--if-muted);
+}
+.sb-path__probe {
+  position: absolute;
+  visibility: hidden;
+  white-space: pre;
+}
+
+.sb-row__muted {
+  font-size: var(--if-text-s);
+  line-height: 18px;
+  color: var(--if-muted);
+}
+
+.sb-row__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.sb-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  margin-top: 3px;
+  min-height: 20px;
+  font-size: var(--if-text-s);
+  line-height: 18px;
+  color: var(--if-muted);
+}
+
+/* Hover actions float over the row's right edge, on a backdrop that matches the row. */
+.sb-row__overlay {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  display: flex;
+  gap: 2px;
+  padding-left: 14px;
+  border-radius: 6px;
+  background:
+    linear-gradient(var(--sb-row-bg), var(--sb-row-bg)),
+    var(--if-surface-sunken);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 14px);
+  mask-image: linear-gradient(to right, transparent, #000 14px);
+  opacity: var(--sb-reveal, 0);
+  transition: opacity var(--if-duration) var(--if-ease);
+}
+
+/* Always-visible trailing actions (run / stop). */
+.sb-row__trail {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px 0 0;
+}
+
+.sb-warn {
+  flex: none;
+  color: var(--if-foehn);
+}
+
+/* ---------- inline confirmation ---------- */
+.sb-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--if-alpenrose) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--if-alpenrose) 40%, transparent);
+}
+.sb-confirm__title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.sb-confirm__body {
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+  overflow-wrap: anywhere;
+}
+.sb-confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* ---------- inline "New …" card ---------- */
+.sb-create {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0 calc(-1 * var(--sb-bleed)) 6px;
+  padding: 12px;
+  border-radius: var(--if-radius-l);
+  border: 1px solid var(--if-border);
+  background: var(--if-bg);
+}
+.sb-create__title {
+  font-family: var(--if-font-display);
+  font-size: var(--if-text-l);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.sb-create__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ---------- empty-state art: a short stretch of river ---------- */
+.sb-art {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+}
+.sb-art__river {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: var(--if-river-width);
+  margin-left: calc(var(--if-river-width) / -2);
+  border-radius: 2px;
+  background: linear-gradient(to bottom, transparent, var(--if-river) 28%, var(--if-river) 72%, transparent);
+}
+.sb-art__slot {
+  position: relative;
+  display: inline-flex;
+  border-radius: 10px;
+  background: var(--if-surface-sunken);
+}
+
+/* ---------- high contrast: no dimming (the Hidden chip says it); hover shows an outline instead of a fill ---------- */
+body.vscode-high-contrast .sb-row--dimmed,
+body.vscode-high-contrast-light .sb-row--dimmed {
+  opacity: 1;
+}
+body.vscode-high-contrast .sb-row:hover,
+body.vscode-high-contrast-light .sb-row:hover {
+  outline: 1px dashed var(--vscode-contrastActiveBorder, var(--if-focus));
+  outline-offset: -1px;
+}

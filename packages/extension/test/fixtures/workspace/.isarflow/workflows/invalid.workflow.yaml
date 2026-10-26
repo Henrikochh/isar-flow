@@ -1,0 +1,12 @@
+# Deliberately invalid: the loop has no maxIterations and the agent does not exist.
+version: 1
+name: Broken workflow
+steps:
+  - id: forever
+    type: loop
+    until: '${{ false }}'
+    steps:
+      - id: ask
+        type: agent
+        agent: nobody
+        prompt: Hello

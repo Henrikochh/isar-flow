@@ -21,7 +21,7 @@ export class Messenger<In extends { type: string }, Out extends { type: string }
           await handler(message);
         } catch (error) {
           this.log?.error(`Webview message '${message.type}' failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
-          void vscode.window.showErrorMessage(`Isar Flow: ${error instanceof Error ? error.message : String(error)}`);
+          void vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
         }
       }),
     );

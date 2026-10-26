@@ -1,0 +1,68 @@
+/* Models section: provider rows with a status dot. */
+
+.sb-provider {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+/* The dot takes a stone's 28 px slot so provider labels line up with agent and workflow names. */
+.sb-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 6px 10px 0;
+  border-radius: 50%;
+  background: var(--sb-dot, var(--if-muted));
+}
+.sb-dot--ok {
+  --sb-dot: var(--if-almgruen);
+}
+.sb-dot--loading {
+  --sb-dot: var(--if-foehn);
+}
+.sb-dot--error {
+  --sb-dot: var(--if-alpenrose);
+}
+.sb-dot--unknown {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--if-muted);
+}
+
+.sb-provider__line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  line-height: 20px;
+}
+
+.sb-provider__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--if-fg);
+}
+
+.sb-provider__count {
+  flex: none;
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+/* Makes room for the row's hover actions instead of peeking out from under them. */
+.sb-provider__count--yields {
+  opacity: calc(1 - var(--sb-reveal, 0));
+  transition: opacity var(--if-duration) var(--if-ease);
+}
+
+.sb-provider__error {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: var(--if-text-s);
+  line-height: 17px;
+  color: color-mix(in srgb, var(--if-alpenrose) 62%, var(--if-muted));
+}

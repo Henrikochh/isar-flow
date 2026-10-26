@@ -1,7 +1,7 @@
 import type { AgentRequest, AgentResult, StepIO } from '../engine/types';
 import { type ChatModel, ModelError, type ModelErrorKind, type ModelResolver } from '../models/types';
 import { abortError, throwIfAborted } from './abort';
-import { continueConversation, startConversation } from './loop';
+import { continueConversation, type Conversation, startConversation, withUsage } from './loop';
 import type { ToolHost } from './types';
 
 export interface ContextFile {
@@ -25,17 +25,30 @@ const FINAL_KINDS: ReadonlySet<ModelErrorKind> = new Set(['auth', 'bad-request',
 /**
  * Runs one agent block: attaches context files, then tries the agent's model and its fallback models in order.
  * A fallback model continues the conversation where the failed model stopped, so finished tool calls are not repeated.
+ * When the block fails after models used tokens, the error is an AgentRunError with the usage of all models.
  */
 export async function executeAgentRequest(
   request: AgentRequest,
   deps: AgentRequestDeps,
 ): Promise<AgentResult> {
-  const { io } = deps;
-  const { agent } = request;
-  throwIfAborted(io.signal);
-
+  throwIfAborted(deps.io.signal);
   const prompt = await withContextFiles(request, deps);
   const conversation = startConversation({ history: request.history, prompt, output: request.output });
+  try {
+    return await answerWithFallbacks(request, deps, prompt, conversation);
+  } catch (error) {
+    throw withUsage(error, conversation.usage);
+  }
+}
+
+async function answerWithFallbacks(
+  request: AgentRequest,
+  deps: AgentRequestDeps,
+  prompt: string,
+  conversation: Conversation,
+): Promise<AgentResult> {
+  const { io } = deps;
+  const { agent } = request;
   const refs = [...new Set([agent.model, ...(agent.fallbackModels ?? [])])];
   const failures: { ref: string; error: unknown }[] = [];
 

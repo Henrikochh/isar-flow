@@ -64,16 +64,26 @@ describe('withRetry', () => {
   });
 
   it('honours the retry hint carried by the error', async () => {
-    const hinted = Object.assign(new ModelError('slow down', 'rate-limit', 429), { retryAfterMs: 3 });
+    const hinted = new ModelError('slow down', 'rate-limit', 429, 3);
     const { fn } = failing(hinted);
     const delays: number[] = [];
     await withRetry(fn, { baseDelayMs: 10_000, onRetry: (_e, _a, delayMs) => delays.push(delayMs) });
     expect(delays).toEqual([3]);
   });
 
+  it('falls back to the backoff for unusable retry hints', async () => {
+    const { fn } = failing(
+      new ModelError('slow down', 'rate-limit', 429, Number.NaN),
+      new ModelError('slow down', 'rate-limit', 429, -5),
+    );
+    const delays: number[] = [];
+    await withRetry(fn, { baseDelayMs: 2, onRetry: (_e, _a, delayMs) => delays.push(delayMs) });
+    expect(delays).toEqual([2, 4]);
+  });
+
   it('caps the delay at 30 seconds', async () => {
     const controller = new AbortController();
-    const hinted = Object.assign(new ModelError('slow down', 'rate-limit', 429), { retryAfterMs: 120_000 });
+    const hinted = new ModelError('slow down', 'rate-limit', 429, 120_000);
     const { fn } = failing(hinted);
     const delays: number[] = [];
     const run = withRetry(fn, {

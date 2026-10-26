@@ -12,6 +12,7 @@ import {
 } from 'yaml';
 import { STEP_ID_PATTERN } from '../schema';
 import type { StepSlot } from '../schema/types';
+import { assignMissingIds } from './assignIds';
 import { EditError, loadForEdit, stringifyDocument } from './document';
 import {
   type BlockNode,
@@ -318,6 +319,8 @@ function applyOp(doc: Document, root: YAMLMap, op: WorkflowOp): void {
       return renameStep(root, op.stepId, op.newId);
     case 'updateWorkflow':
       return updateWorkflow(doc, root, op.set, op.unset);
+    case 'assignMissingIds':
+      return assignMissingIds(doc, root);
     default:
       throw new EditError(`Unknown operation '${String((op as { op?: unknown }).op)}'`);
   }

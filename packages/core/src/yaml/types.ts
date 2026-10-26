@@ -39,7 +39,13 @@ export type WorkflowOp =
   /** Changes a block id and rewrites `steps.<old>` references in all templates. */
   | { op: 'renameStep'; stepId: string; newId: string }
   /** Sets top-level workflow keys (name, description, inputs, env). */
-  | { op: 'updateWorkflow'; set: Record<string, unknown>; unset?: string[] };
+  | { op: 'updateWorkflow'; set: Record<string, unknown>; unset?: string[] }
+  /**
+   * Gives every block without a valid string id (missing, empty, not a string or not matching the id rule) a
+   * fresh id `<type>_<n>` (`block_<n>` for missing or unknown types), unique in the document. A new `id` key
+   * becomes the first key of the block; an existing invalid one is replaced in place.
+   */
+  | { op: 'assignMissingIds' };
 
 export interface ApplyOpsResult {
   /** New document text; equals the input text when `error` is set (ops are atomic). */

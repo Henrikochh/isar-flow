@@ -1,0 +1,14 @@
+# Agent workflow for the integration tests. The tests point the 'mock' provider at a local
+# OpenAI-compatible server; the model reads notes.txt with a tool call and answers with its content.
+version: 1
+name: Mock agent
+steps:
+  - id: ask
+    type: agent
+    agent: reviewer
+    model: mock/echo-model
+    prompt: Read notes.txt and tell me the marker.
+
+  - id: show
+    type: console
+    run: echo agent-said-${{ length(steps.ask.text) > 0 }}

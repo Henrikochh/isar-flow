@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { httpError, parseRetryAfter, serverMessage } from '../../src/models/errors';
+import { ModelError } from '../../src/models/types';
 
 const ctx = { label: 'LiteLLM', url: 'http://localhost:4000/v1/models' };
 
@@ -42,8 +43,25 @@ describe('httpError', () => {
   });
 
   it('carries the Retry-After hint in milliseconds', () => {
-    expect(httpError(429, '', ctx, '2')).toMatchObject({ retryAfterMs: 2000 });
-    expect(httpError(429, '', ctx, null)).not.toHaveProperty('retryAfterMs');
+    expect(httpError(429, '', ctx, '2').retryAfterMs).toBe(2000);
+    expect(httpError(503, '', ctx, '0').retryAfterMs).toBe(0);
+    expect(httpError(429, '', ctx, null).retryAfterMs).toBeUndefined();
+    expect(httpError(429, '', ctx, 'soon').retryAfterMs).toBeUndefined();
+  });
+});
+
+describe('ModelError', () => {
+  it('keeps kind, status and the typed retry hint', () => {
+    const error = new ModelError('slow down', 'rate-limit', 429, 1500);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({
+      name: 'ModelError',
+      message: 'slow down',
+      kind: 'rate-limit',
+      status: 429,
+    });
+    expect(error.retryAfterMs).toBe(1500);
+    expect(new ModelError('gone', 'network').retryAfterMs).toBeUndefined();
   });
 });
 

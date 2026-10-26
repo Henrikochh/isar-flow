@@ -1,0 +1,8 @@
+# A long-running command, used to test that stopping a run kills the process.
+version: 1
+name: Slow command
+steps:
+  - id: wait
+    type: console
+    run: node -e "setTimeout(() => {}, 60000)"
+    timeout: 120

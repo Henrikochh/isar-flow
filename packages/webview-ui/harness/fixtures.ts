@@ -161,3 +161,105 @@ permissions:
   edits: none
   commands: none
 `;
+
+/** Workflow editor scenario 'allblocks': every block type, nested containers and a Break inside an If. */
+export const ALL_BLOCKS_WORKFLOW_TEXT = `version: 1
+name: Release checklist
+description: Build, lint until clean, ask before publishing.
+inputs:
+  version: { type: string, description: Version to publish, required: true }
+  dryRun: { type: boolean, default: true }
+steps:
+  - id: build
+    name: Build the package
+    type: console
+    shell: pwsh
+    run: |
+      npm ci
+      npm run build -- --mode production
+  - id: notes
+    name: Draft release notes
+    type: agent
+    agent: docs-writer
+    prompt: Summarise the changes since the last tag for version \${{ inputs.version }}.
+  - id: polish
+    type: loop
+    while: { value: "\${{ steps.check.exitCode }}", op: neq, to: 0 }
+    maxIterations: 3
+    onMaxIterations: continue
+    steps:
+      - id: check
+        type: console
+        run: npm run lint
+        continueOnError: true
+      - id: lint_clean
+        type: if
+        condition: { value: "\${{ steps.check.exitCode }}", op: eq, to: 0 }
+        then:
+          - id: done
+            type: break
+        else:
+          - id: autofix
+            type: agent
+            agent: coder
+            prompt: Fix these lint errors without changing behaviour. \${{ tail(steps.check.output, 40) }}
+  - id: confirm
+    type: approval
+    message: Publish \${{ inputs.version }} to npm?
+  - id: dry
+    type: if
+    condition: "\${{ inputs.dryRun }}"
+    then:
+      - id: stop_dry
+        type: stop
+        outcome: success
+        message: Dry run finished. Nothing was published.
+  - id: publish
+    type: console
+    run: npm publish --access public
+`;
+
+/** Workflow with very long names, ids, commands and conditions, to check ellipsis and wrapping on the canvas. */
+export const LONG_TEXT_WORKFLOW_TEXT = `version: 1
+name: Nightly dependency upgrade with the full regression suite and a staged rollout to every environment
+inputs:
+  packageManifestPath: { type: string, default: services/checkout-api/package.json }
+  maximumAllowedRegressionPercentage: { type: number, default: 2 }
+  notifyChannelForReleaseManagers: { type: string, default: releases }
+steps:
+  - id: upgrade_all_dependencies_to_latest_minor_versions_and_regenerate_the_lockfile
+    type: console
+    shell: bash
+    continueOnError: true
+    run: npx --yes npm-check-updates --target minor --upgrade --packageFile \${{ inputs.packageManifestPath }} && npm install --no-audit --no-fund --loglevel=error
+  - id: assess
+    name: Assess the upgrade risk for every changed package and summarise all breaking changes for the release notes
+    type: agent
+    agent: docs-writer
+    model: vscode/copilot/claude-sonnet-4.5
+    output: { format: json }
+    prompt: Read the changelogs of every package that changed in \${{ inputs.packageManifestPath }} and list breaking changes, deprecations and anything that needs a migration, with links. Keep it short.
+  - id: regression_until_green_or_out_of_attempts_for_the_whole_checkout_service
+    type: loop
+    until:
+      all:
+        - { value: "\${{ steps.regression_suite_with_coverage_and_mutation_testing.exitCode }}", op: eq, to: 0 }
+        - { value: "\${{ steps.assess.json.riskLevelForTheProductionRollout }}", op: neq, to: high }
+    maxIterations: 10
+    steps:
+      - id: regression_suite_with_coverage_and_mutation_testing
+        type: console
+        continueOnError: true
+        run: npm run test:regression -- --coverage --reporter=junit --outputFile=reports/regression-\${{ loop.iteration }}.xml
+      - id: regression_failed_or_coverage_dropped_below_the_agreed_threshold
+        type: if
+        condition: "\${{ steps.regression_suite_with_coverage_and_mutation_testing.exitCode != 0 || steps.assess.json.coverageDelta < -inputs.maximumAllowedRegressionPercentage }}"
+        then:
+          - id: give_up_and_notify_the_release_managers_in_the_channel
+            type: stop
+            message: The regression suite still fails after the automatic fixes, so the upgrade was rolled back and the release managers were notified in the channel.
+        else:
+          - id: ask_before_rolling_out_to_production_environments
+            type: approval
+            message: All regression tests pass and coverage is within the agreed threshold. Roll the upgrade out to staging and then to every production region now?
+`;

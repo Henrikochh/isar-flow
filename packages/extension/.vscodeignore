@@ -1,0 +1,14 @@
+# Ship only the bundles, webview assets, schemas and docs. Everything else (sources, tests, fixtures,
+# source maps, node_modules, the .vscode-test download) stays out of the .vsix.
+# vsce lets a negation win over any ignore pattern, so the shipped files are listed explicitly.
+**
+!package.json
+!dist/extension.js
+!media/*.svg
+!media/webview/*.js
+!media/webview/*.css
+!media/webview/assets/**
+!schemas/*.json
+!README.md
+!CHANGELOG.md
+!LICENSE

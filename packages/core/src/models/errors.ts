@@ -108,10 +108,7 @@ export function httpError(
     default:
       message = `The ${provider} answered with unexpected HTTP status ${status}.${said}`;
   }
-  const error = new ModelError(message, kind, status);
-  const retryAfterMs = parseRetryAfter(retryAfter);
-  // Read by withRetry to wait as long as the server asked.
-  return retryAfterMs === undefined ? error : Object.assign(error, { retryAfterMs });
+  return new ModelError(message, kind, status, parseRetryAfter(retryAfter));
 }
 
 /** The server could not be reached at all (connection refused, DNS failure, TLS error ...). */

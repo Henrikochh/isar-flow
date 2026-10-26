@@ -1,0 +1,836 @@
+/*
+ * Agent editor: form column (max 640 px) beside the full-height Try it column.
+ * Icon sizes use `.ag-….codicon`: codicon.css sizes icons with `.codicon[class*='codicon-']`, and a compound
+ * selector of the same weight loaded later is the flat way to win.
+ */
+
+.ag-app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+
+.ag-main {
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.ag-column {
+  max-width: 704px;
+  margin: 0 auto;
+  padding: 28px 32px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.ag-loading {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--if-muted);
+}
+
+/* ---------- Header ---------- */
+
+.ag-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--if-border);
+}
+
+.ag-header__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ag-header__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ag-header__scope {
+  flex: none;
+  display: inline-flex;
+}
+
+.ag-header__name,
+.ag-header__description {
+  max-width: 100%;
+  min-width: 8ch;
+  field-sizing: content;
+  margin-left: -7px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--if-radius-m);
+  text-overflow: ellipsis;
+  transition:
+    border-color var(--if-duration) var(--if-ease),
+    background var(--if-duration) var(--if-ease);
+}
+
+.ag-header__name {
+  height: 36px;
+  font-family: var(--if-font-display);
+  font-size: var(--if-text-xxl);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--if-fg);
+}
+
+.ag-header__description {
+  height: 24px;
+  color: var(--if-muted);
+}
+
+.ag-header__name:hover,
+.ag-header__description:hover {
+  border-color: var(--if-input-border);
+}
+
+.ag-header__name:focus,
+.ag-header__description:focus {
+  outline: none;
+  border-color: var(--if-focus);
+  background: var(--if-input-bg);
+  color: var(--if-input-fg);
+}
+
+.ag-header__name::placeholder,
+.ag-header__description::placeholder {
+  color: var(--if-placeholder);
+}
+
+.ag-header__name--invalid {
+  border-color: var(--if-error);
+}
+
+.ag-header__name-static {
+  font-family: var(--if-font-display);
+  font-size: var(--if-text-xxl);
+  font-weight: 600;
+  line-height: 36px;
+}
+
+.ag-header__error,
+.ag-inline-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: var(--if-text-s);
+  color: var(--if-error);
+}
+
+.ag-header__error {
+  padding-top: 2px;
+}
+
+.ag-banners {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ag-banner-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--if-muted);
+}
+
+/* ---------- Form ---------- */
+
+.ag-form {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  padding-top: 4px;
+}
+
+.ag-section-count {
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+
+.ag-model-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ag-model-summary__ref {
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  margin-right: 2px;
+}
+
+.ag-model-summary__note {
+  flex-basis: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--if-foehn);
+}
+
+.ag-model-summary__icon.codicon {
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.ag-fallbacks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ag-fallbacks__list {
+  display: contents;
+  list-style: none;
+}
+
+.ag-fallback {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 28px;
+  padding: 0 2px 0 4px;
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-pill);
+  background: var(--if-surface);
+}
+
+.ag-fallback__order {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--if-muted) 18%, transparent);
+  color: var(--if-muted);
+  font-size: var(--if-text-xs);
+  font-weight: 600;
+}
+
+.ag-fallback__ref {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+}
+
+.ag-fallback__remove {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--if-radius-pill);
+}
+
+.ag-fallbacks__add {
+  flex: 0 1 240px;
+  min-width: 180px;
+}
+
+.ag-numbers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ag-instructions {
+  line-height: 1.6;
+}
+
+/* ---------- Tools ---------- */
+
+/* Hover rows bleed 8 px past the column so their text lines up with the section titles. */
+.ag-tool-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin: 0 -8px;
+}
+
+.ag-tool-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ag-tool-group__header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 0 8px 6px;
+  font-size: var(--if-text-s);
+}
+
+.ag-tool-group__icon.codicon {
+  font-size: 14px;
+}
+
+.ag-risk-read {
+  color: var(--if-almgruen);
+}
+
+.ag-risk-edit {
+  color: var(--if-foehn);
+}
+
+.ag-risk-command {
+  color: var(--if-alpenrose);
+}
+
+.ag-tool-group__title {
+  font-weight: 600;
+}
+
+.ag-tool-group__hint {
+  color: var(--if-muted);
+}
+
+.ag-tool {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 7px 8px;
+  border-radius: var(--if-radius-m);
+  transition: background var(--if-duration) var(--if-ease);
+}
+
+.ag-tool:hover {
+  background: var(--if-hover);
+}
+
+.ag-tool__check {
+  flex: 1;
+  min-width: 0;
+}
+
+.ag-tool__name {
+  flex: none;
+  padding-top: 1px;
+  font-size: var(--if-text-xs);
+  color: var(--if-muted);
+}
+
+/* ---------- Permissions ---------- */
+
+.ag-permissions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
+}
+
+.ag-permission {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px;
+  border-radius: var(--if-radius-m);
+}
+
+.ag-permission__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ag-permission__label {
+  font-weight: 600;
+}
+
+.ag-permission__hint {
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+
+.ag-permission__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: var(--if-text-s);
+  color: var(--if-error);
+}
+
+.ag-permission__control {
+  flex: none;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ag-permission__control:disabled {
+  opacity: 0.45;
+}
+
+/* ---------- Used by ---------- */
+
+.ag-used-by {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+
+.ag-used-by__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: var(--if-radius-m);
+}
+
+.ag-used-by__tile {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--if-isar) var(--if-wash-strength), transparent);
+  color: var(--if-isar);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--if-isar) 30%, transparent);
+}
+
+.ag-used-by__icon.codicon {
+  font-size: 13px;
+}
+
+.ag-used-by__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+}
+
+.ag-used-by__empty {
+  color: var(--if-muted);
+}
+
+.ag-used-by__hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+
+.ag-used-by__ref {
+  padding: 1px 6px;
+  border-radius: var(--if-radius-s);
+  background: color-mix(in srgb, var(--if-muted) 14%, transparent);
+  color: var(--if-fg);
+  font-size: var(--if-text-s);
+}
+
+/* ---------- Try it ---------- */
+
+.ag-tryit {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--if-border);
+  background: var(--if-surface-sunken);
+}
+
+.ag-tryit__header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 10px 0 16px;
+  border-bottom: 1px solid var(--if-border);
+}
+
+.ag-tryit__title {
+  flex: 1;
+  font-family: var(--if-font-display);
+  font-size: var(--if-text-l);
+  font-weight: 600;
+}
+
+.ag-tryit__model {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+
+.ag-tryit__model-icon.codicon {
+  flex: none;
+  font-size: 12px;
+  color: var(--if-isar);
+}
+
+.ag-tryit__empty {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px 32px;
+  text-align: center;
+}
+
+.ag-tryit__empty-text {
+  max-width: 30ch;
+  color: var(--if-muted);
+}
+
+/* A thin stream running into the agent's stone: the river's source. */
+.ag-tryit__source {
+  width: 2px;
+  height: 64px;
+  margin-bottom: -6px;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--if-isar) 55%, transparent));
+}
+
+.ag-transcript {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px 16px 20px;
+}
+
+.ag-user {
+  display: flex;
+  justify-content: flex-end;
+  padding-left: 36px;
+}
+
+.ag-user__bubble {
+  max-width: 100%;
+  padding: 7px 12px;
+  border: 1px solid var(--if-border);
+  border-radius: 12px 12px 4px 12px;
+  background: var(--if-hover);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ag-turn {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  column-gap: 10px;
+}
+
+.ag-turn__gutter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The agent's turn flows down a small stream, like blocks on the river. */
+.ag-turn__stream {
+  flex: 1;
+  width: 2px;
+  min-height: 8px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--if-isar) 38%, transparent);
+}
+
+.ag-turn__stream--live {
+  background: repeating-linear-gradient(to bottom, var(--if-isar) 0 6px, transparent 6px 11px);
+  background-size: 2px 11px;
+  animation: ag-current 1.2s linear infinite;
+}
+
+@keyframes ag-current {
+  to {
+    background-position: 0 11px;
+  }
+}
+
+.ag-turn__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ag-turn__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--if-text-s);
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.ag-answer {
+  padding: 8px 12px;
+  border: 1px solid var(--if-border);
+  border-radius: 4px 12px 12px 12px;
+  background: var(--if-bg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ag-answer--code {
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+/* Wrapped parts of a long line hang two columns past the line's own indent. */
+.ag-code-line {
+  display: block;
+  padding-left: var(--ag-hang, 2ch);
+  text-indent: calc(-1 * var(--ag-hang, 2ch));
+}
+
+.ag-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  background: var(--if-isar);
+  animation: ag-blink 1s steps(2, jump-none) infinite;
+}
+
+@keyframes ag-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.ag-waiting {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+
+/* A tool call reads like a log line: the call on top, its result underneath. */
+.ag-tool-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 8px;
+  padding: 2px 0;
+  font-size: var(--if-text-s);
+  line-height: 18px;
+  color: var(--if-muted);
+}
+
+.ag-tool-row--failed {
+  color: var(--if-alpenrose);
+}
+
+.ag-tool-row__icon.codicon {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.ag-tool-row__call {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--if-font-code);
+}
+
+.ag-tool-row__name {
+  margin-right: 8px;
+  color: var(--if-fg);
+}
+
+.ag-tool-row__result {
+  grid-column: 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ag-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--if-alpenrose) 35%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--if-alpenrose) 10%, transparent);
+  font-size: var(--if-text-s);
+}
+
+.ag-error__icon.codicon {
+  flex: none;
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--if-alpenrose);
+}
+
+.ag-error__text {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ag-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  padding-left: 2px;
+  font-size: var(--if-text-xs);
+  color: var(--if-muted);
+}
+
+.ag-meta__model {
+  font-family: var(--if-font-code);
+}
+
+/* ---------- Composer ---------- */
+
+.ag-composer {
+  flex: none;
+  padding: 12px 16px 16px;
+}
+
+/* One box holds the message and its send bar, like VS Code's chat input. */
+.ag-composer__box {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--if-input-border);
+  border-radius: var(--if-radius-l);
+  background: var(--if-input-bg);
+  transition: border-color var(--if-duration) var(--if-ease);
+}
+
+.ag-composer__box:focus-within {
+  border-color: var(--if-focus);
+}
+
+/* Blocked: the box empties out, but the reason in its bar keeps full contrast. */
+.ag-composer__box--disabled {
+  background: transparent;
+  border-style: dashed;
+}
+
+.ag-composer__input:disabled {
+  cursor: not-allowed;
+}
+
+.ag-composer__input {
+  display: block;
+  min-height: 0;
+  padding: 10px 12px 2px;
+  border: 0;
+  border-radius: var(--if-radius-l) var(--if-radius-l) 0 0;
+  background: transparent;
+  resize: none;
+}
+
+.ag-composer__bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 4px 6px 6px 12px;
+}
+
+.ag-composer__hint {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 4px;
+  font-size: var(--if-text-xs);
+  line-height: 16px;
+  color: var(--if-muted);
+}
+
+.ag-composer__blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--if-foehn);
+}
+
+/* ---------- Narrow editors: stack the columns ---------- */
+
+@media (max-width: 899px) {
+  .ag-app {
+    display: block;
+    overflow-y: auto;
+  }
+
+  .ag-main {
+    overflow: visible;
+  }
+
+  .ag-tryit {
+    height: 600px;
+    border-left: none;
+    border-top: 1px solid var(--if-border);
+  }
+}
+
+@media (max-width: 520px) {
+  .ag-numbers {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ag-column {
+    padding: 20px 16px 48px;
+  }
+
+  .ag-permission {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+
+/* Inline error and status icons match the kit's field errors. */
+.ag-small-icon.codicon {
+  flex: none;
+  margin-top: 1px;
+  font-size: 13px;
+}

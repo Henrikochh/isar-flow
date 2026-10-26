@@ -1,0 +1,129 @@
+/* Condition builder: rules hang on a thin rail in the block's color, joined by "and" / "or". */
+
+.wf-cond {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.wf-cond-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wf-cond-label {
+  font-size: var(--if-text-s);
+  font-weight: 600;
+}
+.wf-cond-rules-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wf-cond-rules {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 0 0 18px;
+  list-style: none;
+}
+.wf-cond-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+/* Rail segment from this rule's stone down to the next one (the joiner is 20 px, a stone sits 23 px into its card). */
+.wf-cond-item::before {
+  content: '';
+  position: absolute;
+  left: -13px;
+  top: 23px;
+  bottom: -43px;
+  width: 2px;
+  background: color-mix(in srgb, var(--block-color) 50%, transparent);
+}
+.wf-cond-item--joined::before {
+  top: 43px;
+}
+.wf-cond-item:last-child::before {
+  display: none;
+}
+.wf-cond-joiner {
+  align-self: flex-start;
+  margin-left: -18px;
+  padding: 3px 0;
+  width: 12px;
+  height: 20px;
+  display: flex;
+  justify-content: center;
+  font-size: var(--if-text-xs);
+  font-weight: 600;
+  line-height: 14px;
+  color: var(--block-color);
+  background: var(--if-surface-sunken);
+  position: relative;
+  z-index: 1;
+}
+
+.wf-cond-rule {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--if-border);
+  border-radius: 8px;
+  background: var(--if-bg);
+}
+/* A stone on the rail, level with the rule's first line. */
+.wf-cond-rule::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  top: 17px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--if-surface-sunken);
+  border: 2px solid var(--block-color);
+}
+.wf-cond-rule--pending {
+  border-style: dashed;
+  border-color: var(--if-border-strong);
+  background: transparent;
+}
+.wf-cond-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wf-cond-value {
+  flex: 1;
+  min-width: 0;
+}
+.wf-cond-op {
+  flex: 0 0 48%;
+  min-width: 0;
+}
+.wf-cond-op--wide {
+  flex: 1;
+}
+.wf-cond-operand {
+  flex: 1;
+}
+.wf-cond-custom {
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+}
+
+.wf-cond-summary {
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+  overflow-wrap: anywhere;
+}
+.wf-cond-summary-lead {
+  color: var(--if-fg);
+  font-weight: 600;
+}

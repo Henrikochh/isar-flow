@@ -137,6 +137,15 @@ export class LanguageModelError extends Error {
   ) {
     super(message);
   }
+  static NoPermissions(message = '') {
+    return new LanguageModelError(message, 'NoPermissions');
+  }
+  static Blocked(message = '') {
+    return new LanguageModelError(message, 'Blocked');
+  }
+  static NotFound(message = '') {
+    return new LanguageModelError(message, 'NotFound');
+  }
 }
 
 export enum DiagnosticSeverity {
@@ -173,6 +182,20 @@ export class ThemeIcon {
   constructor(public id: string) {}
 }
 
+export enum FileType {
+  Unknown = 0,
+  File = 1,
+  Directory = 2,
+  SymbolicLink = 64,
+}
+
+export class RelativePattern {
+  constructor(
+    public baseUri: Uri | string | { uri: Uri },
+    public pattern: string,
+  ) {}
+}
+
 const noop = () => undefined;
 const noopEvent = () => ({ dispose: noop });
 
@@ -185,6 +208,7 @@ export const window = {
   createOutputChannel: () => ({ appendLine: noop, append: noop, info: noop, warn: noop, error: noop, debug: noop, trace: noop, show: noop, dispose: noop }),
   createTerminal: () => ({ show: noop, dispose: noop }),
   onDidCloseTerminal: noopEvent,
+  registerWebviewViewProvider: () => ({ dispose: noop }),
 };
 
 export const workspace = {
@@ -195,7 +219,12 @@ export const workspace = {
   onDidGrantWorkspaceTrust: noopEvent,
   applyEdit: async () => true,
   findFiles: async () => [],
+  onDidChangeWorkspaceFolders: noopEvent,
+  onDidSaveTextDocument: noopEvent,
+  getWorkspaceFolder: (_uri: Uri) => undefined as { uri: Uri; name: string; index: number } | undefined,
+  createFileSystemWatcher: () => ({ onDidCreate: noopEvent, onDidChange: noopEvent, onDidDelete: noopEvent, dispose: noop }),
   fs: {
+    readDirectory: async (): Promise<[string, number][]> => [],
     readFile: async () => new Uint8Array(),
     writeFile: async () => undefined,
     stat: async () => ({ type: 1, size: 0, ctime: 0, mtime: 0 }),

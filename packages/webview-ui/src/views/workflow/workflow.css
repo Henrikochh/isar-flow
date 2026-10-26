@@ -1,0 +1,65 @@
+/* Workflow editor shell: top bar across, palette | canvas | inspector below. */
+
+.wf-app {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 360px;
+  grid-template-rows: 48px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  background: var(--if-bg);
+}
+
+.wf-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* A one-cell grid makes the inspector (whatever its root element) fill the 360 px column. */
+.wf-app__inspector {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--if-border);
+  background: var(--if-surface-sunken);
+}
+
+/* Small play tile in the run dialog header, echoing the Start marker. */
+.wf-dialog-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--if-isar);
+  color: var(--if-on-isar);
+  flex: none;
+}
+
+.wf-dialog-dot .codicon {
+  font-size: 14px;
+  margin-left: 2px;
+}
+
+.wf-inputs-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wf-inputs-form__switch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wf-input-name {
+  font-family: var(--if-font-code);
+  font-weight: 600;
+}

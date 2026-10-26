@@ -1,3 +1,4 @@
+import { AgentRunError } from '../engine/errors';
 import type { StepIO, Usage } from '../engine/types';
 import type { ChatMessage, ChatModel, ChatOptions, ToolCall } from '../models/types';
 import type { OutputShape } from '../schema/types';
@@ -50,12 +51,29 @@ export function startConversation(
   };
 }
 
-/** Runs the tool-calling loop until the model gives a final answer. */
+/**
+ * Runs the tool-calling loop until the model gives a final answer. When the run fails after the model used
+ * tokens, the error is an {@link AgentRunError} that carries the usage.
+ */
 export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoopResult> {
-  return continueConversation(options, startConversation(options));
+  const conversation = startConversation(options);
+  try {
+    return await continueConversation(options, conversation);
+  } catch (error) {
+    throw withUsage(error, conversation.usage);
+  }
 }
 
-/** Runs model turns on `conversation`, updating it in place, until the model gives a final answer. */
+/** The error to throw for a failed run: wrapped in an AgentRunError when tokens were used, so they still count. */
+export function withUsage(error: unknown, usage: Usage): unknown {
+  if (usage.inputTokens + usage.outputTokens <= 0) return error;
+  return new AgentRunError(errorMessage(error), { ...usage }, { cause: error });
+}
+
+/**
+ * Runs model turns on `conversation`, updating it in place, until the model gives a final answer.
+ * Errors are not wrapped: the caller decides about fallbacks and adds `conversation.usage` with withUsage.
+ */
 export async function continueConversation(
   options: AgentLoopOptions,
   conversation: Conversation,

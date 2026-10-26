@@ -1,4 +1,5 @@
 import * as esbuild from 'esbuild';
+import { generateSchemas } from './scripts/schemas.mjs';
 
 const watch = process.argv.includes('--watch');
 
@@ -13,6 +14,8 @@ const options = {
   sourcemap: true,
   logLevel: 'info',
 };
+
+await generateSchemas();
 
 if (watch) {
   const ctx = await esbuild.context(options);

@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "model": {
+      "type": "string",
+      "pattern": "^[^/\\s]+\\/\\S+$",
+      "description": "Model reference \"<provider>/<model>\", e.g. \"litellm/gpt-4.1\" or \"vscode/copilot/gpt-4.1\"."
+    },
+    "fallbackModels": {
+      "description": "Models tried when the main model fails.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[^/\\s]+\\/\\S+$",
+        "description": "Model reference \"<provider>/<model>\", e.g. \"litellm/gpt-4.1\" or \"vscode/copilot/gpt-4.1\"."
+      }
+    },
+    "systemPrompt": {
+      "description": "Instructions that define how the agent behaves.",
+      "type": "string"
+    },
+    "temperature": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "maxTokens": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991
+    },
+    "maxTurns": {
+      "description": "Maximum tool-calling rounds (default 20).",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200
+    },
+    "tools": {
+      "description": "Built-in tools the agent may use.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "readFile",
+          "listFiles",
+          "searchText",
+          "gitDiff",
+          "editFile",
+          "writeFile",
+          "runCommand"
+        ]
+      }
+    },
+    "permissions": {
+      "description": "none = never, ask = confirm each time, auto = allow.",
+      "type": "object",
+      "properties": {
+        "edits": {
+          "type": "string",
+          "enum": [
+            "none",
+            "ask",
+            "auto"
+          ]
+        },
+        "commands": {
+          "type": "string",
+          "enum": [
+            "none",
+            "ask",
+            "auto"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Display name of the agent."
+    },
+    "description": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "model",
+    "name"
+  ],
+  "additionalProperties": false,
+  "title": "Isar Flow agent"
+}

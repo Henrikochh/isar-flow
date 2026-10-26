@@ -1,3 +1,4 @@
+import { validateOutputShape } from './agent';
 import type { Diagnostic, DiagnosticSeverity } from './diagnostics';
 import {
   analyzeExpression,
@@ -413,6 +414,32 @@ export function validateWorkflow(workflow: Workflow, options: ValidateOptions = 
       files.forEach((file, i) =>
         checkTemplate(file, { path: [...block.path, 'context', 'files', i], block }),
       );
+    }
+    checkOutputSchema(block, step.output);
+  };
+
+  const checkOutputSchema = (block: BlockNode, output: unknown) => {
+    if (!isRecord(output) || output.schema === undefined) return;
+    const path = [...block.path, 'output', 'schema'];
+    const subject = `The output schema of ${blockName(block)}`;
+    // Like the agent runtime: anything but format json answers with text and ignores the schema.
+    if (output.format !== 'json') {
+      report(
+        'output-schema-without-json',
+        'warning',
+        `${subject} is only used with output format JSON, so it is ignored. ` +
+          'Switch the output format to JSON or remove the schema.',
+        path,
+        block,
+      );
+      return;
+    }
+    // Schemas that are not mappings are already reported by schema validation.
+    if (!isRecord(output.schema)) return;
+    for (const problem of validateOutputShape(output.schema)) {
+      const text = /[.!?]$/.test(problem) ? problem : `${problem}.`;
+      const message = `${subject} is invalid: ${text} Fix output.schema.`;
+      report('invalid-output-schema', 'error', message, path, block);
     }
   };
 

@@ -20,3 +20,5 @@ export {
 } from './Display';
 export { Dialog } from './Dialog';
 export { ModelPicker, type ModelPickerProps } from './ModelPicker';
+export { Popover, type PopoverProps, type PopoverPlacement } from './Popover';
+export { Menu, MenuItem, MenuLabel, MenuSeparator } from './Menu';

@@ -1,0 +1,404 @@
+/* Run output and run summary in the inspector. */
+
+[data-status='running'] {
+  --insp-status-color: var(--if-isar);
+}
+[data-status='success'] {
+  --insp-status-color: var(--if-almgruen);
+}
+[data-status='failure'] {
+  --insp-status-color: var(--if-alpenrose);
+}
+[data-status='cancelled'],
+[data-status='skipped'],
+[data-status='pending'] {
+  --insp-status-color: var(--if-muted);
+}
+
+/* ---------- status line ---------- */
+
+.wf-run-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 24px;
+}
+.wf-run-status-label {
+  font-weight: 600;
+  color: var(--insp-status-color);
+}
+.wf-run-status-time {
+  color: var(--if-muted);
+  font-variant-numeric: tabular-nums;
+}
+.wf-run-status-chips {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* ---------- log viewer ---------- */
+
+.wf-log {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-l);
+  background: var(--vscode-terminal-background, var(--if-bg));
+  overflow: hidden;
+}
+.wf-log-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px 3px 10px;
+  border-bottom: 1px solid var(--if-border);
+  background: var(--if-surface-sunken);
+  font-size: var(--if-text-s);
+}
+.wf-log-title {
+  font-weight: 600;
+}
+.wf-log-count {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 8px;
+  color: var(--if-muted);
+}
+.wf-log-count-err {
+  color: var(--if-alpenrose);
+}
+.wf-log-body {
+  max-height: 360px;
+  overflow: auto;
+  padding: 6px 0;
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  line-height: 18px;
+  color: var(--vscode-terminal-foreground, var(--if-fg));
+}
+.wf-log-body:focus-visible {
+  outline: 1px solid var(--if-focus);
+  outline-offset: -1px;
+}
+.wf-log-line {
+  padding: 0 10px 0 8px;
+  border-left: 2px solid transparent;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.wf-log-line--err {
+  color: var(--if-alpenrose);
+  border-left-color: var(--if-alpenrose);
+  background: color-mix(in srgb, var(--if-alpenrose) 9%, transparent);
+}
+.wf-log-line--info,
+.wf-log-line--tool {
+  color: var(--if-muted);
+}
+.wf-log-note {
+  padding: 0 10px;
+  color: var(--if-muted);
+  font-family: var(--if-font-ui);
+}
+
+/* ---------- rendered detail ---------- */
+
+.wf-detail {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-l);
+  overflow: hidden;
+}
+.wf-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+}
+.wf-detail-toggle {
+  flex: 1;
+  min-width: 0;
+}
+.wf-detail-label {
+  flex: none;
+  font-size: var(--if-text-s);
+  font-weight: 600;
+}
+.wf-detail-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+.wf-detail-body {
+  max-height: 260px;
+  border: none;
+  border-top: 1px solid var(--if-border);
+  border-radius: 0;
+}
+
+/* ---------- agent answer ---------- */
+
+.wf-answer {
+  padding: 10px 12px;
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-l);
+  background: var(--if-bg);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.wf-answer--streaming::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--if-isar);
+  animation: wf-caret 1s steps(1) infinite;
+}
+@keyframes wf-caret {
+  50% {
+    opacity: 0;
+  }
+}
+.wf-answer-json {
+  max-height: 360px;
+}
+.wf-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wf-tool {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+.wf-tool-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- run summary ---------- */
+
+.wf-run-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.wf-run-hero-glyph {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--if-radius-l);
+  background: color-mix(in srgb, var(--insp-status-color) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--insp-status-color) 30%, transparent);
+}
+.wf-run-hero-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wf-run-hero-title {
+  font-size: var(--if-text-xl);
+  line-height: 26px;
+  color: var(--insp-status-color);
+}
+.wf-run-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-run-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+.wf-run-input {
+  display: grid;
+  grid-template-columns: minmax(56px, auto) minmax(0, 1fr);
+  gap: 10px;
+  font-size: var(--if-text-s);
+}
+.wf-run-input-name {
+  font-family: var(--if-font-code);
+  color: var(--if-muted);
+}
+.wf-run-input-value {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The blocks of the run on a thin river; each item draws its own segment so unreached ones fade. */
+.wf-run-river {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wf-run-river-item {
+  position: relative;
+}
+.wf-run-river-item::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--if-river);
+}
+.wf-run-river-item:first-child::before {
+  top: 50%;
+}
+.wf-run-river-item:last-child::before {
+  bottom: 50%;
+}
+.wf-run-river-item--quiet {
+  opacity: 0.55;
+}
+.wf-run-river-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  padding: 3px 8px 3px 4px;
+  border: none;
+  border-radius: var(--if-radius-m);
+  background: transparent;
+  color: var(--if-fg);
+  text-align: left;
+}
+.wf-run-river-row:hover:not(:disabled) {
+  background: var(--if-hover);
+}
+.wf-run-river-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: var(--if-surface-sunken);
+}
+.wf-run-river-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.wf-run-river-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wf-run-river-count {
+  flex: none;
+  font-size: var(--if-text-xs);
+  color: var(--if-muted);
+  font-variant-numeric: tabular-nums;
+}
+.wf-run-river-time {
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- run history ---------- */
+
+.wf-history {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
+.wf-history-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--if-radius-m);
+  background: transparent;
+  color: var(--if-fg);
+  text-align: left;
+}
+.wf-history-row:hover {
+  background: var(--if-hover);
+}
+.wf-history-row--current {
+  background: var(--if-selected);
+  color: var(--if-selected-fg);
+}
+.wf-history-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.wf-history-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.wf-history-status {
+  font-weight: 600;
+}
+.wf-history-when {
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+.wf-history-error {
+  font-size: var(--if-text-s);
+  color: var(--if-alpenrose);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wf-history-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+  font-variant-numeric: tabular-nums;
+}

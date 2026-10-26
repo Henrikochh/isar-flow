@@ -457,6 +457,13 @@ body.vscode-high-contrast-light .if-btn {
   font-weight: 500;
   color: var(--if-muted);
 }
+/* High contrast: the selected segment gets a ring (inset, so the focus outline stays visible). */
+body.vscode-high-contrast .if-segmented__item[aria-checked='true'],
+body.vscode-high-contrast .if-segmented__item[aria-selected='true'],
+body.vscode-high-contrast-light .if-segmented__item[aria-checked='true'],
+body.vscode-high-contrast-light .if-segmented__item[aria-selected='true'] {
+  box-shadow: inset 0 0 0 1px var(--vscode-contrastActiveBorder, var(--if-focus));
+}
 
 /* ---------- Chip ---------- */
 .if-chip {

@@ -28,7 +28,15 @@ import {
   type WorkflowDocumentState,
   type WorkflowEditorToHost,
 } from '@isar-flow/core';
-import { AGENTS, CATALOG, RECENT_RUNS, REVIEWER_AGENT_TEXT, WORKFLOWS } from './fixtures';
+import {
+  AGENTS,
+  ALL_BLOCKS_WORKFLOW_TEXT,
+  CATALOG,
+  LONG_TEXT_WORKFLOW_TEXT,
+  RECENT_RUNS,
+  REVIEWER_AGENT_TEXT,
+  WORKFLOWS,
+} from './fixtures';
 
 type Send<T> = (message: T) => void;
 
@@ -49,6 +57,11 @@ function scenarioWorkflowText(scenario: string): string {
   switch (scenario) {
     case 'empty':
       return newWorkflowText('New workflow');
+    case 'allblocks':
+      return ALL_BLOCKS_WORKFLOW_TEXT;
+    case 'long':
+    case 'long-narrow':
+      return LONG_TEXT_WORKFLOW_TEXT;
     case 'invalid':
       return review.replace('prompt:', 'promt:');
     case 'syntax':
@@ -170,8 +183,8 @@ export function workflowHost(scenario: string, send: Send<HostToWorkflowEditor>)
   let liveView: RunView | null = null;
   const pendingApprovals = new Map<string, (result: ApprovalResult) => void>();
 
-  const doc = (): WorkflowDocumentState => {
-    const parsed = parseWorkflowText(text);
+  const doc = (source = text): WorkflowDocumentState => {
+    const parsed = parseWorkflowText(source);
     const semantic = parsed.workflow
       ? validateWorkflow(parsed.workflow, { agentIds: AGENTS.map((a) => a.id), modelRefs: CATALOG.models.map((m) => m.ref) })
       : [];
@@ -179,7 +192,7 @@ export function workflowHost(scenario: string, send: Send<HostToWorkflowEditor>)
     return {
       uri: WORKFLOW_URI,
       fileName: 'review-loop.workflow.yaml',
-      text,
+      text: source,
       workflow: parsed.workflow,
       valid: parsed.valid && !diagnostics.some((d) => d.severity === 'error'),
       diagnostics,
@@ -239,6 +252,8 @@ export function workflowHost(scenario: string, send: Send<HostToWorkflowEditor>)
   return (message: WorkflowEditorToHost) => {
     switch (message.type) {
       case 'ready':
+        // 'syntax': the file was readable before the last keystroke, so the canvas keeps the last valid model.
+        if (scenario === 'syntax') send({ type: 'document', doc: doc(scenarioWorkflowText('default')) });
         send({ type: 'document', doc: doc() });
         send({ type: 'catalog', agents: AGENTS, catalog: CATALOG });
         send({ type: 'trust', trusted: scenario !== 'untrusted' });
@@ -277,18 +292,65 @@ export function workflowHost(scenario: string, send: Send<HostToWorkflowEditor>)
 
 /* ---------------- sidebar ---------------- */
 
+/** Sidebar scenarios combine tokens, e.g. "narrow-workflows" or "wide-running". */
+const sidebarHas = (scenario: string, token: string) => scenario.split('-').includes(token);
+
+/** Initial webview state for sidebar scenarios that show an open "New …" card. */
+export function sidebarViewState(scenario: string): unknown {
+  if (sidebarHas(scenario, 'newagent')) return { agentDraft: { name: 'Test fixer', starter: 'coder', scope: 'workspace' } };
+  if (sidebarHas(scenario, 'newworkflow')) return { workflowDraft: { name: '', template: 'review-loop' } };
+  return undefined;
+}
+
 export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
+  const has = (token: string) => sidebarHas(scenario, token);
+  const empty = has('empty');
+  const liveRun = (workflow: (typeof WORKFLOWS)[number], startedAt: number) => ({
+    runId: `run-live-${startedAt}`,
+    workflowUri: workflow.uri,
+    workflowName: workflow.name,
+    status: 'running' as const,
+    startedAt,
+  });
+  const running = has('running') ? liveRun(WORKFLOWS[0], Date.now() - 70_000) : undefined;
+  // "messy": what a lenient host may send for broken files and half-configured providers.
+  const messy = has('messy');
   const state: SidebarState = {
-    hasWorkspace: scenario !== 'noworkspace',
-    trusted: scenario !== 'untrusted',
-    agents: scenario === 'empty' ? [] : [...AGENTS],
-    workflows: scenario === 'empty' ? [] : [...WORKFLOWS],
-    catalog: CATALOG,
-    recentRuns: scenario === 'empty' ? [] : RECENT_RUNS,
-    activeRuns: [],
-    tab: scenario === 'workflows' ? 'workflows' : 'agents',
+    hasWorkspace: !has('noworkspace'),
+    trusted: !has('untrusted'),
+    agents: empty
+      ? []
+      : messy
+        ? [
+            ...AGENTS,
+            { id: 'translator', name: '', model: '', tools: [], scope: 'workspace', uri: 'file:///c%3A/work/shop/.isarflow/agents/translator.agent.yaml', valid: false },
+            { ...AGENTS[1], scope: 'user', shadowed: true, uri: 'file:///c%3A/Users/me/agents/reviewer.agent.yaml' },
+          ]
+        : [...AGENTS],
+    workflows: empty ? [] : messy ? [...WORKFLOWS, { uri: 'file:///c%3A/work/shop/broken.workflow.yaml', name: '', relativePath: 'broken.workflow.yaml', valid: false, stepCount: 0 }] : [...WORKFLOWS],
+    catalog: messy
+      ? {
+          ...CATALOG,
+          loading: true,
+          providers: [
+            { ...CATALOG.providers[0], status: 'loading' },
+            ...CATALOG.providers.slice(1),
+            { id: 'openrouter', label: 'OpenRouter', kind: 'openai-compatible', baseUrl: 'https://openrouter.ai/api/v1', hasApiKey: false, status: 'unknown', modelCount: 0 },
+          ],
+        }
+      : CATALOG,
+    recentRuns: empty ? [] : running ? [running, ...RECENT_RUNS] : RECENT_RUNS,
+    activeRuns: running ? [running.workflowUri] : [],
+    tab: ['workflows', 'untrusted', 'running', 'newworkflow'].some(has) ? 'workflows' : 'agents',
   };
   const push = () => send({ type: 'state', state: { ...state } });
+  const finishRun = (runId: string, status: 'success' | 'cancelled') => {
+    const run = state.recentRuns.find((r) => r.runId === runId);
+    if (!run || run.status !== 'running') return;
+    state.recentRuns = state.recentRuns.map((r) => (r.runId === runId ? { ...r, status, durationMs: Date.now() - r.startedAt } : r));
+    state.activeRuns = state.activeRuns.filter((uri) => uri !== run.workflowUri);
+    push();
+  };
 
   return (message: SidebarToHost) => {
     switch (message.type) {
@@ -314,13 +376,18 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
         ];
         push();
         break;
-      case 'runWorkflow':
-        state.activeRuns = [message.uri];
+      case 'runWorkflow': {
+        const workflow = state.workflows.find((w) => w.uri === message.uri);
+        if (!workflow) break;
+        const run = liveRun(workflow, Date.now());
+        state.activeRuns = [...state.activeRuns, message.uri];
+        state.recentRuns = [run, ...state.recentRuns];
         push();
-        setTimeout(() => {
-          state.activeRuns = [];
-          push();
-        }, 4000);
+        setTimeout(() => finishRun(run.runId, 'success'), 4000);
+        break;
+      }
+      case 'cancelRun':
+        finishRun(message.runId, 'cancelled');
         break;
       case 'refreshModels':
         state.catalog = { ...state.catalog, loading: true };
@@ -339,7 +406,12 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
 /* ---------------- agent editor ---------------- */
 
 export function agentHost(scenario: string, send: Send<HostToAgentEditor>) {
-  let text = scenario === 'new' ? newAgentText('Translator') : REVIEWER_AGENT_TEXT;
+  let text =
+    scenario === 'new'
+      ? newAgentText('Translator')
+      : scenario === 'invalid'
+        ? REVIEWER_AGENT_TEXT.replace('temperature: 0.2', 'temperature: 3').replace('edits: none', 'edits: sometimes')
+        : REVIEWER_AGENT_TEXT;
   const id = scenario === 'new' ? 'translator' : 'reviewer';
   let streaming: { cancelled: boolean } | undefined;
 

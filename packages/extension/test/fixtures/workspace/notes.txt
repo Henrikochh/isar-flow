@@ -1,0 +1,2 @@
+Release notes for the integration test.
+Marker: isar-notes-marker-42

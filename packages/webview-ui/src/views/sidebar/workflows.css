@@ -1,0 +1,316 @@
+/* Workflows tab: pulse tiles, run actions, template cards and the recent-runs stream. */
+
+/* ---------- workflow tile ---------- */
+.sb-tile {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--if-isar);
+  background: color-mix(in srgb, var(--if-isar) var(--if-wash-strength), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--if-isar) 30%, transparent);
+}
+/* While running, a current flows down through the tile (same 1.2 s rhythm as the canvas river). */
+.sb-tile--running {
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--if-isar) 34%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 100% 200%;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px var(--if-isar);
+  animation: sb-current 1.2s linear infinite;
+}
+@keyframes sb-current {
+  from {
+    background-position: 0 -200%;
+  }
+  to {
+    background-position: 0 200%;
+  }
+}
+
+.sb-run-btn {
+  color: var(--if-isar);
+}
+.sb-run-btn:hover:not(:disabled) {
+  color: var(--if-isar);
+}
+.sb-stop-btn:hover:not(:disabled) {
+  color: var(--if-alpenrose);
+}
+
+.sb-running {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  color: var(--if-isar);
+}
+
+.sb-meta-running {
+  font-weight: 600;
+  color: var(--if-isar);
+}
+.sb-meta-status {
+  color: var(--if-fg);
+}
+/* Same footprint as a StatusGlyph, for runs that have not happened yet (compound to beat codicon.css sizing). */
+.sb-meta-glyph.codicon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 15px;
+  color: var(--if-muted);
+}
+
+/* ---------- template cards ---------- */
+.sb-templates {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sb-template {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px 10px;
+  border: 1px solid var(--if-input-border);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  transition:
+    border-color var(--if-duration) var(--if-ease),
+    background var(--if-duration) var(--if-ease);
+}
+.sb-template:hover {
+  border-color: var(--if-border-strong);
+  background: var(--if-hover);
+}
+.sb-template--selected,
+.sb-template--selected:hover {
+  border-color: var(--if-isar);
+  background: color-mix(in srgb, var(--if-isar) 7%, transparent);
+  box-shadow: inset 0 0 0 1px var(--if-isar);
+}
+
+.sb-radio {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border-radius: 50%;
+  border: 1px solid var(--if-input-border);
+  background: var(--if-input-bg);
+}
+.sb-radio--on {
+  border-color: var(--if-isar);
+  background: var(--if-isar);
+  box-shadow: inset 0 0 0 3px var(--if-input-bg);
+}
+
+.sb-template__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sb-template__title {
+  font-weight: 600;
+  line-height: 18px;
+}
+.sb-template__desc {
+  font-size: var(--if-text-s);
+  line-height: 1.4;
+  color: var(--if-muted);
+}
+
+/* Miniature river of the template's blocks: stones joined by stream, containers drawn as pools. */
+.sb-stones {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.sb-mini {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  color: var(--block-color);
+  background: var(--block-wash);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--block-color) 30%, transparent);
+}
+.sb-mini > .codicon {
+  font-size: 12px;
+}
+.sb-stream {
+  flex: none;
+  width: 6px;
+  height: 2px;
+  background: var(--if-river);
+}
+.sb-mini-group {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--block-color) 9%, transparent);
+}
+.sb-stone-slot {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px dashed var(--if-border-strong);
+}
+body.vscode-high-contrast .sb-mini,
+body.vscode-high-contrast-light .sb-mini {
+  box-shadow: inset 0 0 0 1px var(--block-color);
+}
+body.vscode-high-contrast .sb-mini-group,
+body.vscode-high-contrast-light .sb-mini-group {
+  box-shadow: inset 0 0 0 1px var(--block-color);
+}
+
+/* ---------- recent runs: statuses as stones on a thin stream ---------- */
+.sb-runs {
+  list-style: none;
+  margin: 0 calc(-1 * var(--sb-bleed));
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sb-run {
+  position: relative;
+}
+/* The stream runs through the centre of the 28 px stone column, the same axis as the row tiles above. */
+/* Each row draws its stretch; the stretches overlap by a pixel and are opaque, so the joins never show. */
+.sb-run::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  bottom: 0;
+  left: 21px;
+  width: 2px;
+  background: color-mix(in srgb, var(--if-isar) 45%, var(--if-surface-sunken));
+}
+body.vscode-high-contrast .sb-run::before,
+body.vscode-high-contrast-light .sb-run::before {
+  background: var(--if-river);
+}
+.sb-run:first-child::before {
+  top: 16px;
+}
+.sb-run:last-child::before {
+  bottom: auto;
+  height: 17px;
+}
+.sb-run:only-child::before {
+  display: none;
+}
+
+.sb-run__main {
+  --sb-row-bg: transparent;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-areas:
+    'stone name'
+    '. meta'
+    '. error';
+  column-gap: 10px;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--sb-row-bg);
+  color: inherit;
+  text-align: left;
+}
+.sb-run__main:hover {
+  --sb-row-bg: var(--if-hover);
+}
+.sb-run__main:focus-visible {
+  outline-offset: -1px;
+}
+
+.sb-run__stone {
+  grid-area: stone;
+  justify-self: center;
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background:
+    linear-gradient(var(--sb-row-bg), var(--sb-row-bg)),
+    var(--if-surface-sunken);
+}
+
+.sb-run__name {
+  grid-area: name;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 20px;
+}
+
+.sb-run__meta {
+  grid-area: meta;
+  display: flex;
+  gap: 8px;
+  font-size: var(--if-text-s);
+  line-height: 18px;
+  color: var(--if-muted);
+  white-space: nowrap;
+}
+
+.sb-run__error {
+  grid-area: error;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--if-text-s);
+  line-height: 17px;
+  color: color-mix(in srgb, var(--if-alpenrose) 62%, var(--if-muted));
+}
+
+@container (min-width: 320px) {
+  .sb-run__main {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'stone name meta'
+      '. error error';
+  }
+}
+
+body.vscode-high-contrast .sb-run__main:hover,
+body.vscode-high-contrast-light .sb-run__main:hover,
+body.vscode-high-contrast .sb-template:hover,
+body.vscode-high-contrast-light .sb-template:hover {
+  outline: 1px dashed var(--vscode-contrastActiveBorder, var(--if-focus));
+  outline-offset: -1px;
+}

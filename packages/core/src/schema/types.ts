@@ -34,7 +34,10 @@ export interface AgentDefinition extends AgentSettings {
 
 /**
  * Expected JSON shape of an agent answer. Either a compact shape (`{ approved: boolean, issues: "string[]" }`)
- * or a full JSON Schema object (detected by a string `type` property).
+ * or a full JSON Schema object. It counts as JSON Schema (see isJsonSchema) when it has a `properties` object,
+ * or when its `type` is a JSON Schema type name (or a non-empty list of them) and every other key is a known
+ * JSON Schema keyword; anything else is read as a compact shape, so `{ type: string }` is a schema for a
+ * string while `{ type: string, size: number }` is a compact shape with the keys `type` and `size`.
  */
 export type OutputShape = Record<string, unknown>;
 

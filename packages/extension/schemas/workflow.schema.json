@@ -1,0 +1,761 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "number",
+      "const": 1,
+      "description": "Isar Flow workflow format version."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "inputs": {
+      "description": "Values asked for when the run starts; referenced as inputs.<name>.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "default": {
+            "type": [
+              "string",
+              "number",
+              "boolean"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "multiline": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "env": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "steps": {
+      "$ref": "#/definitions/__schema0"
+    }
+  },
+  "required": [
+    "version",
+    "name",
+    "steps"
+  ],
+  "additionalProperties": false,
+  "definitions": {
+    "__schema0": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+                "description": "Unique id, used to reference outputs as steps.<id>."
+              },
+              "name": {
+                "description": "Display label on the canvas.",
+                "type": "string"
+              },
+              "timeout": {
+                "description": "Timeout in seconds.",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "continueOnError": {
+                "type": "boolean"
+              },
+              "retry": {
+                "description": "Retry failed attempts; delay in seconds.",
+                "type": "object",
+                "properties": {
+                  "max": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "delay": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "max"
+                ],
+                "additionalProperties": false
+              },
+              "type": {
+                "type": "string",
+                "const": "agent"
+              },
+              "agent": {
+                "description": "Agent id or inline agent settings.",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "model": {
+                        "type": "string",
+                        "pattern": "^[^/\\s]+\\/\\S+$",
+                        "description": "Model reference \"<provider>/<model>\", e.g. \"litellm/gpt-4.1\" or \"vscode/copilot/gpt-4.1\"."
+                      },
+                      "fallbackModels": {
+                        "description": "Models tried when the main model fails.",
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[^/\\s]+\\/\\S+$",
+                          "description": "Model reference \"<provider>/<model>\", e.g. \"litellm/gpt-4.1\" or \"vscode/copilot/gpt-4.1\"."
+                        }
+                      },
+                      "systemPrompt": {
+                        "description": "Instructions that define how the agent behaves.",
+                        "type": "string"
+                      },
+                      "temperature": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 2
+                      },
+                      "maxTokens": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "maxTurns": {
+                        "description": "Maximum tool-calling rounds (default 20).",
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 200
+                      },
+                      "tools": {
+                        "description": "Built-in tools the agent may use.",
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "readFile",
+                            "listFiles",
+                            "searchText",
+                            "gitDiff",
+                            "editFile",
+                            "writeFile",
+                            "runCommand"
+                          ]
+                        }
+                      },
+                      "permissions": {
+                        "description": "none = never, ask = confirm each time, auto = allow.",
+                        "type": "object",
+                        "properties": {
+                          "edits": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "ask",
+                              "auto"
+                            ]
+                          },
+                          "commands": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "ask",
+                              "auto"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "model": {
+                "type": "string",
+                "pattern": "^[^/\\s]+\\/\\S+$",
+                "description": "Model reference \"<provider>/<model>\", e.g. \"litellm/gpt-4.1\" or \"vscode/copilot/gpt-4.1\"."
+              },
+              "prompt": {
+                "type": "string",
+                "description": "Task for the agent. Supports ${{ }} templates."
+              },
+              "output": {
+                "type": "object",
+                "properties": {
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "text",
+                      "json"
+                    ]
+                  },
+                  "schema": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "format"
+                ],
+                "additionalProperties": false
+              },
+              "session": {
+                "type": "string",
+                "enum": [
+                  "fresh",
+                  "continue"
+                ]
+              },
+              "context": {
+                "type": "object",
+                "properties": {
+                  "files": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "prompt"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+                "description": "Unique id, used to reference outputs as steps.<id>."
+              },
+              "name": {
+                "description": "Display label on the canvas.",
+                "type": "string"
+              },
+              "timeout": {
+                "description": "Timeout in seconds.",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "continueOnError": {
+                "type": "boolean"
+              },
+              "retry": {
+                "description": "Retry failed attempts; delay in seconds.",
+                "type": "object",
+                "properties": {
+                  "max": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "delay": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "max"
+                ],
+                "additionalProperties": false
+              },
+              "type": {
+                "type": "string",
+                "const": "console"
+              },
+              "run": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Command line to run. Supports ${{ }} templates."
+              },
+              "shell": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "pwsh",
+                  "powershell",
+                  "cmd",
+                  "bash",
+                  "sh"
+                ]
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "env": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "run"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+                "description": "Unique id, used to reference outputs as steps.<id>."
+              },
+              "name": {
+                "description": "Display label on the canvas.",
+                "type": "string"
+              },
+              "timeout": {
+                "description": "Timeout in seconds.",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "continueOnError": {
+                "type": "boolean"
+              },
+              "retry": {
+                "description": "Retry failed attempts; delay in seconds.",
+                "type": "object",
+                "properties": {
+                  "max": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "delay": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "max"
+                ],
+                "additionalProperties": false
+              },
+              "type": {
+                "type": "string",
+                "const": "loop"
+              },
+              "until": {
+                "description": "Checked after each iteration; the loop ends when true.",
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/__schema1"
+                  }
+                ]
+              },
+              "while": {
+                "description": "Checked before each iteration; the loop ends when false.",
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/__schema1"
+                  }
+                ]
+              },
+              "maxIterations": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100,
+                "description": "Safety limit (1–100)."
+              },
+              "onMaxIterations": {
+                "type": "string",
+                "enum": [
+                  "fail",
+                  "continue"
+                ]
+              },
+              "steps": {
+                "$ref": "#/definitions/__schema0"
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "maxIterations",
+              "steps"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+                "description": "Unique id, used to reference outputs as steps.<id>."
+              },
+              "name": {
+                "description": "Display label on the canvas.",
+                "type": "string"
+              },
+              "timeout": {
+                "description": "Timeout in seconds.",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "continueOnError": {
+                "type": "boolean"
+              },
+              "retry": {
+                "description": "Retry failed attempts; delay in seconds.",
+                "type": "object",
+                "properties": {
+                  "max": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "delay": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "max"
+                ],
+                "additionalProperties": false
+              },
+              "type": {
+                "type": "string",
+                "const": "if"
+              },
+              "condition": {
+                "$ref": "#/definitions/__schema1"
+              },
+              "then": {
+                "$ref": "#/definitions/__schema0"
+              },
+              "else": {
+                "allOf": [
+                  {
+                    "$ref": "#/definitions/__schema0"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "condition",
+              "then"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+                "description": "Unique id, used to reference outputs as steps.<id>."
+              },
+              "name": {
+                "description": "Display label on the canvas.",
+                "type": "string"
+              },
+              "timeout": {
+                "description": "Timeout in seconds.",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "continueOnError": {
+                "type": "boolean"
+              },
+              "retry": {
+                "description": "Retry failed attempts; delay in seconds.",
+                "type": "object",
+                "properties": {
+                  "max": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "delay": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "max"
+                ],
+                "additionalProperties": false
+              },
+              "type": {
+                "type": "string",
+                "const": "break"
+              }
+            },
+            "required": [
+              "id",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+                "description": "Unique id, used to reference outputs as steps.<id>."
+              },
+              "name": {
+                "description": "Display label on the canvas.",
+                "type": "string"
+              },
+              "timeout": {
+                "description": "Timeout in seconds.",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "continueOnError": {
+                "type": "boolean"
+              },
+              "retry": {
+                "description": "Retry failed attempts; delay in seconds.",
+                "type": "object",
+                "properties": {
+                  "max": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "delay": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "max"
+                ],
+                "additionalProperties": false
+              },
+              "type": {
+                "type": "string",
+                "const": "stop"
+              },
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "success",
+                  "failure"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+                "description": "Unique id, used to reference outputs as steps.<id>."
+              },
+              "name": {
+                "description": "Display label on the canvas.",
+                "type": "string"
+              },
+              "timeout": {
+                "description": "Timeout in seconds.",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "continueOnError": {
+                "type": "boolean"
+              },
+              "retry": {
+                "description": "Retry failed attempts; delay in seconds.",
+                "type": "object",
+                "properties": {
+                  "max": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "delay": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "max"
+                ],
+                "additionalProperties": false
+              },
+              "type": {
+                "type": "string",
+                "const": "approval"
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              },
+              "onReject": {
+                "type": "string",
+                "enum": [
+                  "stop",
+                  "continue"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "__schema1": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "Expression, e.g. \"${{ steps.tests.exitCode == 0 }}\""
+        },
+        {
+          "type": "object",
+          "properties": {
+            "all": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/__schema1"
+              }
+            }
+          },
+          "required": [
+            "all"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "any": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/__schema1"
+              }
+            }
+          },
+          "required": [
+            "any"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "not": {
+              "$ref": "#/definitions/__schema1"
+            }
+          },
+          "required": [
+            "not"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {},
+            "op": {
+              "type": "string",
+              "enum": [
+                "eq",
+                "neq",
+                "gt",
+                "gte",
+                "lt",
+                "lte",
+                "contains",
+                "notContains",
+                "matches",
+                "notMatches",
+                "startsWith",
+                "endsWith",
+                "isEmpty",
+                "isNotEmpty",
+                "isTrue",
+                "isFalse"
+              ]
+            },
+            "to": {},
+            "ignoreCase": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "value",
+            "op"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "title": "Isar Flow workflow"
+}

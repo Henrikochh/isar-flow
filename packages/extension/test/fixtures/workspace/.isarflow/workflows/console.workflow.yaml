@@ -1,0 +1,38 @@
+# Console-only workflow used by the integration tests. Every command works in PowerShell, cmd, bash and sh.
+version: 1
+name: Console basics
+description: Echo, exit codes, a retry loop and a condition
+env:
+  GREETING: hello-isar
+steps:
+  - id: greet
+    type: console
+    run: echo ${{ env.GREETING }}
+
+  - id: fails
+    name: Exit with code 3
+    type: console
+    run: exit 3
+    continueOnError: true
+
+  - id: retry_loop
+    type: loop
+    until: { value: '${{ steps.attempt.exitCode }}', op: eq, to: 0 }
+    maxIterations: 5
+    steps:
+      - id: attempt
+        type: console
+        run: 'exit ${{ loop.iteration < 3 ? 1 : 0 }}'
+        continueOnError: true
+
+  - id: check
+    type: if
+    condition: '${{ steps.fails.exitCode == 3 && steps.retry_loop.iterations == 3 }}'
+    then:
+      - id: then_echo
+        type: console
+        run: echo branch-then
+    else:
+      - id: else_echo
+        type: console
+        run: echo branch-else

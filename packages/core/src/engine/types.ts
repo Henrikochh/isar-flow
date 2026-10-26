@@ -98,6 +98,10 @@ export interface RunOptions {
   signal?: AbortSignal;
   /** Process environment visible as `env.*` (workflow `env` is merged on top). */
   env?: Record<string, string>;
+  /**
+   * Readable as `secrets.*` in expressions. Values of 4 or more characters are replaced with '••••••' in
+   * every event and in the run summary; the host still receives the real values.
+   */
   secrets?: Record<string, string>;
   workflowFile?: string;
   workspaceRoot: string;
@@ -108,8 +112,15 @@ export interface RunOptions {
   now?: () => number;
 }
 
-/** Outputs of a block, readable as `steps.<id>.<key>`. Always contains `status`. */
-export type StepOutput = Record<string, unknown> & { status: StepStatus; durationMs?: number };
+/**
+ * Outputs of a block, readable as `steps.<id>.<key>`. Always contains `status`. `error` is set for failed and
+ * cancelled blocks and holds the same text as the step-end event's `error`.
+ */
+export type StepOutput = Record<string, unknown> & {
+  status: StepStatus;
+  durationMs?: number;
+  error?: string;
+};
 
 export type RunEvent =
   | { type: 'run-start'; runId: string; workflowName: string; startedAt: number; inputs: Record<string, unknown> }

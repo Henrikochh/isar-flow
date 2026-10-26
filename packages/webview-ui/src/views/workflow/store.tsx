@@ -4,6 +4,7 @@
  */
 import { createContext, type ReactNode, useContext, useMemo, useReducer } from 'react';
 import {
+  collectStepIds,
   reduceRunEvent,
   type AgentSummary,
   type ApprovalPrompt,
@@ -11,6 +12,7 @@ import {
   type ModelCatalog,
   type RunRecordSummary,
   type RunView,
+  type Workflow,
   type WorkflowDocumentState,
   type WorkflowEditorToHost,
   type WorkflowOp,
@@ -32,12 +34,15 @@ export interface WorkflowUiState {
   selection: string | null;
   /** Last ops error from the host, shown as a dismissible banner. */
   opsError: string | null;
+  /**
+   * Most recent non-null workflow model. While the YAML has a syntax error (`doc.workflow` is null) the canvas
+   * keeps rendering this one, dimmed.
+   */
+  lastWorkflow?: Workflow | null;
 }
 
 export type WorkflowUiAction =
-  | HostToWorkflowEditor
-  | { type: 'select'; stepId: string | null }
-  | { type: 'dismissOpsError' };
+  HostToWorkflowEditor | { type: 'select'; stepId: string | null } | { type: 'dismissOpsError' };
 
 export const initialWorkflowUiState: WorkflowUiState = {
   doc: null,
@@ -55,18 +60,13 @@ export const initialWorkflowUiState: WorkflowUiState = {
 export function workflowUiReducer(state: WorkflowUiState, action: WorkflowUiAction): WorkflowUiState {
   switch (action.type) {
     case 'document': {
-      const ids = new Set<string>();
-      const collect = (steps: { id: string; steps?: unknown; then?: unknown; else?: unknown }[] = []) => {
-        for (const s of steps) {
-          ids.add(s.id);
-          collect(s.steps as never);
-          collect(s.then as never);
-          collect(s.else as never);
-        }
-      };
-      collect((action.doc.workflow?.steps ?? []) as never);
-      const selection = state.selection && ids.has(state.selection) ? state.selection : null;
-      return { ...state, doc: action.doc, selection };
+      const workflow = action.doc.workflow;
+      // While the YAML cannot be read there is no model to check the selection against, so it is kept.
+      if (!workflow) return { ...state, doc: action.doc };
+      // collectStepIds tolerates the lenient model (blocks without ids, odd nesting).
+      const selection =
+        state.selection && collectStepIds(workflow).includes(state.selection) ? state.selection : null;
+      return { ...state, doc: action.doc, selection, lastWorkflow: workflow };
     }
     case 'catalog':
       return { ...state, agents: action.agents, catalog: action.catalog };
@@ -83,7 +83,10 @@ export function workflowUiReducer(state: WorkflowUiState, action: WorkflowUiActi
     case 'history':
       return { ...state, history: action.runs };
     case 'approvalRequest':
-      return { ...state, approvals: [...state.approvals.filter((a) => a.requestId !== action.prompt.requestId), action.prompt] };
+      return {
+        ...state,
+        approvals: [...state.approvals.filter((a) => a.requestId !== action.prompt.requestId), action.prompt],
+      };
     case 'approvalResolved':
       return { ...state, approvals: state.approvals.filter((a) => a.requestId !== action.requestId) };
     case 'opsFailed':
@@ -137,7 +140,8 @@ export function WorkflowStoreProvider({
       run: (inputs) => send({ type: 'run', inputs }),
       cancelRun: () => send({ type: 'cancelRun' }),
       selectRun: (runId) => send({ type: 'selectRun', runId }),
-      answerApproval: (requestId, approved, comment) => send({ type: 'approval', requestId, approved, comment }),
+      answerApproval: (requestId, approved, comment) =>
+        send({ type: 'approval', requestId, approved, comment }),
       openYaml: (stepId) => send({ type: 'openYaml', stepId }),
       openAgent: (agentId) => send({ type: 'openAgent', agentId }),
       createAgent: () => send({ type: 'createAgent' }),

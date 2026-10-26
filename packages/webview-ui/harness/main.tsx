@@ -3,7 +3,7 @@
  * URL: /harness/index.html?view=workflow&scenario=running&theme=dark[&bare=1]
  */
 import { applyTheme, type HarnessTheme } from './themes';
-import { agentHost, sidebarHost, workflowHost } from './mockHost';
+import { agentHost, sidebarHost, sidebarViewState, workflowHost } from './mockHost';
 import { TRANSCRIPT_FIXTURE } from './transcript';
 
 const params = new URLSearchParams(location.search);
@@ -22,7 +22,12 @@ const handler: (message: never) => void =
       ? agentHost(scenario, toWebview)
       : workflowHost(scenario, toWebview);
 
-let viewState: unknown = view === 'agent' && scenario === 'tryit' ? { tryIt: { messages: TRANSCRIPT_FIXTURE } } : undefined;
+let viewState: unknown =
+  view === 'agent' && scenario === 'tryit'
+    ? { tryIt: { messages: TRANSCRIPT_FIXTURE } }
+    : view === 'sidebar'
+      ? sidebarViewState(scenario)
+      : undefined;
 
 window.acquireVsCodeApi = () => ({
   postMessage: (message: unknown) => {

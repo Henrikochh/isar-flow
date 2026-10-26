@@ -1,0 +1,48 @@
+.wf-banners {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 760px;
+  align-self: center;
+  padding: 12px 16px 4px;
+}
+
+.wf-banner-title {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.wf-banner-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--if-link);
+  font-size: var(--if-text-s);
+  font-weight: 500;
+}
+
+.wf-banner-link:hover {
+  text-decoration: underline;
+}
+
+.wf-banner-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wf-approval {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.wf-approval__comment {
+  flex: 1 1 220px;
+  width: auto;
+}

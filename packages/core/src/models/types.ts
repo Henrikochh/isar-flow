@@ -72,6 +72,8 @@ export class ModelError extends Error {
     message: string,
     readonly kind: ModelErrorKind,
     readonly status?: number,
+    /** How long the server asked to wait before retrying (from Retry-After); used by withRetry. */
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = 'ModelError';

@@ -1,0 +1,1315 @@
+/*
+ * The river canvas. The turquoise stream is the one bold element; cards, frames and chrome stay quiet and take
+ * their surfaces from the VS Code theme.
+ */
+
+.wf-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.wf-canvas {
+  --wf-card-w: 300px;
+  --wf-river-w: 3px;
+  --wf-lane-gap: 48px;
+  --wf-lane-pad: 10px;
+  --wf-radius-card: 10px;
+  --wf-bend: 14px;
+  /* Opaque river color for pieces that overlap; matches --if-river over the canvas background. */
+  --wf-river-solid: color-mix(in srgb, var(--if-isar) 62%, var(--if-bg));
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--if-bg);
+  container-type: inline-size;
+}
+
+.wf-canvas--dragging {
+  cursor: grabbing;
+}
+
+.wf-canvas:focus-visible {
+  outline: 1px solid var(--if-focus);
+  outline-offset: -1px;
+}
+
+.wf-stage {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  padding: 48px;
+}
+
+.wf-stage--center {
+  align-items: center;
+}
+
+.wf-river {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  min-width: 360px;
+  transition: opacity var(--if-duration) var(--if-ease);
+}
+
+.wf-river--stale {
+  opacity: 0.6;
+  filter: saturate(0.6);
+}
+
+/* ---------- River lines ---------- */
+
+.wf-line {
+  display: block;
+  flex: 1 1 12px;
+  width: var(--wf-river-w);
+  min-height: 10px;
+  background: var(--if-river);
+}
+
+.wf-line--idle,
+.wf-line--passed {
+  opacity: 1;
+}
+
+.wf-line--pending {
+  opacity: 0.35;
+}
+
+/* The current flowing towards the running block: dashes moving down. */
+.wf-line--current {
+  background-color: color-mix(in srgb, var(--if-isar) 22%, transparent);
+  background-image: linear-gradient(to bottom, var(--if-isar) 0 7px, transparent 7px 12px);
+  background-size: 100% 12px;
+  animation: wf-current 1.2s linear infinite;
+}
+
+@keyframes wf-current {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 36px;
+  }
+}
+
+.wf-line--stub {
+  flex: none;
+  height: 32px;
+}
+
+/* First piece of an empty lane, so its slot lines up with the first card of the other lane. */
+.wf-line--lead {
+  flex: none;
+  height: 28px;
+}
+
+/* ---------- Lists and segments ---------- */
+
+.wf-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+}
+
+.wf-list--grow {
+  flex: 1 1 auto;
+}
+
+.wf-seg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+  flex: none;
+  min-height: 32px;
+  transition: min-height var(--if-duration) var(--if-ease);
+}
+
+.wf-seg--open {
+  min-height: 72px;
+}
+
+.wf-seg--grow {
+  flex: 1 0 auto;
+}
+
+/* Drop slot: closed to nothing, opens into a dashed 36 px target while dragging. */
+.wf-slot {
+  flex: none;
+  width: var(--wf-card-w);
+  max-width: 100%;
+  height: 0;
+  border: 0 dashed transparent;
+  border-radius: var(--wf-radius-card);
+  opacity: 0;
+  transition:
+    height var(--if-duration) var(--if-ease),
+    opacity var(--if-duration) var(--if-ease),
+    background var(--if-duration) var(--if-ease);
+}
+
+.wf-slot--open {
+  height: 36px;
+  margin: 4px 0;
+  border-width: 1.5px;
+  border-color: color-mix(in srgb, var(--if-isar) 55%, transparent);
+  opacity: 1;
+}
+
+.wf-slot--over {
+  background: var(--block-wash);
+  border-style: solid;
+  border-color: var(--block-color);
+}
+
+/* Insertion point: a small round "+" on the river, revealed on hover or keyboard focus. */
+.wf-insert {
+  position: absolute;
+  top: 6px;
+  left: calc(50% - 10px);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1.5px solid var(--if-isar);
+  border-radius: 50%;
+  background: var(--if-bg);
+  color: var(--if-isar);
+  opacity: 0;
+  transition:
+    opacity var(--if-duration) var(--if-ease),
+    background var(--if-duration) var(--if-ease),
+    color var(--if-duration) var(--if-ease);
+}
+
+/* Wider invisible hover target so the "+" appears when the pointer is near the river. */
+.wf-insert::before {
+  content: '';
+  position: absolute;
+  inset: -6px -64px;
+}
+
+.wf-insert:hover,
+.wf-insert:focus-visible,
+.wf-insert--open {
+  opacity: 1;
+}
+
+.wf-insert:hover,
+.wf-insert--open {
+  background: var(--if-isar);
+  color: var(--if-on-isar);
+}
+
+.wf-insert:focus-visible {
+  outline: 1px solid var(--if-focus);
+  outline-offset: 2px;
+}
+
+.wf-insert__icon.codicon {
+  font-size: 12px;
+}
+
+/* Empty lists */
+.wf-empty-lane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+  min-height: 72px;
+}
+
+.wf-empty-lane--grow {
+  flex: 1 1 auto;
+}
+
+.wf-empty-lane__target {
+  display: flex;
+  justify-content: center;
+  align-self: stretch;
+  padding: 4px 0;
+}
+
+.wf-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: var(--wf-card-w);
+  max-width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border: 1.5px dashed color-mix(in srgb, var(--if-muted) 40%, transparent);
+  border-radius: var(--wf-radius-card);
+  background: var(--if-bg);
+  color: var(--if-muted);
+  font-size: var(--if-text-s);
+  transition:
+    border-color var(--if-duration) var(--if-ease),
+    background var(--if-duration) var(--if-ease),
+    color var(--if-duration) var(--if-ease);
+}
+
+.wf-placeholder--button:hover {
+  border-color: var(--if-isar);
+  color: var(--if-fg);
+}
+
+.wf-placeholder--open {
+  border-color: color-mix(in srgb, var(--if-isar) 60%, transparent);
+  color: var(--if-fg);
+}
+
+.wf-placeholder--over {
+  border-style: solid;
+  border-color: var(--block-color);
+  background: var(--block-wash);
+}
+
+.wf-empty-root {
+  position: relative;
+  z-index: 1;
+  width: 380px;
+  border: 1.5px dashed color-mix(in srgb, var(--if-muted) 35%, transparent);
+  border-radius: 14px;
+  background: var(--if-bg);
+  transition:
+    border-color var(--if-duration) var(--if-ease),
+    background var(--if-duration) var(--if-ease);
+}
+
+.wf-empty-root__text {
+  display: block;
+  text-wrap: balance;
+}
+
+.wf-empty-root--open {
+  border-color: color-mix(in srgb, var(--if-isar) 60%, transparent);
+}
+
+.wf-empty-root--over {
+  border-style: solid;
+  border-color: var(--block-color);
+  background: var(--block-wash);
+}
+
+/* ---------- Start and End markers ---------- */
+
+.wf-marker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: 12px;
+  align-self: stretch;
+  min-width: var(--wf-card-w);
+  /* Long input names wrap and shorten inside the side column instead of widening the whole river. */
+  contain: inline-size;
+}
+
+.wf-marker__axis {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+}
+
+.wf-marker__tail {
+  flex: 1;
+  width: var(--wf-river-w);
+  background: var(--if-river);
+}
+
+.wf-marker__dot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+
+.wf-marker__dot--start {
+  background: var(--if-isar);
+  color: var(--if-on-isar);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--if-isar) 16%, transparent);
+}
+
+.wf-marker__icon.codicon {
+  font-size: 13px;
+  margin-left: 2px;
+}
+
+.wf-marker__dot--end {
+  --end-tone: var(--if-river);
+  border: 3px solid var(--end-tone);
+  background: var(--if-bg);
+}
+
+.wf-marker__dot--end::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--end-tone);
+}
+
+.wf-marker__dot--success {
+  --end-tone: var(--if-almgruen);
+}
+
+.wf-marker__dot--failure {
+  --end-tone: var(--if-alpenrose);
+}
+
+.wf-marker__dot--cancelled {
+  --end-tone: var(--if-muted);
+}
+
+/* Rows are 20 px; the 3 px top padding centers the first row on the 26 px dot. */
+.wf-marker__info {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+  padding-top: 3px;
+}
+
+.wf-marker__label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  font-family: var(--if-font-display);
+  font-size: var(--if-text-l);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.wf-marker__inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.wf-marker__outcome {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--if-text-s);
+  font-weight: 600;
+}
+
+.wf-marker__muted {
+  color: var(--if-muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Block cards ---------- */
+
+.wf-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: var(--wf-card-w);
+  padding: 10px 12px 12px;
+  border: 1px solid var(--if-border);
+  border-radius: var(--wf-radius-card);
+  background: var(--if-surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--if-shadow) 60%, transparent);
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  transition:
+    border-color var(--if-duration) var(--if-ease),
+    box-shadow var(--if-duration) var(--if-ease),
+    opacity var(--if-duration) var(--if-ease);
+}
+
+.wf-card:hover {
+  border-color: var(--if-border-strong);
+}
+
+.wf-card:focus-visible,
+.wf-pill:focus-visible,
+.wf-loop__head:focus-visible {
+  outline: 2px solid var(--if-focus);
+  outline-offset: 2px;
+}
+
+.wf-loop__head:focus-visible {
+  outline-offset: -2px;
+}
+
+.wf-card--selected,
+.wf-pill--selected,
+.wf-loop--selected {
+  outline: 2px solid var(--block-color, var(--if-focus));
+  outline-offset: 2px;
+}
+
+.wf-card--running,
+.wf-pill--running {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--if-isar) 35%, transparent);
+}
+
+.wf-card--awaiting,
+.wf-pill--awaiting {
+  outline: 2px solid var(--if-almgruen);
+  outline-offset: 2px;
+  animation: wf-approval-pulse 1.8s var(--if-ease) infinite;
+}
+
+@keyframes wf-approval-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--if-almgruen) 50%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 12px color-mix(in srgb, var(--if-almgruen) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--if-almgruen) 0%, transparent);
+  }
+}
+
+.wf-card--skipped,
+.wf-pill--skipped,
+.wf-loop--skipped,
+.wf-if--skipped {
+  opacity: 0.55;
+}
+
+.wf-card--dragging,
+.wf-pill--dragging,
+.wf-loop--dragging,
+.wf-if--dragging {
+  opacity: 0.35;
+}
+
+.wf-card--broken,
+.wf-pill--broken {
+  border-style: dashed;
+}
+
+.wf-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 28px;
+}
+
+.wf-card__titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.wf-card__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--if-font-display);
+  font-size: var(--if-text-l);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+}
+
+.wf-card__id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-xs);
+  color: var(--if-muted);
+}
+
+.wf-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wf-card__who {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: var(--if-text-s);
+}
+
+.wf-card__agent {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.wf-card__agent--none {
+  color: var(--if-muted);
+  font-weight: 500;
+}
+
+.wf-card__model {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-xs);
+  color: var(--if-muted);
+}
+
+.wf-card__text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--if-muted);
+  font-size: var(--if-text-s);
+  line-height: 1.5;
+}
+
+.wf-card__line {
+  font-size: var(--if-text-s);
+  font-weight: 600;
+}
+
+.wf-card__placeholder {
+  color: var(--if-muted);
+  font-size: var(--if-text-s);
+  font-style: italic;
+}
+
+.wf-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Template expressions inside prompts and messages. */
+.wf-expr {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--if-fg) 9%, transparent);
+  color: var(--if-fg);
+  font-family: var(--if-font-code);
+  font-size: 0.92em;
+}
+
+/* Console command strip */
+.wf-cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--if-radius-m);
+  background: color-mix(in srgb, var(--if-fg) 6%, transparent);
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+}
+
+.wf-cmd__prompt {
+  flex: none;
+  color: var(--if-muted);
+}
+
+.wf-cmd__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  color: var(--if-fg);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.wf-cmd__more {
+  flex: none;
+  color: var(--if-muted);
+  font-family: var(--if-font-ui);
+  font-size: var(--if-text-xs);
+}
+
+/* Condition line of the If header: "If <condition>", clamped to two lines. */
+.wf-ifcond {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: var(--if-text-s);
+  line-height: 1.5;
+}
+
+.wf-ifcond__kw {
+  margin-right: 2px;
+  color: var(--if-muted);
+  font-weight: 600;
+}
+
+.wf-ifcond__text {
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  color: var(--if-fg);
+  word-break: break-all;
+}
+
+/* Badges in the card head */
+.wf-badge {
+  --tone: var(--if-alpenrose);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 7px 0 5px;
+  border-radius: var(--if-radius-pill);
+  background: color-mix(in srgb, var(--tone) 16%, transparent);
+  color: var(--tone);
+  font-size: var(--if-text-xs);
+  font-weight: 700;
+}
+
+.wf-badge--warning {
+  --tone: var(--if-foehn);
+}
+
+.wf-badge__icon.codicon {
+  font-size: 12px;
+}
+
+.wf-stone-unknown {
+  --block-color: var(--if-foehn);
+  --block-wash: color-mix(in srgb, var(--if-foehn) var(--if-wash-strength), transparent);
+}
+
+/* Break: a compact pill on the river */
+.wf-pill {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px 0 6px;
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-pill);
+  background: var(--if-surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--if-shadow) 60%, transparent);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color var(--if-duration) var(--if-ease),
+    opacity var(--if-duration) var(--if-ease);
+}
+
+.wf-pill:hover {
+  border-color: var(--if-border-strong);
+}
+
+.wf-pill__label {
+  font-family: var(--if-font-display);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- Loop: frame, header and eddy ---------- */
+
+.wf-loop {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  min-width: calc(var(--wf-card-w) + 48px);
+  border: 1px solid color-mix(in srgb, var(--if-enzian) 40%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--if-enzian) 3%, var(--if-bg));
+  transition: opacity var(--if-duration) var(--if-ease);
+}
+
+.wf-loop--running {
+  border-color: color-mix(in srgb, var(--if-enzian) 65%, transparent);
+}
+
+.wf-loop__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--if-enzian) 22%, transparent);
+  border-radius: 13px 13px 0 0;
+  background: color-mix(in srgb, var(--if-enzian) 8%, transparent);
+  cursor: pointer;
+  user-select: none;
+  /* The header follows the frame's width instead of widening it for a long condition. */
+  contain: inline-size;
+}
+
+/* Stone and titles stay in view when a wide frame is scrolled sideways. */
+.wf-loop__lead {
+  position: sticky;
+  left: 12px;
+  /* Content-sized and never wider than the visible canvas, so it has room to slide into view. */
+  flex: 0 1 auto;
+  max-width: calc(100cqw - 150px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.wf-loop__titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wf-loop__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wf-loop__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--if-font-display);
+  font-size: var(--if-text-l);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+}
+
+.wf-loop__summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--if-muted);
+  font-size: var(--if-text-s);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.wf-loop__cond {
+  color: var(--if-fg);
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  word-break: break-all;
+}
+
+/* Iteration chip and status stay in view on the right when a wide frame is scrolled sideways. */
+.wf-loop__aside {
+  position: sticky;
+  right: 12px;
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wf-loop__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 20px;
+}
+
+.wf-iter {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--if-radius-pill);
+  background: color-mix(in srgb, var(--if-enzian) 16%, transparent);
+  color: var(--if-enzian);
+  font-size: var(--if-text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-iter--live {
+  background: var(--if-enzian);
+  color: var(--if-bg);
+}
+
+/* Eddy: return channel on the left of the frame, from the bottom back up to the header. */
+.wf-eddy {
+  position: absolute;
+  top: 20px;
+  bottom: 16px;
+  left: -30px;
+  width: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  color: var(--if-enzian);
+  pointer-events: none;
+  transition: opacity var(--if-duration) var(--if-ease);
+}
+
+.wf-eddy--idle {
+  opacity: 0.7;
+}
+
+.wf-eddy--pending {
+  opacity: 0.3;
+}
+
+.wf-eddy--passed {
+  opacity: 1;
+}
+
+.wf-eddy__cap {
+  flex: none;
+  display: block;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wf-eddy__channel {
+  flex: 1 1 0;
+  width: 2px;
+  min-height: 4px;
+  margin-left: 8px;
+  background: currentColor;
+}
+
+.wf-eddy__badge {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0;
+  border-radius: 50%;
+  background: var(--if-enzian);
+  color: var(--if-bg);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- If: header, fork, lanes around a gravel bank, merge ---------- */
+
+.wf-if {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  min-width: var(--wf-card-w);
+  transition: opacity var(--if-duration) var(--if-ease);
+}
+
+.wf-split {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+}
+
+.wf-fork,
+.wf-merge {
+  --wf-stem: 8px;
+  position: relative;
+  z-index: 1;
+  flex: none;
+  height: 40px;
+}
+
+.wf-fork__stem {
+  position: absolute;
+  top: 0;
+  left: calc(50% - 1.5px);
+  height: var(--wf-stem);
+  min-height: 0;
+}
+
+.wf-merge__stem {
+  position: absolute;
+  bottom: 0;
+  left: calc(50% - 1.5px);
+  height: var(--wf-stem);
+  min-height: 0;
+}
+
+/*
+ * Arms: from the center line a bend into a straight run, then a turn down into the lane (mirrored for the merge).
+ * Bends and turns have the same radius at any lane width. The pieces overlap a little, so they use the opaque
+ * river color; dimming happens on the arm (or on both arms together) as a whole.
+ */
+.wf-arms {
+  position: absolute;
+  inset: 0;
+  transition: opacity var(--if-duration) var(--if-ease);
+}
+
+.wf-arm {
+  position: absolute;
+  transition: opacity var(--if-duration) var(--if-ease);
+}
+
+.wf-arms--pending,
+.wf-arm--pending {
+  opacity: 0.35;
+}
+
+.wf-arm--fork-then,
+.wf-arm--fork-else {
+  top: var(--wf-stem);
+  bottom: 0;
+}
+
+.wf-arm--merge-then,
+.wf-arm--merge-else {
+  top: 0;
+  bottom: var(--wf-stem);
+}
+
+/* The arm box runs from the outer edge of the lane line to the center line. */
+.wf-arm--fork-then,
+.wf-arm--merge-then {
+  left: calc((100% - var(--wf-lane-gap)) / 4 - var(--wf-river-w) / 2);
+  right: 50%;
+}
+
+.wf-arm--fork-else,
+.wf-arm--merge-else {
+  left: 50%;
+  right: calc((100% - var(--wf-lane-gap)) / 4 - var(--wf-river-w) / 2);
+}
+
+.wf-bend,
+.wf-turn {
+  position: absolute;
+  border: 0 solid var(--wf-river-solid);
+}
+
+/* Bends at the center line: the stroke is centered on it, so the box reaches half a stroke past the arm box. */
+.wf-bend--fork-then,
+.wf-bend--fork-else,
+.wf-bend--merge-then,
+.wf-bend--merge-else {
+  height: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+}
+
+.wf-bend--fork-then {
+  top: 0;
+  right: calc(var(--wf-river-w) / -2);
+  left: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+  border-right-width: var(--wf-river-w);
+  border-bottom-width: var(--wf-river-w);
+  border-bottom-right-radius: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+}
+
+.wf-bend--fork-else {
+  top: 0;
+  left: calc(var(--wf-river-w) / -2);
+  right: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+  border-left-width: var(--wf-river-w);
+  border-bottom-width: var(--wf-river-w);
+  border-bottom-left-radius: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+}
+
+.wf-bend--merge-then {
+  bottom: 0;
+  right: calc(var(--wf-river-w) / -2);
+  left: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+  border-right-width: var(--wf-river-w);
+  border-top-width: var(--wf-river-w);
+  border-top-right-radius: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+}
+
+.wf-bend--merge-else {
+  bottom: 0;
+  left: calc(var(--wf-river-w) / -2);
+  right: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+  border-left-width: var(--wf-river-w);
+  border-top-width: var(--wf-river-w);
+  border-top-left-radius: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+}
+
+/* Turns into the lanes: 4 px wider than the radius, so they overlap the straight run instead of meeting it edge to edge. */
+.wf-turn--fork-then,
+.wf-turn--fork-else,
+.wf-turn--merge-then,
+.wf-turn--merge-else {
+  width: calc(var(--wf-bend) + var(--wf-river-w) / 2 + 4px);
+}
+
+.wf-turn--fork-then,
+.wf-turn--fork-else {
+  top: calc(var(--wf-bend) - var(--wf-river-w) / 2);
+  bottom: 0;
+  border-top-width: var(--wf-river-w);
+}
+
+.wf-turn--merge-then,
+.wf-turn--merge-else {
+  top: 0;
+  bottom: calc(var(--wf-bend) - var(--wf-river-w) / 2);
+  border-bottom-width: var(--wf-river-w);
+}
+
+.wf-turn--fork-then {
+  left: 0;
+  border-left-width: var(--wf-river-w);
+  border-top-left-radius: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+}
+
+.wf-turn--fork-else {
+  right: 0;
+  border-right-width: var(--wf-river-w);
+  border-top-right-radius: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+}
+
+.wf-turn--merge-then {
+  left: 0;
+  border-left-width: var(--wf-river-w);
+  border-bottom-left-radius: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+}
+
+.wf-turn--merge-else {
+  right: 0;
+  border-right-width: var(--wf-river-w);
+  border-bottom-right-radius: calc(var(--wf-bend) + var(--wf-river-w) / 2);
+}
+
+/* Beside the turn into each lane, level with the straight run. */
+.wf-lane-label {
+  position: absolute;
+  top: calc(var(--wf-stem) + var(--wf-bend) - 6px);
+  color: var(--if-muted);
+  font-family: var(--if-font-display);
+  font-size: var(--if-text-s);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.wf-lane-label--then {
+  right: calc(100% - (100% - var(--wf-lane-gap)) / 4 + 12px);
+}
+
+.wf-lane-label--else {
+  left: calc(100% - (100% - var(--wf-lane-gap)) / 4 + 12px);
+}
+
+.wf-lane-label--taken {
+  color: var(--if-fg);
+}
+
+.wf-lanes {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--wf-lane-gap);
+}
+
+.wf-lane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: calc(var(--wf-card-w) + 2 * var(--wf-lane-pad));
+  padding: 0 var(--wf-lane-pad);
+}
+
+/*
+ * The gravel bank: a long pointed island between the arms, from inside the fork to inside the merge. The outline
+ * is an SVG stretched to the lanes' height; the pebbles are two irregular SVG patterns used as masks, so their
+ * color still comes from the kies token.
+ */
+.wf-bank {
+  position: absolute;
+  top: 30px;
+  bottom: 30px;
+  left: calc(50% - 15px);
+  width: 30px;
+}
+
+.wf-bank__shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: color-mix(in srgb, var(--if-kies) 11%, transparent);
+  stroke: none;
+}
+
+.wf-bank__gravel {
+  position: absolute;
+  inset: 0;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 100' preserveAspectRatio='none'%3E%3Cpath d='M16 0 C25 15 32 32 32 50 C32 68 25 85 16 100 C7 85 0 68 0 50 C0 32 7 15 16 0 Z'/%3E%3C/svg%3E")
+    0 0 / 100% 100% no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 100' preserveAspectRatio='none'%3E%3Cpath d='M16 0 C25 15 32 32 32 50 C32 68 25 85 16 100 C7 85 0 68 0 50 C0 32 7 15 16 0 Z'/%3E%3C/svg%3E")
+    0 0 / 100% 100% no-repeat;
+}
+
+/* Larger pebbles. */
+.wf-bank__gravel::before,
+.wf-bank__gravel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.wf-bank__gravel::before {
+  background: color-mix(in srgb, var(--if-kies) 46%, transparent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='74'%3E%3Cg fill='%23000'%3E%3Cellipse cx='9' cy='9' rx='3.2' ry='2.2' transform='rotate(18 9 9)'/%3E%3Cellipse cx='21' cy='17' rx='2.3' ry='1.6' transform='rotate(-12 21 17)'/%3E%3Cellipse cx='12' cy='28' rx='2.8' ry='1.9' transform='rotate(34 12 28)'/%3E%3Cellipse cx='22.5' cy='37' rx='1.7' ry='1.25'/%3E%3Cellipse cx='8' cy='46' rx='2.5' ry='1.7' transform='rotate(-22 8 46)'/%3E%3Cellipse cx='19' cy='55' rx='3.1' ry='2.1' transform='rotate(10 19 55)'/%3E%3Cellipse cx='10.5' cy='65' rx='1.9' ry='1.4'/%3E%3Cellipse cx='23' cy='70' rx='1.5' ry='1.1'/%3E%3C/g%3E%3C/svg%3E")
+    center 6px / 30px 74px repeat-y;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='74'%3E%3Cg fill='%23000'%3E%3Cellipse cx='9' cy='9' rx='3.2' ry='2.2' transform='rotate(18 9 9)'/%3E%3Cellipse cx='21' cy='17' rx='2.3' ry='1.6' transform='rotate(-12 21 17)'/%3E%3Cellipse cx='12' cy='28' rx='2.8' ry='1.9' transform='rotate(34 12 28)'/%3E%3Cellipse cx='22.5' cy='37' rx='1.7' ry='1.25'/%3E%3Cellipse cx='8' cy='46' rx='2.5' ry='1.7' transform='rotate(-22 8 46)'/%3E%3Cellipse cx='19' cy='55' rx='3.1' ry='2.1' transform='rotate(10 19 55)'/%3E%3Cellipse cx='10.5' cy='65' rx='1.9' ry='1.4'/%3E%3Cellipse cx='23' cy='70' rx='1.5' ry='1.1'/%3E%3C/g%3E%3C/svg%3E")
+    center 6px / 30px 74px repeat-y;
+}
+
+/* Fine grains on a different period, so the pattern does not visibly repeat. */
+.wf-bank__gravel::after {
+  background: color-mix(in srgb, var(--if-kies) 34%, transparent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='47'%3E%3Cg fill='%23000'%3E%3Ccircle cx='15' cy='4' r='1'/%3E%3Ccircle cx='5.5' cy='13' r='1.15'/%3E%3Ccircle cx='25' cy='9' r='0.9'/%3E%3Ccircle cx='17' cy='21' r='0.85'/%3E%3Ccircle cx='6' cy='29' r='0.9'/%3E%3Ccircle cx='26' cy='27' r='1.1'/%3E%3Ccircle cx='14' cy='36' r='1.05'/%3E%3Ccircle cx='23' cy='43' r='0.85'/%3E%3Ccircle cx='7.5' cy='42' r='0.75'/%3E%3C/g%3E%3C/svg%3E")
+    center 20px / 30px 47px repeat-y;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='47'%3E%3Cg fill='%23000'%3E%3Ccircle cx='15' cy='4' r='1'/%3E%3Ccircle cx='5.5' cy='13' r='1.15'/%3E%3Ccircle cx='25' cy='9' r='0.9'/%3E%3Ccircle cx='17' cy='21' r='0.85'/%3E%3Ccircle cx='6' cy='29' r='0.9'/%3E%3Ccircle cx='26' cy='27' r='1.1'/%3E%3Ccircle cx='14' cy='36' r='1.05'/%3E%3Ccircle cx='23' cy='43' r='0.85'/%3E%3Ccircle cx='7.5' cy='42' r='0.75'/%3E%3C/g%3E%3C/svg%3E")
+    center 20px / 30px 47px repeat-y;
+}
+
+/* ---------- Zoom control ---------- */
+
+.wf-zoom {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--vscode-widget-border, var(--if-border));
+  border-radius: 8px;
+  background: var(--if-surface);
+  box-shadow: 0 2px 10px var(--if-shadow);
+}
+
+.wf-zoom__value {
+  min-width: 46px;
+  height: 24px;
+  padding: 0 4px;
+  border: none;
+  border-radius: var(--if-radius-s);
+  background: transparent;
+  color: var(--if-fg);
+  font-size: var(--if-text-s);
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-zoom__value:hover {
+  background: var(--if-hover);
+}
+
+.wf-zoom__divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--if-border);
+}
+
+/* ---------- Drag preview ---------- */
+
+.wf-drag-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  height: 36px;
+  padding: 0 14px 0 6px;
+  border: 1px solid var(--block-color, var(--if-border));
+  border-radius: var(--if-radius-pill);
+  background: var(--if-surface);
+  box-shadow: 0 10px 28px var(--if-shadow);
+  color: var(--if-fg);
+  cursor: grabbing;
+}
+
+.wf-drag-preview__label {
+  font-family: var(--if-font-display);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- Theme variants ---------- */
+
+body.vscode-light .wf-canvas {
+  --wf-river-solid: color-mix(in srgb, var(--if-isar) 55%, var(--if-bg));
+}
+
+body.vscode-high-contrast .wf-canvas,
+body.vscode-high-contrast-light .wf-canvas {
+  --wf-river-solid: var(--if-isar);
+}
+
+
+body.vscode-high-contrast .wf-card,
+body.vscode-high-contrast-light .wf-card,
+body.vscode-high-contrast .wf-pill,
+body.vscode-high-contrast-light .wf-pill {
+  box-shadow: none;
+}
+
+body.vscode-high-contrast .wf-loop,
+body.vscode-high-contrast-light .wf-loop {
+  border-color: var(--if-enzian);
+}
+
+body.vscode-high-contrast .wf-bank__shape,
+body.vscode-high-contrast-light .wf-bank__shape {
+  fill: none;
+  stroke: var(--if-kies);
+  stroke-width: 1px;
+}

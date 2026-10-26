@@ -37,10 +37,9 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 const cancelled = () => new ModelError('The request was cancelled.', 'aborted');
 
 function retryDelay(error: ModelError, attempt: number, baseDelayMs: number): number {
-  // Errors built from an HTTP response carry the server's Retry-After hint as `retryAfterMs`.
-  const hint: unknown = (error as { retryAfterMs?: unknown }).retryAfterMs;
+  const hint = error.retryAfterMs;
   const delay =
-    typeof hint === 'number' && Number.isFinite(hint) && hint >= 0 ? hint : baseDelayMs * 2 ** (attempt - 1);
+    hint !== undefined && Number.isFinite(hint) && hint >= 0 ? hint : baseDelayMs * 2 ** (attempt - 1);
   return Math.min(delay, MAX_DELAY_MS);
 }
 

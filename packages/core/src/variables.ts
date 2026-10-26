@@ -17,6 +17,11 @@ const COMMON_OUTPUTS: OutputInfo[] = [
     description: 'How the block ended: success, failure, skipped or cancelled',
   },
   { key: 'durationMs', type: 'number', description: 'How long the block ran, in milliseconds' },
+  {
+    key: 'error',
+    type: 'string',
+    description: 'Why the block failed or was cancelled; empty when it succeeded',
+  },
 ];
 
 export const STEP_OUTPUTS: Record<StepType, OutputInfo[]> = {

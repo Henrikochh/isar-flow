@@ -92,10 +92,10 @@ const find = (vars: VariableInfo[], expression: string) => vars.find((v) => v.ex
 describe('STEP_OUTPUTS', () => {
   const keys = (type: keyof typeof STEP_OUTPUTS) => STEP_OUTPUTS[type].map((o) => o.key);
 
-  it('lists status and durationMs for every block type', () => {
+  it('lists status, durationMs and error for every block type', () => {
     for (const type of STEP_TYPES) {
-      expect(keys(type)).toContain('status');
-      expect(keys(type)).toContain('durationMs');
+      expect(keys(type).slice(-3)).toEqual(['status', 'durationMs', 'error']);
+      expect(STEP_OUTPUTS[type].at(-1)).toMatchObject({ key: 'error', type: 'string' });
     }
   });
 
@@ -109,6 +109,7 @@ describe('STEP_OUTPUTS', () => {
       'turns',
       'status',
       'durationMs',
+      'error',
     ]);
     expect(keys('console')).toEqual([
       'exitCode',
@@ -118,12 +119,13 @@ describe('STEP_OUTPUTS', () => {
       'timedOut',
       'status',
       'durationMs',
+      'error',
     ]);
-    expect(keys('loop')).toEqual(['iterations', 'exitReason', 'status', 'durationMs']);
-    expect(keys('if')).toEqual(['branch', 'result', 'status', 'durationMs']);
-    expect(keys('approval')).toEqual(['approved', 'comment', 'status', 'durationMs']);
-    expect(keys('break')).toEqual(['status', 'durationMs']);
-    expect(keys('stop')).toEqual(['status', 'durationMs']);
+    expect(keys('loop')).toEqual(['iterations', 'exitReason', 'status', 'durationMs', 'error']);
+    expect(keys('if')).toEqual(['branch', 'result', 'status', 'durationMs', 'error']);
+    expect(keys('approval')).toEqual(['approved', 'comment', 'status', 'durationMs', 'error']);
+    expect(keys('break')).toEqual(['status', 'durationMs', 'error']);
+    expect(keys('stop')).toEqual(['status', 'durationMs', 'error']);
   });
 
   it('types and describes every output', () => {
@@ -281,8 +283,17 @@ describe('availableVariables: entries', () => {
         'steps.gate.result',
         'steps.ok.status',
         'steps.ok.durationMs',
+        'steps.ok.error',
       ]),
     );
+  });
+
+  it('offers the error of every readable block', () => {
+    const vars = availableVariables(sample, 'report');
+    for (const id of ['plan', 'tests', 'fix-loop', 'gate', 'review']) {
+      expect(find(vars, `steps.${id}.error`)).toMatchObject({ type: 'string', group: 'steps', stepId: id });
+    }
+    expect(find(vars, 'steps.review.error')?.description).toMatch(/failed or was cancelled/);
   });
 
   it('only offers json for agent blocks with JSON output and adds fields of a compact shape', () => {

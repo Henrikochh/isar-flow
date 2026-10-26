@@ -13,6 +13,7 @@ import {
   type RunScope,
   StepSetupError,
 } from './context';
+import { usageOfError } from './errors';
 import {
   type LeafDeps,
   type PreparedLeaf,
@@ -21,6 +22,7 @@ import {
   prepareConsole,
   timeoutMessage,
 } from './leaves';
+import { copyData, MaskedStream, SecretMasker } from './mask';
 import { EventQueue } from './queue';
 import type { BlockResult, Flow } from './result';
 import { AbortScope, onAbort, settle, sleep, stepTimeoutMs } from './timing';
@@ -40,6 +42,8 @@ const ABORT_GRACE_MS = 1000;
 const DEFAULT_MAX_ITERATIONS = 5;
 const MAX_ITERATIONS_LIMIT = 100;
 const MAX_RETRIES = 10;
+/** Error text of cancelled blocks, in the step-end event and as `steps.<id>.error`. */
+const CANCELLED = 'Cancelled';
 
 interface Frame {
   /** Aborts on cancellation and on timeouts of enclosing blocks. */
@@ -74,8 +78,8 @@ function retryPolicy(retry: Step['retry']): { max: number; delaySeconds: number 
   };
 }
 
-function failure(error: string, retryable = true): BlockResult {
-  return { status: 'failure', output: {}, error, ...(retryable ? {} : { retryable: false }) };
+function failure(error: string, retryable = true, output: Record<string, unknown> = {}): BlockResult {
+  return { status: 'failure', output, error, ...(retryable ? {} : { retryable: false }) };
 }
 
 function retryMessage(attempt: number, max: number, error: string | undefined, delaySeconds: number): string {
@@ -88,6 +92,7 @@ class WorkflowRun {
   private readonly steps: Record<string, StepOutput> = {};
   private readonly sessions = new Map<string, ChatMessage[]>();
   private readonly usage: Usage = { inputTokens: 0, outputTokens: 0 };
+  private readonly masker: SecretMasker;
   private scope!: RunScope;
   private workflowEnv: Record<string, string> = {};
 
@@ -95,9 +100,38 @@ class WorkflowRun {
     private readonly workflow: Workflow,
     private readonly options: RunOptions,
     private readonly signal: AbortSignal,
-    private readonly emit: (event: RunEvent) => void,
+    private readonly send: (event: RunEvent) => void,
   ) {
     this.now = options.now ?? Date.now;
+    this.masker = new SecretMasker(options.secrets);
+  }
+
+  /**
+   * Emits a copy of the event with secrets masked, so listeners never see secret values and cannot change
+   * what expressions read. Log text is masked by the step logger, which also catches secrets split over chunks.
+   */
+  private emit(event: RunEvent): void {
+    const mask = this.masker;
+    switch (event.type) {
+      case 'run-start':
+        return this.send({ ...event, inputs: copyData(event.inputs) });
+      case 'step-start':
+        return this.send(event.detail === undefined ? event : { ...event, detail: mask.text(event.detail) });
+      case 'step-end':
+        return this.send({
+          ...event,
+          output: mask.data(event.output),
+          ...(event.error !== undefined && { error: mask.text(event.error) }),
+        });
+      case 'run-end':
+        return this.send({
+          ...event,
+          usage: { ...event.usage },
+          ...(event.error !== undefined && { error: mask.text(event.error) }),
+        });
+      default:
+        return this.send(event);
+    }
   }
 
   private get runId(): string {
@@ -130,21 +164,20 @@ class WorkflowRun {
 
     const { status, error } = runOutcome(flow);
     const durationMs = this.now() - startedAt;
-    const usage = { ...this.usage };
     this.emit({
       type: 'run-end',
       runId: this.runId,
       status,
       ...(error !== undefined && { error }),
       durationMs,
-      usage,
+      usage: this.usage,
     });
     return {
       runId: this.runId,
       status,
-      ...(error !== undefined && { error }),
-      steps: { ...this.steps },
-      usage,
+      ...(error !== undefined && { error: this.masker.text(error) }),
+      steps: this.masker.data(this.steps),
+      usage: { ...this.usage },
       durationMs,
     };
   }
@@ -259,14 +292,18 @@ class WorkflowRun {
       run: async (scope) => {
         const io: StepIO = { runId: this.runId, stepId: step.id, signal: scope.signal, log: logger.log };
         const settled = await settle(leaf.invoke(io), scope.signal, ABORT_GRACE_MS);
-        if (settled.kind === 'value' && settled.value.usage) this.addUsage(settled.value.usage);
+        // A failed agent call still counts when the model used tokens before it failed.
+        const errorUsage = settled.kind === 'error' ? usageOfError(settled.error) : undefined;
+        const usage = settled.kind === 'value' ? settled.value.usage : errorUsage;
+        if (usage) this.addUsage(usage);
+        const failedOutput = errorUsage ? { usage: errorUsage } : {};
         if (scope.signal.aborted || settled.kind === 'abandoned') {
-          const partial = settled.kind === 'value' ? settled.value.output : {};
+          const partial = settled.kind === 'value' ? settled.value.output : failedOutput;
           // The engine's timer usually fires before the host's own, so the host cannot be relied on to set timedOut.
           const timedOut = scope.timedOut && step.type === 'console';
           return this.interrupted(step, scope, timedOut ? { ...partial, timedOut: true } : partial);
         }
-        if (settled.kind === 'error') return failure(errorMessage(settled.error));
+        if (settled.kind === 'error') return failure(errorMessage(settled.error), true, failedOutput);
         const { usage: _usage, commit, ...result } = settled.value;
         commit?.();
         return result;
@@ -296,7 +333,8 @@ class WorkflowRun {
         result.status !== 'failure' ||
         result.control ||
         result.retryable === false ||
-        attempt > maxRetries
+        attempt > maxRetries ||
+        (step.type === 'agent' && this.budgetError() !== undefined)
       ) {
         return result;
       }
@@ -426,7 +464,16 @@ class WorkflowRun {
   private finishStep(step: Step, startedAt: number, logger: StepLogger, result: BlockResult): Flow {
     const at = this.now();
     const durationMs = at - startedAt;
-    const output: StepOutput = { ...result.output, status: result.status, durationMs };
+    const error =
+      result.status === 'success'
+        ? undefined
+        : (result.error ?? (result.status === 'cancelled' ? CANCELLED : 'Unknown error'));
+    const output: StepOutput = {
+      ...result.output,
+      status: result.status,
+      durationMs,
+      ...(error !== undefined && { error }),
+    };
     this.steps[step.id] = output;
     logger.close();
     this.emit({
@@ -435,7 +482,7 @@ class WorkflowRun {
       stepId: step.id,
       status: result.status,
       output,
-      ...(result.error !== undefined && { error: result.error }),
+      ...(error !== undefined && { error }),
       durationMs,
       at,
     });
@@ -471,13 +518,24 @@ class WorkflowRun {
 
   private createLogger(stepId: string): StepLogger {
     let open = true;
+    const streams = new Map<LogStream, MaskedStream>();
+    const write = (stream: LogStream, text: string) => {
+      if (text !== '') this.emit({ type: 'step-log', runId: this.runId, stepId, stream, text });
+    };
     return {
       log: (stream, text) => {
         if (!open || typeof text !== 'string' || text === '') return;
-        this.emit({ type: 'step-log', runId: this.runId, stepId, stream, text });
+        let masked = streams.get(stream);
+        if (!masked) {
+          masked = new MaskedStream(this.masker);
+          streams.set(stream, masked);
+        }
+        write(stream, masked.push(text));
       },
       close: () => {
+        if (!open) return;
         open = false;
+        for (const [stream, masked] of streams) write(stream, masked.flush());
       },
     };
   }

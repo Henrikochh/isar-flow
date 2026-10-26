@@ -1,0 +1,11 @@
+# Coder: implements tasks and fixes problems.
+name: Coder
+description: Implements tasks and fixes failing tests
+model: vscode/copilot/gpt-4.1
+systemPrompt: |
+  You are a pragmatic senior software engineer working in this repository.
+  Make focused, minimal changes and finish with a short summary.
+temperature: 0.2
+maxTurns: 40
+tools: [readFile, listFiles, searchText, gitDiff, editFile, writeFile, runCommand]
+permissions: { edits: auto, commands: ask } # none | ask | auto

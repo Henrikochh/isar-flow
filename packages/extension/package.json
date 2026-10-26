@@ -31,7 +31,10 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Workflows and agents can be viewed and edited, but not run, in Restricted Mode."
+      "description": "Workflows and agents can be viewed and edited, but not run, in Restricted Mode.",
+      "restrictedConfigurations": [
+        "isarFlow.providers"
+      ]
     },
     "virtualWorkspaces": false
   },
@@ -301,7 +304,8 @@
         "isarFlow.confirmCommands": {
           "type": "boolean",
           "default": true,
-          "description": "Ask before running a workflow whose console commands you have not approved yet."
+          "scope": "application",
+          "description": "Ask before running a workflow whose console commands you have not approved yet. Only your user settings can turn this off."
         },
         "isarFlow.historyLimit": {
           "type": "number",
@@ -335,7 +339,7 @@
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc -p tsconfig.json",
-    "test:integration": "node ./test/integration/runTests.mjs",
+    "test:integration": "npm run build && node ./test/integration/runTests.mjs",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
