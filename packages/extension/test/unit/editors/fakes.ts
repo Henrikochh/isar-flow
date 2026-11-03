@@ -12,10 +12,20 @@ import type {
   RunRecordSummary,
   RunReview,
   RunView,
+  SimulationResult,
+  SimulationState,
   ToolHost,
+  Workflow,
   WorkflowSummary,
 } from '@isar-flow/core';
-import type { ActiveRun, AgentRecord, ReviewService, Services } from '../../../src/contracts';
+import type {
+  ActiveRun,
+  AgentRecord,
+  ReviewService,
+  RunStartOptions,
+  Services,
+  SimulationStore,
+} from '../../../src/contracts';
 import type { EditorDocument, EditorUi } from '../../../src/editors/host';
 import { computeReplaceRange } from '../../../src/editors/textEdit';
 
@@ -122,7 +132,9 @@ export function fakeServices() {
         respond: vi.fn(),
         attach: vi.fn(() => ({ dispose: detach })),
       },
-      start: vi.fn(async () => 'run-1'),
+      start: vi.fn(
+        async (_uri: vscode.Uri, _inputs?: Record<string, unknown>, _options?: RunStartOptions) => 'run-1',
+      ),
       cancel: vi.fn(),
       active: vi.fn(() => state.active),
       dispose: vi.fn(),
@@ -248,4 +260,39 @@ export function fakeReviews() {
     contentProvider: { provideTextDocumentContent: () => '' },
   } satisfies ReviewService;
   return { service, emitter, reviews };
+}
+
+/** `/w/x.workflow.yaml` → `/w/.isarflow/simulations/x.sim.yaml`, like the real store for a workspace folder `/w`. */
+export const simulationUriFor = (workflowUri: vscode.Uri) =>
+  vscode.Uri.file(
+    `/w/.isarflow/simulations/${workflowUri.path.replace(/^.*\/|\.workflow\.ya?ml$/g, '')}.sim.yaml`,
+  );
+
+/**
+ * A simulation store whose state() answers `simulation`; attach it with
+ * Object.assign(services.runs, { simulations: service }).
+ */
+export function fakeSimulations() {
+  const emitter = new vscode.EventEmitter<{ uri: string }>();
+  const data = {
+    simulation: {
+      path: '.isarflow/simulations/review.sim.yaml',
+      exists: false,
+      file: {},
+      diagnostics: [],
+    } as SimulationState,
+  };
+  const service = {
+    onDidChange: emitter.event,
+    uriFor: vi.fn(simulationUriFor),
+    state: vi.fn(async (_uri: vscode.Uri, _workflow: Workflow | null) => data.simulation),
+    load: vi.fn(async () => data.simulation.file),
+    setBlock: vi.fn(
+      async (_uri: vscode.Uri, _stepId: string, _results: SimulationResult[] | null) => undefined,
+    ),
+    renameBlock: vi.fn(async (_uri: vscode.Uri, _oldId: string, _newId: string) => undefined),
+    open: vi.fn(async (_uri: vscode.Uri) => undefined),
+    dispose: vi.fn(),
+  } satisfies SimulationStore;
+  return { service, emitter, data };
 }

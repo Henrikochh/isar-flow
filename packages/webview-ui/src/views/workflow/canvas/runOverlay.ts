@@ -21,6 +21,8 @@ export function isStale(run: RunView, entry: BlockEntry): boolean {
   const loopView = viewOf(run, loop);
   if (!view || !loop || !loopView) return false;
   if (isStale(run, loop)) return true;
+  // A reused result belongs to the iteration the resumed run continues at; the block's next start replaces it.
+  if (view.reused) return false;
   if (loopView.status !== 'running') return false;
   if (view.status === 'skipped') {
     // Skipped blocks never start; they belong to the round in which their If decided.

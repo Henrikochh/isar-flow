@@ -22,13 +22,25 @@ import {
   prepareConsole,
   timeoutMessage,
 } from './leaves';
+import { iterationLimit } from './limits';
 import { copyData, MaskedStream, SecretMasker } from './mask';
 import { EventQueue } from './queue';
 import type { BlockResult, Flow } from './result';
+import {
+  blockId,
+  missingTargetError,
+  type ResumePath,
+  resumeIteration,
+  resumePath,
+  splitAtTarget,
+  storedOutput,
+} from './resume';
+import { runStartEvent } from './runStart';
 import { AbortScope, onAbort, settle, sleep, stepTimeoutMs } from './timing';
 import { addUsage, usageOfOutput } from './usage';
 import type {
   LogStream,
+  ResumeOptions,
   RunEvent,
   RunOptions,
   RunStatus,
@@ -40,8 +52,6 @@ import type {
 
 /** How long a cancelled or timed-out host call may take to wind down before the engine stops waiting for it. */
 const ABORT_GRACE_MS = 1000;
-const DEFAULT_MAX_ITERATIONS = 5;
-const MAX_ITERATIONS_LIMIT = 100;
 const MAX_RETRIES = 10;
 /** Error text of cancelled blocks, in the step-end event and as `steps.<id>.error`. */
 const CANCELLED = 'Cancelled';
@@ -63,10 +73,18 @@ interface StepLogger {
   close(): void;
 }
 
-/** Schema validation guarantees 1–100; this keeps runs finite even for unvalidated input. */
-function iterationLimit(value: number): number {
-  if (!Number.isFinite(value) || value < 1) return DEFAULT_MAX_ITERATIONS;
-  return Math.min(Math.floor(value), MAX_ITERATIONS_LIMIT);
+/** Run from here, until the target starts. */
+interface ActiveResume extends ResumePath {
+  options: ResumeOptions;
+  /** Ids already reported as reused (duplicate ids are reported once). */
+  reported: Set<string>;
+  /** Blocks after the target in document order. */
+  afterTarget: Set<Step>;
+  /**
+   * Blocks after the target that a resumed loop iteration seeded with the previous iteration's output, by id.
+   * They are reported as reused when the target starts, so the run's view keeps them for a later Run from here.
+   */
+  seeded: Map<string, StepOutput>;
 }
 
 /** Schema validation guarantees 1–10 retries and a delay ≥ 0; invalid values fall back to no retry / no delay. */
@@ -121,6 +139,7 @@ class WorkflowRun {
   private readonly masker: SecretMasker;
   private scope!: RunScope;
   private workflowEnv: Record<string, string> = {};
+  private resume: ActiveResume | undefined;
 
   constructor(
     private readonly workflow: Workflow,
@@ -173,7 +192,16 @@ class WorkflowRun {
     } catch (error) {
       flow = { kind: 'fail', error: errorMessage(error) };
     }
-    this.emit({ type: 'run-start', runId: this.runId, workflowName: this.workflow.name, startedAt, inputs });
+    const resume = this.options.resume;
+    if (resume) {
+      const steps = this.workflow.steps ?? [];
+      const path = resumePath(steps, resume.stepId);
+      if (path) {
+        const afterTarget = new Set(splitAtTarget(steps, path).fromTarget.slice(1));
+        this.resume = { ...path, options: resume, reported: new Set(), afterTarget, seeded: new Map() };
+      } else flow ??= { kind: 'fail', error: missingTargetError(resume.stepId) };
+    }
+    this.emit(runStartEvent(this.workflow, this.options, startedAt, inputs));
 
     if (!flow) {
       try {
@@ -229,10 +257,61 @@ class WorkflowRun {
   private async executeList(list: Step[], frame: Frame): Promise<Flow> {
     for (const step of list) {
       if (frame.signal.aborted) return { kind: 'abort' };
+      if (this.reuseBeforeTarget(step)) continue;
       const flow = await this.executeStep(step, frame);
       if (flow.kind !== 'next') return flow;
     }
     return { kind: 'next' };
+  }
+
+  /**
+   * Run from here: reports a block before the target and its nested blocks as reused instead of running them
+   * (they never affect the flow). Ends resume mode when the target is reached. False for blocks that run.
+   */
+  private reuseBeforeTarget(step: Step): boolean {
+    const resume = this.resume;
+    if (!resume) return false;
+    if (step === resume.target) {
+      this.resume = undefined;
+      for (const [id, output] of resume.seeded) if (!resume.reported.has(id)) this.reuse(id, output);
+      return false;
+    }
+    if (resume.ancestors.includes(step)) return false;
+    walkSteps([step], ({ step: block }) => {
+      const id = blockId(block);
+      const output = storedOutput(resume.options, block);
+      if (id === undefined || !output || resume.reported.has(id)) return;
+      resume.reported.add(id);
+      this.reuse(id, output);
+    });
+    return true;
+  }
+
+  private reuse(stepId: string, stored: StepOutput): void {
+    const output = copyData(stored);
+    this.steps[stepId] = output;
+    this.emit({
+      type: 'step-end',
+      runId: this.runId,
+      stepId,
+      status: output.status,
+      output,
+      ...(typeof output.error === 'string' && { error: output.error }),
+      durationMs: 0,
+      at: this.now(),
+      reused: true,
+    });
+  }
+
+  /** A loop resumed at a later iteration: its blocks hold the previous iteration's outputs, as in a normal run. */
+  private seedLoopBody(loop: LoopStep, resume: ActiveResume): void {
+    walkSteps(loop.steps ?? [], ({ step }) => {
+      const id = blockId(step);
+      const output = storedOutput(resume.options, step);
+      if (id === undefined || !output) return;
+      this.steps[id] = copyData(output);
+      if (resume.afterTarget.has(step) && !resume.seeded.has(id)) resume.seeded.set(id, output);
+    });
   }
 
   private async executeStep(step: Step, frame: Frame): Promise<Flow> {
@@ -414,7 +493,10 @@ class WorkflowRun {
   private async runLoop(step: LoopStep, scope: AbortScope): Promise<BlockResult> {
     const max = iterationLimit(step.maxIterations);
     const hasCondition = step.until !== undefined || step.while !== undefined;
-    let iterations = 0;
+    // A loop that contains the resume target continues at the stored iteration, without its checks.
+    const resume = this.resume?.ancestors.includes(step) ? this.resume : undefined;
+    const resumeAt = resume ? resumeIteration(resume.options, step) : undefined;
+    let iterations = (resumeAt ?? 1) - 1;
     const exit = (exitReason: 'condition' | 'maxIterations' | 'break'): BlockResult => ({
       status: 'success',
       output: { iterations, exitReason },
@@ -423,10 +505,15 @@ class WorkflowRun {
     for (;;) {
       if (scope.signal.aborted) return this.interrupted(step, scope, { iterations });
       const upcoming = { iteration: iterations + 1, index: iterations };
-      if (step.while !== undefined && !checkCondition('while', step.while, this.context(upcoming))) {
+      const resumed = upcoming.iteration === resumeAt;
+      if (
+        !resumed &&
+        step.while !== undefined &&
+        !checkCondition('while', step.while, this.context(upcoming))
+      ) {
         return exit('condition');
       }
-      if (iterations >= max) {
+      if (!resumed && iterations >= max) {
         if (!hasCondition || step.onMaxIterations === 'continue') return exit('maxIterations');
         const error = `Loop '${step.id}' reached its limit of ${max} iterations without meeting its condition`;
         return {
@@ -446,6 +533,7 @@ class WorkflowRun {
         iteration: iterations,
         maxIterations: max,
       });
+      if (resumed && resume && iterations > 1) this.seedLoopBody(step, resume);
       const flow = await this.executeList(step.steps ?? [], { signal: scope.signal, loop });
       if (flow.kind === 'break') return exit('break');
       if (flow.kind !== 'next') return this.fromChildren(step, scope, flow, { iterations });
@@ -456,7 +544,12 @@ class WorkflowRun {
   }
 
   private async runIf(step: IfStep, frame: Frame, scope: AbortScope): Promise<BlockResult> {
-    const result = checkCondition('condition', step.condition, this.context(frame.loop));
+    // An if that contains the resume target takes the target's branch without checking its condition.
+    const forced = this.resume?.branches.get(step);
+    const result =
+      forced === undefined
+        ? checkCondition('condition', step.condition, this.context(frame.loop))
+        : forced === 'then';
     const taken = (result ? step.then : step.else) ?? [];
     this.skip((result ? step.else : step.then) ?? []);
     const flow = await this.executeList(taken, {

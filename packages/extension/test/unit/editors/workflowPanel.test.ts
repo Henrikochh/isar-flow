@@ -1,10 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import type { HostToWorkflowEditor, RunEvent, RunReview, RunView } from '@isar-flow/core';
+import {
+  type HostToWorkflowEditor,
+  liveContext,
+  type RunEvent,
+  type RunReview,
+  type RunView,
+  type SimulationState,
+} from '@isar-flow/core';
 import { PendingApprovals } from '../../../src/editors/approvals';
 import { DOCUMENT_CHANGED, WRITE_FAILED } from '../../../src/editors/host';
 import { WorkflowPanel } from '../../../src/editors/workflowPanel';
-import { agentSummary, AsyncDocument, FakeDocument, fakeReviews, fakeServices, fakeUi } from './fakes';
+import {
+  agentSummary,
+  AsyncDocument,
+  FakeDocument,
+  fakeReviews,
+  fakeServices,
+  fakeSimulations,
+  fakeUi,
+} from './fakes';
 
 const TEXT = [
   '# Review workflow',
@@ -84,14 +99,17 @@ describe('WorkflowPanel', () => {
     expect(attach).toHaveBeenCalledTimes(2);
   });
 
-  it('answers ready with document, catalog, trust and history', async () => {
+  it('answers ready with document, catalog, trust, history and the last run context', async () => {
     const { panel, posted, types, state } = setup();
     state.history = [
       { runId: 'old', workflowUri: URI, workflowName: 'Review', status: 'success', startedAt: 1 },
     ];
     await panel.handle({ type: 'ready' });
-    expect(types()).toEqual(['document', 'catalog', 'trust', 'history']);
-    const [document, catalog, trust, history] = posted;
+    await settle();
+    expect(types()).toEqual(['document', 'catalog', 'trust', 'history', 'lastRunContext']);
+    const [document, catalog, trust, history, lastRunContext] = posted;
+    // The run is listed but can no longer be read.
+    expect(lastRunContext).toEqual({ type: 'lastRunContext', context: null });
     expect(document).toMatchObject({
       type: 'document',
       doc: { uri: URI, fileName: 'review.workflow.yaml', text: TEXT, valid: true, diagnostics: [] },
@@ -678,5 +696,359 @@ describe('WorkflowPanel reviews', () => {
       'Could not revert the changes: git is gone',
       'Could not open the diff of a.txt: no editor',
     ]);
+  });
+});
+
+/** Sends a message as the webview could, with any shape. */
+const sendRaw = (panel: WorkflowPanel, message: unknown) =>
+  panel.handle(message as Parameters<WorkflowPanel['handle']>[0]);
+
+function setupWithSimulations(text = TEXT) {
+  const simulations = fakeSimulations();
+  const t = setupWith(new FakeDocument(text), (fake) =>
+    Object.assign(fake.services.runs, { simulations: simulations.service }),
+  );
+  return { ...t, simulations };
+}
+
+const SIMULATION_URI = 'file:///w/.isarflow/simulations/review.sim.yaml';
+
+describe('WorkflowPanel run from here and simulation', () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }));
+  afterEach(() => vi.useRealTimers());
+
+  it('starts a run from a block of its own runs', async () => {
+    const t = setup();
+    t.state.history = [record('old')];
+    t.state.active = [{ runId: 'live', workflowUri: URI, view: view('live', 'running') }];
+    await t.panel.handle({ type: 'runFromHere', runId: 'old', stepId: 'tests', inputs: { task: 'x' } });
+    await t.panel.handle({ type: 'runFromHere', runId: 'live', stepId: 'implement', inputs: {} });
+    expect(t.services.runs.start.mock.calls).toEqual([
+      [t.doc.uri, { task: 'x' }, { resume: { runId: 'old', stepId: 'tests' } }],
+      [t.doc.uri, {}, { resume: { runId: 'live', stepId: 'implement' } }],
+    ]);
+  });
+
+  it('ignores Run from here with wrong types or runs of other workflows', async () => {
+    const t = setup();
+    t.state.history = [record('old'), record('other', 'file:///w/other.workflow.yaml')];
+    await sendRaw(t.panel, { type: 'runFromHere', runId: 7, stepId: 'tests', inputs: {} });
+    await sendRaw(t.panel, { type: 'runFromHere', runId: 'old', stepId: null, inputs: {} });
+    await sendRaw(t.panel, { type: 'runFromHere', runId: 'old', stepId: 'tests' });
+    await sendRaw(t.panel, { type: 'runFromHere', runId: 'old', stepId: 'tests', inputs: null });
+    await sendRaw(t.panel, { type: 'runFromHere', runId: 'old', stepId: 'tests', inputs: ['x'] });
+    await sendRaw(t.panel, { type: 'runFromHere', runId: 'old', stepId: 'tests', inputs: 'x' });
+    await sendRaw(t.panel, { type: 'runFromHere', runId: 'other', stepId: 'tests', inputs: {} });
+    await sendRaw(t.panel, { type: 'runFromHere', runId: 'gone', stepId: 'tests', inputs: {} });
+    expect(t.services.runs.start).not.toHaveBeenCalled();
+    expect(t.doc.save).not.toHaveBeenCalled();
+  });
+
+  it('saves a dirty document before running from here, and stops when saving fails', async () => {
+    const t = setup();
+    t.state.history = [record('old')];
+    t.doc.isDirty = true;
+    await t.panel.handle({ type: 'runFromHere', runId: 'old', stepId: 'tests', inputs: {} });
+    expect(t.doc.save).toHaveBeenCalledTimes(1);
+    expect(t.services.runs.start).toHaveBeenCalledTimes(1);
+
+    t.doc.isDirty = true;
+    t.doc.saveResult = false;
+    await t.panel.handle({ type: 'runFromHere', runId: 'old', stepId: 'tests', inputs: {} });
+    expect(t.services.runs.start).toHaveBeenCalledTimes(1);
+    expect(t.ui.errors).toEqual([
+      'The workflow was not run because it could not be saved. Save the file, then run it again.',
+    ]);
+  });
+
+  it('simulates the workflow with the given inputs', async () => {
+    const t = setup();
+    await t.panel.handle({ type: 'simulate', inputs: { task: 'x' } });
+    await sendRaw(t.panel, { type: 'simulate', inputs: ['x'] });
+    await sendRaw(t.panel, { type: 'simulate' });
+    expect(t.services.runs.start.mock.calls).toEqual([[t.doc.uri, { task: 'x' }, { simulate: true }]]);
+  });
+
+  it('simulates unsaved edits without saving the file (a simulation changes no files)', async () => {
+    const t = setup();
+    t.doc.isDirty = true;
+    t.doc.saveResult = false;
+    await t.panel.handle({ type: 'simulate', inputs: {} });
+    expect(t.doc.save).not.toHaveBeenCalled();
+    expect(t.services.runs.start.mock.calls).toEqual([[t.doc.uri, {}, { simulate: true }]]);
+    expect(t.ui.errors).toEqual([]);
+  });
+
+  it('saves the mocks of a block with only the known fields', async () => {
+    const t = setupWithSimulations();
+    await sendRaw(t.panel, {
+      type: 'setSimulationMocks',
+      stepId: 'tests',
+      results: [
+        { exitCode: 1, output: '1 failed', extra: true },
+        { exitCode: 1.5, text: 3, json: { issues: ['x', null], score: 2 }, approved: 'yes', comment: 'c' },
+        'not a result',
+        null,
+        [1],
+        { approved: true, error: 'boom', output: 7 },
+        { error: '', json: null },
+        { json: { when: new Date(0) } },
+        { json: Number.NaN, text: 'answer' },
+        {},
+      ],
+    });
+    await t.panel.handle({ type: 'setSimulationMocks', stepId: 'implement', results: null });
+    await t.panel.handle({ type: 'setSimulationMocks', stepId: 'implement', results: [] });
+    expect(t.simulations.service.setBlock.mock.calls).toEqual([
+      [
+        t.doc.uri,
+        'tests',
+        [
+          { exitCode: 1, output: '1 failed' },
+          { json: { issues: ['x', null], score: 2 }, comment: 'c' },
+          { approved: true, error: 'boom' },
+          { json: null },
+          {},
+          { text: 'answer' },
+          {},
+        ],
+      ],
+      [t.doc.uri, 'implement', null],
+      [t.doc.uri, 'implement', []],
+    ]);
+  });
+
+  it('ignores mocks for invalid block ids or without a list', async () => {
+    const t = setupWithSimulations();
+    await sendRaw(t.panel, { type: 'setSimulationMocks', stepId: '1tests', results: [] });
+    await sendRaw(t.panel, { type: 'setSimulationMocks', stepId: 'te sts', results: [] });
+    await sendRaw(t.panel, { type: 'setSimulationMocks', stepId: 7, results: [] });
+    await sendRaw(t.panel, { type: 'setSimulationMocks', stepId: 'tests', results: { exitCode: 0 } });
+    await sendRaw(t.panel, { type: 'setSimulationMocks', stepId: 'tests' });
+    expect(t.simulations.service.setBlock).not.toHaveBeenCalled();
+  });
+
+  it('reports mocks that could not be saved', async () => {
+    const t = setupWithSimulations();
+    t.simulations.service.setBlock.mockRejectedValueOnce(
+      new Error("The simulation file can't be read: bad indentation. Fix it in the file first."),
+    );
+    await t.panel.handle({ type: 'setSimulationMocks', stepId: 'tests', results: [{ exitCode: 1 }] });
+    expect(t.ui.errors).toEqual([
+      "Could not save the simulation mocks: The simulation file can't be read: bad indentation. Fix it in the file first.",
+    ]);
+  });
+
+  it('opens the simulation file and reports failures', async () => {
+    const t = setupWithSimulations();
+    await t.panel.handle({ type: 'openSimulationFile' });
+    expect(t.simulations.service.open).toHaveBeenCalledWith(t.doc.uri);
+    t.simulations.service.open.mockRejectedValueOnce(new Error('No permission'));
+    await t.panel.handle({ type: 'openSimulationFile' });
+    expect(t.ui.errors).toEqual(['Could not open the simulation file: No permission']);
+  });
+
+  it('does nothing with simulation messages when there is no simulation store', async () => {
+    const t = setup();
+    await t.panel.handle({ type: 'setSimulationMocks', stepId: 'tests', results: null });
+    await t.panel.handle({ type: 'openSimulationFile' });
+    await t.panel.handle({ type: 'ready' });
+    await settle();
+    expect(t.ui.errors).toEqual([]);
+    expect(t.types()).not.toContain('simulation');
+  });
+
+  it('sends the simulation file after ready and after every document change', async () => {
+    const t = setupWithSimulations();
+    t.emitters.agents.fire();
+    await settle();
+    expect(t.simulations.service.state).not.toHaveBeenCalled();
+
+    await t.panel.handle({ type: 'ready' });
+    await settle();
+    expect(t.last('simulation')).toEqual({ type: 'simulation', simulation: t.simulations.data.simulation });
+    const [uri, workflow] = t.simulations.service.state.mock.calls[0];
+    expect(uri).toBe(t.doc.uri);
+    expect(workflow?.steps.map((step) => step.id)).toEqual(['implement', 'tests']);
+
+    const changed: SimulationState = { ...t.simulations.data.simulation, exists: true };
+    t.simulations.data.simulation = changed;
+    t.doc.text = TEXT.replace('id: tests', 'id: unit');
+    t.panel.documentChanged();
+    vi.advanceTimersByTime(150);
+    await settle();
+    expect(t.last('simulation')).toEqual({ type: 'simulation', simulation: changed });
+    expect(t.simulations.service.state.mock.calls[1][1]?.steps.map((step) => step.id)).toEqual([
+      'implement',
+      'unit',
+    ]);
+  });
+
+  it('posts only the newest of overlapping simulation reads', async () => {
+    const t = setupWithSimulations();
+    await t.panel.handle({ type: 'ready' });
+    await settle();
+    t.posted.length = 0;
+    const older: SimulationState = { ...t.simulations.data.simulation, path: 'older' };
+    const newer: SimulationState = { ...t.simulations.data.simulation, path: 'newer' };
+    let release: (state: SimulationState) => void = () => undefined;
+    t.simulations.service.state.mockImplementationOnce(
+      () => new Promise<SimulationState>((resolve) => (release = resolve)),
+    );
+    t.simulations.service.state.mockImplementationOnce(async () => newer);
+    t.simulations.emitter.fire({ uri: SIMULATION_URI });
+    t.doc.text = `${TEXT}# changed\n`;
+    t.panel.documentChanged();
+    vi.advanceTimersByTime(150);
+    await settle();
+    release(older);
+    await settle();
+    expect(t.posted.filter((m) => m.type === 'simulation')).toEqual([
+      { type: 'simulation', simulation: newer },
+    ]);
+  });
+
+  it('re-sends the simulation file when the store reports a change of its file', async () => {
+    const t = setupWithSimulations();
+    t.simulations.emitter.fire({ uri: SIMULATION_URI });
+    await settle();
+    expect(t.simulations.service.state).not.toHaveBeenCalled();
+
+    await t.panel.handle({ type: 'ready' });
+    await settle();
+    const count = () => t.posted.filter((m) => m.type === 'simulation').length;
+    expect(count()).toBe(1);
+    t.simulations.emitter.fire({ uri: SIMULATION_URI });
+    await settle();
+    expect(count()).toBe(2);
+    // The .sim.yml variant of the same file counts too.
+    t.simulations.emitter.fire({ uri: SIMULATION_URI.replace(/yaml$/, 'yml') });
+    await settle();
+    expect(count()).toBe(3);
+    t.simulations.emitter.fire({ uri: 'file:///w/.isarflow/simulations/other.sim.yaml' });
+    t.simulations.emitter.fire({ uri: 'file:///w/.isarflow/simulations/review-2.sim.yaml' });
+    await settle();
+    expect(count()).toBe(3);
+
+    t.panel.dispose();
+    t.simulations.emitter.fire({ uri: SIMULATION_URI });
+    await settle();
+    expect(count()).toBe(3);
+  });
+
+  it('moves the mocks of renamed blocks', async () => {
+    const t = setupWithSimulations();
+    await t.panel.handle({
+      type: 'ops',
+      ops: [
+        { op: 'renameStep', stepId: 'tests', newId: 'unit' },
+        { op: 'renameStep', stepId: 'implement', newId: 'implement' },
+        { op: 'updateStep', stepId: 'unit', set: { run: 'npm run unit' } },
+        { op: 'renameStep', stepId: 'unit', newId: 'unit_tests' },
+      ],
+    });
+    expect(t.doc.text).toContain('id: unit_tests');
+    expect(t.simulations.service.renameBlock.mock.calls).toEqual([
+      [t.doc.uri, 'tests', 'unit'],
+      [t.doc.uri, 'unit', 'unit_tests'],
+    ]);
+  });
+
+  it('moves no mocks when the ops fail, and logs failed moves', async () => {
+    const t = setupWithSimulations();
+    await t.panel.handle({ type: 'ops', ops: [{ op: 'renameStep', stepId: 'nope', newId: 'x' }] });
+    expect(t.simulations.service.renameBlock).not.toHaveBeenCalled();
+
+    t.simulations.service.renameBlock.mockRejectedValueOnce(new Error('read-only'));
+    await t.panel.handle({ type: 'ops', ops: [{ op: 'renameStep', stepId: 'tests', newId: 'unit' }] });
+    await settle();
+    expect(t.services.output.warn).toHaveBeenCalledWith(
+      'Could not move the simulation mocks of tests to unit: read-only',
+    );
+    expect(t.ui.errors).toEqual([]);
+  });
+});
+
+describe('WorkflowPanel last run context', () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }));
+  afterEach(() => vi.useRealTimers());
+
+  const contexts = (t: ReturnType<typeof setup>) =>
+    t.posted.flatMap((m) => (m.type === 'lastRunContext' ? [m.context] : []));
+
+  it('sends null after ready when the workflow has no runs', async () => {
+    const t = setup();
+    await t.panel.handle({ type: 'ready' });
+    expect(contexts(t)).toEqual([null]);
+  });
+
+  it('sends the context of the newest run once per new newest run', async () => {
+    const t = setup();
+    t.state.history = [record('r1'), record('r0')];
+    t.state.views.r1 = { ...view('r1', 'failure'), inputs: { task: 'x' } };
+    // Not sent before the webview is ready.
+    t.emitters.history.fire();
+    await settle();
+    expect(contexts(t)).toEqual([]);
+
+    await t.panel.handle({ type: 'ready' });
+    await settle();
+    expect(contexts(t)).toEqual([liveContext(t.state.views.r1)]);
+
+    // Review counts and other changes that keep the newest run send nothing.
+    t.state.history = [
+      { ...record('r1'), review: { total: 1, kept: 1, reverted: 0, pending: 0 } },
+      record('r0'),
+    ];
+    t.emitters.history.fire();
+    t.emitters.history.fire();
+    await settle();
+    expect(contexts(t)).toHaveLength(1);
+
+    // A newer run that is only stored, not cached.
+    t.state.stored.r2 = view('r2');
+    t.state.history = [record('r2'), ...t.state.history];
+    t.emitters.history.fire();
+    await settle();
+    expect(contexts(t)).toEqual([liveContext(t.state.views.r1), liveContext(view('r2'))]);
+
+    // The same run with another status.
+    t.state.history = [{ ...record('r2'), status: 'cancelled' }, ...t.state.history.slice(1)];
+    t.state.stored.r2 = view('r2', 'cancelled');
+    t.emitters.history.fire();
+    await settle();
+    expect(contexts(t).at(-1)).toEqual(liveContext(view('r2', 'cancelled')));
+
+    t.state.history = [];
+    t.emitters.history.fire();
+    await settle();
+    expect(contexts(t)).toHaveLength(4);
+    expect(contexts(t).at(-1)).toBeNull();
+  });
+
+  it('posts only the newest of overlapping run reads', async () => {
+    const t = setup();
+    await t.panel.handle({ type: 'ready' });
+    let release: (value: RunView | undefined) => void = () => undefined;
+    vi.mocked(t.services.runs.history.getAsync).mockImplementationOnce(
+      () => new Promise<RunView | undefined>((resolve) => (release = resolve)),
+    );
+    t.state.history = [record('slow')];
+    t.emitters.history.fire();
+    t.state.views.fast = view('fast');
+    t.state.history = [record('fast'), record('slow')];
+    t.emitters.history.fire();
+    release(view('slow'));
+    await settle();
+    expect(contexts(t)).toEqual([null, liveContext(view('fast'))]);
+  });
+
+  it('sends null when the newest run can no longer be read', async () => {
+    const t = setup();
+    t.state.history = [record('broken')];
+    vi.mocked(t.services.runs.history.getAsync).mockRejectedValueOnce(new Error('corrupt'));
+    await t.panel.handle({ type: 'ready' });
+    await settle();
+    expect(contexts(t)).toEqual([null]);
   });
 });

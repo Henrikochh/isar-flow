@@ -229,7 +229,8 @@
 .wf-run-hero-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  align-items: center;
+  gap: 4px 10px;
   font-size: var(--if-text-s);
   color: var(--if-muted);
   font-variant-numeric: tabular-nums;
@@ -512,4 +513,42 @@
   font-family: var(--if-font-code);
   font-size: var(--if-text-xs);
   overflow-wrap: anywhere;
+}
+
+/* ---- Run summary: resumed from an earlier run, or simulated ---- */
+.wf-run-origin {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--if-muted);
+  font-size: var(--if-text-s);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.wf-run-origin__icon {
+  flex: none;
+  margin-top: 1px;
+  font-size: 14px;
+}
+
+/* "Run from here" under the status line of a block's run output. */
+.wf-run-resume {
+  display: inline-flex;
+  align-self: flex-start;
+}
+
+/* "Reused" under a block of a resumed run that did not run (in place of the model line). */
+.wf-run-reused {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 28px;
+  font-size: var(--if-text-xs);
+  line-height: 16px;
+  color: var(--if-muted);
+}
+.wf-run-reused .codicon {
+  font-size: 12px;
 }

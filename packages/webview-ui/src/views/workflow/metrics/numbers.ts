@@ -40,10 +40,11 @@ function defined<T extends object>(value: T): T {
 /**
  * Numbers of a block that started in the run; undefined for blocks that were skipped or never started. A
  * running block keeps the totals of its finished executions (loops re-run blocks), and so does a block that ran in
- * an earlier loop iteration and was skipped in the last one.
+ * an earlier loop iteration and was skipped in the last one. A reused block (Run from here) did not run in this run:
+ * its output and numbers belong to the run it continues.
  */
 export function blockNumbers(view: StepRunView | undefined): BlockNumbers | undefined {
-  if (!view) return undefined;
+  if (!view || view.reused) return undefined;
   const metrics = isRecord(view.metrics) ? view.metrics : undefined;
   if (!FINISHED.has(view.status) && !((view.status === 'running' || view.status === 'skipped') && metrics))
     return undefined;

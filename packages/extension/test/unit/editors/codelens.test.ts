@@ -3,10 +3,11 @@ import * as vscode from 'vscode';
 import { codeLensCommands } from '../../../src/codelens';
 
 describe('codeLensCommands', () => {
-  it('offers run and canvas for workflow files', () => {
+  it('offers run, simulate and canvas for workflow files', () => {
     const uri = vscode.Uri.file('/w/.isarflow/workflows/review.workflow.yaml');
     expect(codeLensCommands(uri)).toEqual([
       { title: '$(play) Run workflow', command: 'isarFlow.runWorkflow', arguments: [uri] },
+      { title: '$(beaker) Simulate', command: 'isarFlow.simulateWorkflow', arguments: [uri] },
       { title: '$(type-hierarchy) Open in canvas', command: 'isarFlow.openInCanvas', arguments: [uri] },
     ]);
   });

@@ -130,8 +130,9 @@ export function Popover({
     const frame = requestAnimationFrame(() => {
       const panel = panelRef.current;
       if (!panel || panel.contains(document.activeElement)) return;
+      // Menu items are buttons too: an aria-disabled one (e.g. Run from here without a run) never gets the focus.
       const first = panel.querySelector<HTMLElement>(
-        '[data-autofocus], input, textarea, [role="menuitem"]:not([aria-disabled="true"]), button:not(:disabled)',
+        '[data-autofocus], input, textarea, [role="menuitem"]:not([aria-disabled="true"]), button:not(:disabled):not([aria-disabled="true"])',
       );
       (first ?? panel).focus();
     });

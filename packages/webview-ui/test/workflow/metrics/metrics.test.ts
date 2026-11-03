@@ -328,3 +328,40 @@ describe('labels', () => {
     expect(formatAverage(2.04)).toBe('2');
   });
 });
+
+describe('blockTrends of simulated runs', () => {
+  it('leaves simulated runs out: nothing was executed', () => {
+    const blocks = { tests: { status: 'success' as const, durationMs: 1000 } };
+    const trends = blockTrends([
+      summary('1', 1, blocks),
+      { ...summary('sim', 3, { tests: { status: 'success', durationMs: 5 } }), simulated: true },
+      summary('2', 2, { tests: { status: 'success', durationMs: 3000 } }),
+    ]);
+    expect(trends).toEqual({ runs: 2, blocks: { tests: { runs: 2, durationMs: 2000 } } });
+    expect(blockTrends([summary('1', 1, blocks), { ...summary('sim', 2, blocks), simulated: true }])).toBe(
+      undefined,
+    );
+  });
+});
+
+describe('reused blocks of a resumed run', () => {
+  const reused = step({
+    status: 'success',
+    executions: 0,
+    durationMs: 0,
+    reused: true,
+    output: {
+      status: 'success',
+      model: 'litellm/claude-sonnet',
+      usage: { inputTokens: 18_400, outputTokens: 1_250 },
+    },
+  });
+
+  it('have no numbers: they did not run in this run', () => {
+    expect(blockNumbers(reused)).toBeUndefined();
+  });
+
+  it('add nothing to the cost of the run', () => {
+    expect(runCost(run({ implement: reused }), PRICES)).toEqual({ unpriced: [] });
+  });
+});

@@ -10,6 +10,7 @@ import type {
 } from '@isar-flow/core';
 
 export * from './reviews';
+export * from './simulationFixtures';
 
 const NOW = Date.UTC(2026, 9, 26, 9, 30);
 export const FIXTURE_NOW = NOW;
@@ -172,6 +173,29 @@ export const RECENT_RUNS: RunRecordSummary[] = [
     status: 'cancelled',
     startedAt: NOW - 26 * 3_600_000,
     durationMs: 48_000,
+  },
+];
+
+/** Sidebar "markers": a simulated run and a run resumed from run-6, newer than RECENT_RUNS. */
+export const MARKED_RUNS: RunRecordSummary[] = [
+  {
+    runId: 'run-9',
+    workflowUri: RECENT_RUNS[0].workflowUri,
+    workflowName: RECENT_RUNS[0].workflowName,
+    status: 'success',
+    startedAt: NOW - 60_000,
+    durationMs: 3_400,
+    simulated: true,
+  },
+  {
+    runId: 'run-8',
+    workflowUri: RECENT_RUNS[1].workflowUri,
+    workflowName: RECENT_RUNS[1].workflowName,
+    status: 'success',
+    startedAt: NOW - 2 * 60_000,
+    durationMs: 96_000,
+    usage: { inputTokens: 9_870, outputTokens: 1_240 },
+    resumedFrom: { runId: 'run-6', stepId: 'fix_loop' },
   },
 ];
 

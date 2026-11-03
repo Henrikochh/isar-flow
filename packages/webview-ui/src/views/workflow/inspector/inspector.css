@@ -212,6 +212,7 @@
 .wf-insp-note {
   font-size: var(--if-text-s);
   color: var(--if-muted);
+  text-wrap: pretty;
 }
 .wf-insp-explain {
   color: var(--if-fg);

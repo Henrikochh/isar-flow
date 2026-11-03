@@ -29,3 +29,19 @@ describe('run history in the workflow panel', () => {
     expect(plain).not.toHaveTextContent(/to review|kept|reverted/);
   });
 });
+
+describe('simulated and resumed runs in the run history', () => {
+  it('marks them with chips', () => {
+    renderHistory([
+      { ...RECENT_RUNS[0], runId: 'run-9', simulated: true },
+      { ...RECENT_RUNS[0], runId: 'run-8', resumedFrom: { runId: 'run-3', stepId: 'tests' } },
+      RECENT_RUNS[2],
+    ]);
+    const [simulated, resumed, plain] = within(
+      screen.getByRole('list', { name: 'Run history' }),
+    ).getAllByRole('button');
+    expect(within(simulated).getByText('Simulated')).toHaveClass('if-chip');
+    expect(within(resumed).getByText('Resumed')).toHaveAttribute('title', 'Resumed from tests');
+    expect(plain).not.toHaveTextContent(/Simulated|Resumed/);
+  });
+});

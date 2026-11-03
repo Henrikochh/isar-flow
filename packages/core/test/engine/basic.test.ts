@@ -26,6 +26,13 @@ describe('run lifecycle', () => {
       workflowName: 'Test workflow',
       startedAt: 1010,
       inputs: {},
+      context: {
+        env: [],
+        secrets: [],
+        workflow: { name: 'Test workflow', file: '' },
+        workspace: { root: '/ws' },
+      },
+      blockHashes: { a: expect.any(String), b: expect.any(String) },
     });
     expect(r.summary).toMatchObject({
       runId: 'run-1',

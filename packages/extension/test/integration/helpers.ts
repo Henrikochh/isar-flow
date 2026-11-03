@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import * as vscode from 'vscode';
 import type { RunEvent, RunView } from '@isar-flow/core';
+import type { RunStartOptions } from '../../src/contracts';
 import type { IsarFlowApi } from '../../src/extension';
 
 export const EXTENSION_ID = 'isarflow.isar-flow';
@@ -50,12 +51,16 @@ export interface FinishedRun {
   events: RunEvent[];
 }
 
-/** Starts a run with the given inputs and waits until it has ended and is saved to the history. */
+/**
+ * Starts a run with the given inputs (and options: Run from here, Simulate) and waits until it has ended and is
+ * saved to the history.
+ */
 export async function runToEnd(
   api: IsarFlowApi,
   uri: vscode.Uri,
   inputs: Record<string, unknown> = {},
   onEvent?: (event: RunEvent, runId: string | undefined) => void,
+  options?: RunStartOptions,
 ): Promise<FinishedRun> {
   const key = uri.toString();
   const events: RunEvent[] = [];
@@ -66,7 +71,7 @@ export async function runToEnd(
     onEvent?.(event, runId);
   });
   try {
-    runId = await api.runs.start(uri, inputs);
+    runId = await api.runs.start(uri, inputs, options);
     assert.ok(runId, `The run of ${uri.path} did not start.`);
     const view = await api.runs.whenFinished(runId);
     assert.ok(view, `The run ${runId} has no final view.`);

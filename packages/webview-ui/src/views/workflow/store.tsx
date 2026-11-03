@@ -3,7 +3,7 @@
  * `document` message plus the edits it sent and the host has not confirmed yet (see optimistic.ts), and sends
  * semantic ops back. Run state is reduced locally from run events.
  */
-import { createContext, type ReactNode, useContext, useMemo, useReducer } from 'react';
+import { createContext, type ReactNode, useContext, useMemo, useReducer, useRef } from 'react';
 import {
   applyWorkflowOps,
   collectStepIds,
@@ -56,6 +56,17 @@ export interface WorkflowUiState {
    * keeps rendering this one, dimmed.
    */
   lastWorkflow?: Workflow | null;
+  /** "Run from here" waiting for its run to be shown, then for the user's answer (RunFromHereHost). */
+  resumeRequest?: ResumeRequest | null;
+  /** Run or Simulate asked for outside the top bar (a banner); the top bar asks for inputs and starts it. */
+  startRequest?: StartMode | null;
+}
+
+export type StartMode = 'run' | 'simulate';
+
+export interface ResumeRequest {
+  runId: string;
+  stepId: string;
 }
 
 export type WorkflowUiAction =
@@ -63,7 +74,11 @@ export type WorkflowUiAction =
   | { type: 'select'; stepId: string | null }
   | { type: 'dismissOpsError' }
   /** Ops the webview just sent to the host; shown at once. */
-  | { type: 'localOps'; ops: WorkflowOp[] };
+  | { type: 'localOps'; ops: WorkflowOp[] }
+  | ({ type: 'requestResume' } & ResumeRequest)
+  | { type: 'clearResumeRequest' }
+  | { type: 'requestStart'; mode: StartMode }
+  | { type: 'clearStartRequest' };
 
 export const initialWorkflowUiState: WorkflowUiState = {
   doc: null,
@@ -78,6 +93,8 @@ export const initialWorkflowUiState: WorkflowUiState = {
   selection: null,
   opsError: null,
   review: null,
+  resumeRequest: null,
+  startRequest: null,
 };
 
 /** The document the host will send for `text`, parsed and validated the way the host does it. */
@@ -153,7 +170,9 @@ export function workflowUiReducer(state: WorkflowUiState, action: WorkflowUiActi
     case 'run': {
       const runId = action.run?.runId;
       const review = [state.review, state.parkedReview].find((r) => r && r.runId === runId) ?? null;
-      return { ...state, run: action.run, runLive: action.live, review, parkedReview: null };
+      // No run means the requested one is gone (pruned); any other run may be shown before it.
+      const resumeRequest = action.run ? state.resumeRequest : null;
+      return { ...state, run: action.run, runLive: action.live, review, parkedReview: null, resumeRequest };
     }
     case 'runEvent': {
       // While a past run is shown, live events are ignored; the host sends a 'run' snapshot when switching back.
@@ -161,7 +180,7 @@ export function workflowUiReducer(state: WorkflowUiState, action: WorkflowUiActi
       const start = action.event.type === 'run-start';
       const run = reduceRunEvent(start ? null : state.run, action.event);
       return start
-        ? { ...state, run, runLive: true, review: null, parkedReview: null }
+        ? { ...state, run, runLive: true, review: null, parkedReview: null, resumeRequest: null }
         : { ...state, run, runLive: true };
     }
     case 'review': {
@@ -192,6 +211,14 @@ export function workflowUiReducer(state: WorkflowUiState, action: WorkflowUiActi
     case 'focusStep':
     case 'select':
       return { ...state, selection: action.stepId };
+    case 'requestResume':
+      return { ...state, resumeRequest: { runId: action.runId, stepId: action.stepId } };
+    case 'clearResumeRequest':
+      return { ...state, resumeRequest: null };
+    case 'requestStart':
+      return { ...state, startRequest: action.mode };
+    case 'clearStartRequest':
+      return { ...state, startRequest: null };
     default:
       return state;
   }
@@ -201,6 +228,16 @@ export interface WorkflowActions {
   applyOps(ops: WorkflowOp[]): void;
   select(stepId: string | null): void;
   run(inputs: Record<string, unknown>): void;
+  /** Continues the finished run `runId` at block `stepId`. */
+  runFromHere(runId: string, stepId: string, inputs: Record<string, unknown>): void;
+  simulate(inputs: Record<string, unknown>): void;
+  openSimulationFile(): void;
+  /** Starts "Run from here"; shows that run first when another one is shown (RunFromHereHost takes over). */
+  requestResume(runId: string, stepId: string): void;
+  clearResumeRequest(): void;
+  /** Run or Simulate like the top bar does (inputs dialog first); for buttons outside the top bar. */
+  requestStart(mode: StartMode): void;
+  clearStartRequest(): void;
   cancelRun(): void;
   selectRun(runId: string | null): void;
   answerApproval(requestId: string, approved: boolean, comment?: string): void;
@@ -229,6 +266,8 @@ export function WorkflowStoreProvider({
 }) {
   const [state, dispatch] = useReducer(workflowUiReducer, initialState);
   useHostMessages<HostToWorkflowEditor>((message) => dispatch(message));
+  const shownRunId = useRef<string | undefined>(undefined);
+  shownRunId.current = state.run?.runId;
 
   const actions = useMemo<WorkflowActions>(
     () => ({
@@ -239,6 +278,16 @@ export function WorkflowStoreProvider({
       },
       select: (stepId) => dispatch({ type: 'select', stepId }),
       run: (inputs) => send({ type: 'run', inputs }),
+      runFromHere: (runId, stepId, inputs) => send({ type: 'runFromHere', runId, stepId, inputs }),
+      simulate: (inputs) => send({ type: 'simulate', inputs }),
+      openSimulationFile: () => send({ type: 'openSimulationFile' }),
+      requestResume: (runId, stepId) => {
+        dispatch({ type: 'requestResume', runId, stepId });
+        if (shownRunId.current !== runId) send({ type: 'selectRun', runId });
+      },
+      clearResumeRequest: () => dispatch({ type: 'clearResumeRequest' }),
+      requestStart: (mode) => dispatch({ type: 'requestStart', mode }),
+      clearStartRequest: () => dispatch({ type: 'clearStartRequest' }),
       cancelRun: () => send({ type: 'cancelRun' }),
       selectRun: (runId) => send({ type: 'selectRun', runId }),
       answerApproval: (requestId, approved, comment) =>

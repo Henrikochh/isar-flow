@@ -6,6 +6,7 @@ import type { RunManagerDeps, RunTerminal, Services, SetupCheck } from './contra
 import { registerDiagnostics } from './diagnostics';
 import { registerAgentEditor } from './editors/agentEditor';
 import { registerWorkflowEditor } from './editors/workflowEditor';
+import { registerLiveValueHover } from './liveValues/hoverProvider';
 import {
   createModelRegistry,
   createSetupCheck,
@@ -120,6 +121,7 @@ export function activate(context: vscode.ExtensionContext): IsarFlowApi {
     registerAgentEditor(services),
     registerDiagnostics(services),
     registerCodeLens(services),
+    registerLiveValueHover(services),
     registerWorkflowCommands(services),
   );
 

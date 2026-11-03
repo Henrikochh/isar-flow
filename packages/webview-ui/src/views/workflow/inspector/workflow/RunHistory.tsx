@@ -1,13 +1,14 @@
 import './runHistory.css';
 import type { RunRecordSummary } from '@isar-flow/core';
-import { StatusGlyph, statusLabel } from '../../../../components';
+import { RunOriginChip, StatusGlyph, statusLabel } from '../../../../components';
 import { formatDuration, formatRelativeTime, formatTokens } from '../../../../hooks';
 import { ReviewCounts } from '../../review/ReviewCounts';
+import { blockName } from '../../runFromHere/model';
 import { useWorkflowActions, useWorkflowState } from '../../store';
 
 /** Past runs of this workflow; clicking one shows it on the canvas. */
 export function RunHistory() {
-  const { history, run } = useWorkflowState();
+  const { history, run, doc } = useWorkflowState();
   const actions = useWorkflowActions();
   if (history.length === 0) {
     return <p className="wf-insp-note">No runs yet. Each run of this workflow appears here.</p>;
@@ -31,6 +32,7 @@ export function RunHistory() {
                 <span className="wf-history-line">
                   <span className="wf-history-status">{statusLabel(record.status)}</span>
                   <span className="wf-history-when">{formatRelativeTime(record.startedAt, now)}</span>
+                  <RunOriginChip run={record} blockName={(id) => blockName(doc?.workflow, id)} />
                 </span>
                 {record.error ? <span className="wf-history-error">{record.error}</span> : null}
                 {record.review?.total ? (

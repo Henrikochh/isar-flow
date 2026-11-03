@@ -1,6 +1,6 @@
 /** Leaf block cards on the river (agent, console, stop, approval, break and unknown blocks). */
 import type { ReactNode } from 'react';
-import { Stone, StatusGlyph } from '../../../components';
+import { Chip, Stone, StatusGlyph } from '../../../components';
 import type { StepStatus } from '@isar-flow/core';
 import { cx } from '../cx';
 import { useCanvas } from './canvasContext';
@@ -9,10 +9,31 @@ import { CardMetrics } from './CardMetrics';
 import { type BlockEntry, textOf } from './model';
 import { type BlockHandle, useBlockHandle } from './useBlockHandle';
 
-/** Status glyph during a run; otherwise a problem badge for diagnostics or a missing id. */
+/**
+ * Status glyph during a run (with a Reused chip for blocks a resumed run took from the run it continues); otherwise
+ * a problem badge for diagnostics or a missing id.
+ */
 export function CardBadge({ entry, status }: { entry: BlockEntry; status: StepStatus | undefined }) {
   const { problems, run } = useCanvas();
-  if (status && (status !== 'pending' || run?.status === 'running')) return <StatusGlyph status={status} />;
+  if (status && (status !== 'pending' || run?.status === 'running')) {
+    const reused = entry.id !== undefined && run?.steps[entry.id]?.reused === true;
+    return (
+      <>
+        {reused ? (
+          <span className="wf-card__reused">
+            <Chip
+              tone="outline"
+              icon="history"
+              title="Not run: the result comes from the run this one continues."
+            >
+              Reused
+            </Chip>
+          </span>
+        ) : null}
+        <StatusGlyph status={status} />
+      </>
+    );
+  }
   if (!entry.id) {
     return (
       <span

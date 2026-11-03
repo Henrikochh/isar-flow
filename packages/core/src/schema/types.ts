@@ -147,3 +147,38 @@ export interface Workflow {
 }
 
 export type StepSlot = 'steps' | 'then' | 'else';
+
+/* ---------- simulation file (.isarflow/simulations/<workflow>.sim.yaml) ---------- */
+
+/**
+ * One mocked host call of a block in a simulated run. Only the fields of the block's type apply (console:
+ * exitCode, output; agent: text, json; approval: approved, comment); `error` fails the call for any of them.
+ */
+export interface SimulationResult {
+  /** Console: exit code (default 0). */
+  exitCode?: number;
+  /** Console: what the command printed (default empty). */
+  output?: string;
+  /** Agent: the answer text (default "(simulated answer)"; for JSON answers the JSON as text). */
+  text?: string;
+  /** Agent with a JSON answer: the answer (default: sample JSON built from the block's JSON fields). */
+  json?: unknown;
+  /** Approval: the decision (default from the file's `approvals`). */
+  approved?: boolean;
+  /** Approval: the comment that comes with the decision. */
+  comment?: string;
+  /** Fails this call with the message, e.g. to simulate an unreachable model. */
+  error?: string;
+}
+
+/** How approval blocks without mocks are answered in simulated runs. */
+export type SimulationApprovals = 'approve' | 'reject';
+
+/** Contents of a simulation file: mocks for Simulate. */
+export interface SimulationFile {
+  version?: 1;
+  /** Answer for approval blocks without mocks (default approve). */
+  approvals?: SimulationApprovals;
+  /** Results per block id, used in order; the last one repeats. */
+  blocks?: Record<string, SimulationResult[]>;
+}

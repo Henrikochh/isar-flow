@@ -145,3 +145,28 @@ describe('skipped blocks inside a running loop', () => {
     expect(segmentState(run, entry('needs_fix').children[0], 0, entry('needs_fix'))).toBe('pending');
   });
 });
+
+describe('reused blocks of a resumed run', () => {
+  const resumed = (reused: boolean): RunView => ({
+    runId: 'r2',
+    workflowName: 'w',
+    status: 'running',
+    startedAt: 0,
+    inputs: {},
+    usage: { inputTokens: 0, outputTokens: 0 },
+    activeStepId: 'review',
+    resumedFrom: { runId: 'r1', stepId: 'review' },
+    steps: {
+      implement: { status: 'success', executions: 0, durationMs: 0, logs: [], reused: true },
+      review_loop: { status: 'running', executions: 1, loop: { iteration: 3, maxIterations: 5 }, logs: [] },
+      tests: { status: 'failure', executions: 0, durationMs: 0, logs: [], reused },
+      review: { status: 'running', executions: 1, iteration: 3, logs: [] },
+    },
+  });
+
+  it('counts a reused block in the loop the run continues as current', () => {
+    expect(effectiveStatus(resumed(true), entry('tests'))).toBe('failure');
+    expect(effectiveStatus(resumed(true), entry('implement'))).toBe('success');
+    expect(effectiveStatus(resumed(false), entry('tests'))).toBe('pending');
+  });
+});

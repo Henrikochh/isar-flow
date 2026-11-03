@@ -2,6 +2,7 @@ import type { LogStream, RunEvent, Usage } from '../engine/types';
 import { usageOfOutput } from '../engine/usage';
 import type { RunRecordSummary } from '../protocol';
 import { addExecution, blockRunMetrics } from './metrics';
+import { runStoppedAt } from './resume';
 import type { RunView, StepRunView } from './types';
 
 /** Log entries kept per block; older ones are dropped. */
@@ -16,6 +17,19 @@ export function createRunView(
   inputs: Record<string, unknown> = {},
 ): RunView {
   return { runId, workflowName, status: 'running', startedAt, inputs, usage: { ...ZERO_USAGE }, steps: {} };
+}
+
+type RunStartEvent = Extract<RunEvent, { type: 'run-start' }>;
+type StepEndEvent = Extract<RunEvent, { type: 'step-end' }>;
+
+function startView(event: RunStartEvent): RunView {
+  return {
+    ...createRunView(event.runId, event.workflowName, event.startedAt, event.inputs),
+    ...(event.resumedFrom && { resumedFrom: { ...event.resumedFrom } }),
+    ...(event.simulated === true && { simulated: true }),
+    ...(event.context && { context: event.context }),
+    ...(event.blockHashes && { blockHashes: event.blockHashes }),
+  };
 }
 
 function emptyStep(): StepRunView {
@@ -76,8 +90,8 @@ function startStep(previous: StepRunView, event: Extract<RunEvent, { type: 'step
   };
 }
 
-function endStep(previous: StepRunView, event: Extract<RunEvent, { type: 'step-end' }>): StepRunView {
-  const { error: _previousError, ...rest } = previous;
+function endStep(previous: StepRunView, event: StepEndEvent): StepRunView {
+  const { error: _previousError, reused: _reused, ...rest } = previous;
   return {
     ...rest,
     status: event.status,
@@ -90,11 +104,22 @@ function endStep(previous: StepRunView, event: Extract<RunEvent, { type: 'step-e
   };
 }
 
+/** A block copied from the run this one continues: no execution, so no metrics and no usage for this run. */
+function reuseStep(previous: StepRunView, event: StepEndEvent): StepRunView {
+  const { error: _previousError, ...rest } = previous;
+  return {
+    ...rest,
+    status: event.status,
+    output: event.output,
+    durationMs: 0,
+    ...(event.error !== undefined && { error: event.error }),
+    reused: true,
+  };
+}
+
 /** Applies one engine event to a run view. Pure: never mutates its inputs. */
 export function reduceRunEvent(view: RunView | null, event: RunEvent): RunView {
-  if (event.type === 'run-start') {
-    return createRunView(event.runId, event.workflowName, event.startedAt, event.inputs);
-  }
+  if (event.type === 'run-start') return startView(event);
   const current = view ?? createRunView(event.runId, '', 'at' in event ? event.at : 0);
   if (current.runId !== event.runId) return current;
 
@@ -107,6 +132,10 @@ export function reduceRunEvent(view: RunView | null, event: RunEvent): RunView {
     case 'step-log':
       return withStep(current, event.stepId, (step) => appendLog(step, event.stream, event.text));
     case 'step-end': {
+      if (event.reused) {
+        const next = withStep(current, event.stepId, (step) => reuseStep(step, event));
+        return withActive(next, lastRunning(next.steps));
+      }
       let next = withStep(current, event.stepId, (step) => endStep(step, event));
       const usage = usageOfOutput(event.output);
       if (usage) {
@@ -146,6 +175,7 @@ export function reduceRunEvent(view: RunView | null, event: RunEvent): RunView {
 /** Compact record of a run for history lists (it lives in the history index, so no text or logs). */
 export function runRecordSummary(view: RunView, workflowUri: string): RunRecordSummary {
   const blocks = blockRunMetrics(view.steps);
+  const stopped = view.status === 'failure' || view.status === 'cancelled' ? runStoppedAt(view) : undefined;
   return {
     runId: view.runId,
     workflowUri,
@@ -156,5 +186,8 @@ export function runRecordSummary(view: RunView, workflowUri: string): RunRecordS
     ...(view.error !== undefined && { error: view.error }),
     usage: { ...view.usage },
     ...(Object.keys(blocks).length > 0 && { blocks }),
+    ...(view.resumedFrom && { resumedFrom: { ...view.resumedFrom } }),
+    ...(view.simulated === true && { simulated: true }),
+    ...(stopped !== undefined && { stoppedAt: stopped }),
   };
 }

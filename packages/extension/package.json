@@ -36,7 +36,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Workflows and agents can be viewed and edited, but not run, in Restricted Mode.",
+      "description": "Workflows and agents can be viewed, edited and simulated, but not run, in Restricted Mode.",
       "restrictedConfigurations": [
         "isarFlow.providers"
       ]
@@ -108,6 +108,23 @@
         "title": "Run workflow",
         "category": "Isar Flow",
         "icon": "$(play)"
+      },
+      {
+        "command": "isarFlow.simulateWorkflow",
+        "title": "Simulate workflow",
+        "category": "Isar Flow",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "isarFlow.runFromHere",
+        "title": "Run from here",
+        "category": "Isar Flow",
+        "icon": "$(debug-continue)"
+      },
+      {
+        "command": "isarFlow.openSimulationFile",
+        "title": "Open simulation file",
+        "category": "Isar Flow"
       },
       {
         "command": "isarFlow.cancelRun",
@@ -187,6 +204,7 @@
       "editor/title": [
         {
           "command": "isarFlow.runWorkflow",
+          "alt": "isarFlow.simulateWorkflow",
           "when": "activeCustomEditorId == isarFlow.workflowEditor || resourceFilename =~ /\\.workflow\\.ya?ml$/",
           "group": "navigation@1"
         },
@@ -225,9 +243,21 @@
           "group": "isarFlow@1"
         },
         {
+          "command": "isarFlow.simulateWorkflow",
+          "when": "resourceFilename =~ /\\.workflow\\.ya?ml$/",
+          "group": "isarFlow@1"
+        },
+        {
           "command": "isarFlow.openYaml",
           "when": "resourceFilename =~ /\\.(workflow|agent)\\.ya?ml$/",
           "group": "isarFlow@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "isarFlow.runFromHere",
+          "when": "resourceFilename =~ /\\.workflow\\.ya?ml$/",
+          "group": "isarFlow@1"
         }
       ],
       "commandPalette": [
@@ -334,7 +364,7 @@
           "default": 50,
           "minimum": 1,
           "maximum": 500,
-          "description": "Runs kept per workflow. The snapshots and worktrees of older runs are removed too."
+          "description": "Runs kept per workflow; simulated runs are counted separately. The snapshots and worktrees of older runs are removed too."
         },
         "isarFlow.agentContextTokens": {
           "type": "number",
@@ -384,6 +414,14 @@
       {
         "fileMatch": "*.agent.yml",
         "url": "./schemas/agent.schema.json"
+      },
+      {
+        "fileMatch": "**/.isarflow/simulations/*.sim.yaml",
+        "url": "./schemas/simulation.schema.json"
+      },
+      {
+        "fileMatch": "**/.isarflow/simulations/*.sim.yml",
+        "url": "./schemas/simulation.schema.json"
       }
     ]
   },

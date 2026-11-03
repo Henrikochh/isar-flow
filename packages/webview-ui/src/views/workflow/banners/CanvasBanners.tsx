@@ -1,6 +1,6 @@
 /**
- * Messages pinned above the canvas: pending approvals, unreadable YAML, failed edits, blocks without ids and
- * restricted mode.
+ * Messages pinned above the canvas: pending approvals, unreadable YAML, failed edits, blocks without ids,
+ * restricted mode and a simulated run.
  */
 import './banners.css';
 import { useState } from 'react';
@@ -8,6 +8,8 @@ import type { ApprovalPrompt, Diagnostic } from '@isar-flow/core';
 import { Banner, Button, TextInput } from '../../../components';
 import { useEditor } from '../editorContext';
 import { blocksNeedingIds, blockTitle } from '../canvas/model';
+import { simulatedNote } from '../simulation/copy';
+import { useStartBlockers } from '../topbar/useStartBlockers';
 import { useWorkflowActions, useWorkflowState } from '../store';
 
 function ApprovalBanner({ prompt }: { prompt: ApprovalPrompt }) {
@@ -80,6 +82,43 @@ function MissingIdsBanner({ missing, invalid }: { missing: number; invalid: numb
   );
 }
 
+/** A simulated run on the canvas looks finished like a real one; this says, in its own tone, that nothing ran. */
+function SimulatedRunBanner({ running }: { running: boolean }) {
+  const { openSimulationFile } = useWorkflowActions();
+  return (
+    <Banner tone="simulated" title={running ? 'Simulating' : 'Simulated run'}>
+      <span className="wf-banner-message">
+        {`${simulatedNote(running)} `}
+        <Button variant="link" onClick={openSimulationFile}>
+          Edit mocks
+        </Button>
+      </span>
+    </Banner>
+  );
+}
+
+/** Restricted Mode turns Run off; Simulate runs nothing, so the banner offers it right there. */
+function RestrictedBanner() {
+  const { run, runLive } = useWorkflowState();
+  const { requestStart } = useWorkflowActions();
+  const { simulate: blocker } = useStartBlockers();
+  const canSimulate = blocker === null && !(runLive && run?.status === 'running');
+  return (
+    <Banner
+      tone="warning"
+      actions={
+        canSimulate ? (
+          <Button size="s" variant="secondary" icon="beaker" onClick={() => requestStart('simulate')}>
+            Simulate
+          </Button>
+        ) : undefined
+      }
+    >
+      Running is disabled until you trust this workspace. You can still simulate the workflow.
+    </Banner>
+  );
+}
+
 function syntaxProblem(diagnostics: Diagnostic[]): Diagnostic | undefined {
   return (
     diagnostics.find((d) => d.severity === 'error' && d.code === 'yaml-syntax') ??
@@ -88,15 +127,16 @@ function syntaxProblem(diagnostics: Diagnostic[]): Diagnostic | undefined {
 }
 
 export function CanvasBanners() {
-  const { doc, approvals, opsError, trusted } = useWorkflowState();
+  const { doc, approvals, opsError, trusted, run } = useWorkflowState();
   const { openYaml, dismissOpsError } = useWorkflowActions();
   const { model, editable } = useEditor();
   const ids = editable ? blocksNeedingIds(model) : { missing: 0, invalid: 0 };
   const needIds = ids.missing + ids.invalid > 0;
   const unreadable = doc !== null && doc.workflow === null ? syntaxProblem(doc.diagnostics) : undefined;
   const unreadableDoc = doc !== null && doc.workflow === null;
+  const simulated = run?.simulated === true;
 
-  if (!approvals.length && !unreadableDoc && !opsError && !needIds && trusted) return null;
+  if (!approvals.length && !unreadableDoc && !opsError && !needIds && trusted && !simulated) return null;
   const line = unreadable?.range ? ` (line ${unreadable.range.start.line + 1})` : '';
 
   return (
@@ -136,7 +176,8 @@ export function CanvasBanners() {
         </Banner>
       ) : null}
       {needIds ? <MissingIdsBanner missing={ids.missing} invalid={ids.invalid} /> : null}
-      {!trusted ? <Banner tone="warning">Running is disabled until you trust this workspace.</Banner> : null}
+      {!trusted ? <RestrictedBanner /> : null}
+      {simulated ? <SimulatedRunBanner running={run.status === 'running'} /> : null}
     </div>
   );
 }

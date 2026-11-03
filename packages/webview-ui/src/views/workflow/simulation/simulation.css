@@ -1,0 +1,98 @@
+/* ---------- Inspector: Simulation section ---------- */
+
+.wf-sim-hint {
+  margin: -4px 0 0;
+  color: var(--if-muted);
+  font-size: var(--if-text-s);
+}
+
+.wf-sim-muted {
+  margin: 0;
+  color: var(--if-muted);
+  font-size: var(--if-text-s);
+}
+
+.wf-sim-defaults {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wf-sim-sample {
+  max-height: 160px;
+  margin: 0;
+  overflow: auto;
+  padding: 6px 8px;
+  border-radius: var(--if-radius-s);
+  background: color-mix(in srgb, var(--if-fg) 6%, transparent);
+  color: var(--if-fg);
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wf-sim-warning {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.wf-sim-warning + .wf-sim-warning {
+  margin-top: 4px;
+}
+
+.wf-sim-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wf-sim-item {
+  min-width: 0;
+}
+
+.wf-sim-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-m);
+}
+
+.wf-sim-row__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.wf-sim-row__title {
+  font-weight: 600;
+}
+
+.wf-sim-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.wf-sim-exit {
+  max-width: 120px;
+}
+
+.wf-sim-actions {
+  display: flex;
+  margin-top: -6px;
+}
+
+body.vscode-high-contrast .wf-sim-sample,
+body.vscode-high-contrast-light .wf-sim-sample {
+  border: 1px solid var(--if-border);
+  background: transparent;
+}

@@ -68,6 +68,11 @@ function BlockRow({ block, run }: { block: BlockNode; run: RunView }) {
           <code className="wf-run-model" title={numbers.model}>
             {numbers.model}
           </code>
+        ) : view?.reused ? (
+          <span className="wf-run-reused" title="Not run: the result comes from the run this one continues.">
+            <i className="codicon codicon-history" aria-hidden="true" />
+            Reused
+          </span>
         ) : null}
       </span>
       <span role="cell" className="wf-run-cell-num">

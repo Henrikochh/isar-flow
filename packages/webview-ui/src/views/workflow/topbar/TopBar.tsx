@@ -1,40 +1,26 @@
-/** Top bar of the workflow editor: name, file, validation, runs, Open YAML and Run / Stop. */
+/** Top bar of the workflow editor: name, file, validation, runs, Open YAML and Run (with Simulate) / Stop. */
 import './topbar.css';
-import { useId, useState } from 'react';
-import { Button } from '../../../components';
+import { useEffect, useState } from 'react';
+import { Button, SplitButton } from '../../../components';
 import { formatDuration } from '../../../hooks';
 import { useEditor } from '../editorContext';
-import { useWorkflowActions, useWorkflowState } from '../store';
+import { RunFromHereHost } from '../runFromHere/RunFromHereHost';
+import { type StartMode, useWorkflowActions, useWorkflowState } from '../store';
 import { declaredInputs, InputsDialog } from './InputsDialog';
 import { NameEditor } from './NameEditor';
 import { RunsMenu } from './RunsMenu';
+import { useRunControlsFocus } from './useRunControlsFocus';
 import { useRunElapsed } from './useRunElapsed';
+import { useStartBlockers } from './useStartBlockers';
 import { ValidationPill } from './ValidationPill';
 
-/** Why the workflow cannot run right now, or null when it can. */
-export function runBlocker(
-  trusted: boolean,
-  valid: boolean,
-  readable: boolean,
-  problems: number,
-  blocks: number,
-): string | null {
-  if (!trusted) return 'Running is disabled until you trust this workspace.';
-  if (!readable) return "Fix the YAML first: the file can't be read.";
-  if (!valid)
-    return problems === 1
-      ? 'Fix the problem before running.'
-      : `Fix the ${problems} problems before running.`;
-  if (blocks === 0) return 'Add a block before running.';
-  return null;
-}
+export { runBlocker } from './useStartBlockers';
 
 export function TopBar() {
-  const { doc, trusted, run, runLive } = useWorkflowState();
+  const { doc, run, runLive, startRequest } = useWorkflowState();
   const actions = useWorkflowActions();
-  const { workflow, editable, model } = useEditor();
-  const [asking, setAsking] = useState(false);
-  const reasonId = useId();
+  const { workflow, editable } = useEditor();
+  const [asking, setAsking] = useState<StartMode | null>(null);
   const elapsed = useRunElapsed(runLive ? run : null);
 
   const name =
@@ -42,17 +28,24 @@ export function TopBar() {
     doc?.fileName.replace(/\.workflow\.ya?ml$/i, '') ||
     'Workflow';
   const running = runLive && run?.status === 'running';
-  const errorCount = doc?.diagnostics.filter((d) => d.severity === 'error').length ?? 0;
-  const blocker = doc
-    ? runBlocker(trusted, doc.valid, doc.workflow !== null, Math.max(1, errorCount), model.entries.length)
-    : 'Loading the workflow…';
+  const runFocus = useRunControlsFocus(running);
+  const { run: blocker, simulate: simulateBlocker } = useStartBlockers();
   const inputs = declaredInputs(doc?.workflow?.inputs);
 
-  const start = () => {
-    if (blocker) return;
-    if (inputs.length) setAsking(true);
-    else actions.run({});
+  const start = (mode: StartMode) => {
+    if ((mode === 'run' ? blocker : simulateBlocker) !== null) return;
+    if (inputs.length) setAsking(mode);
+    else if (mode === 'run') actions.run({});
+    else actions.simulate({});
   };
+
+  // Run or Simulate asked for elsewhere (the Restricted Mode banner) starts here, with the same checks and dialog.
+  useEffect(() => {
+    if (!startRequest) return;
+    actions.clearStartRequest();
+    if (!running) start(startRequest);
+    // Once per request; start reads the state of the render that made it.
+  }, [startRequest]);
 
   return (
     <header className="wf-topbar">
@@ -74,46 +67,70 @@ export function TopBar() {
         <Button variant="ghost" icon="go-to-file" onClick={() => actions.openYaml()}>
           Open YAML
         </Button>
-        {running ? (
-          <>
-            <span className="wf-elapsed" aria-label="Elapsed time" role="timer">
-              {formatDuration(elapsed)}
-            </span>
-            <Button variant="danger" icon="debug-stop" onClick={actions.cancelRun}>
-              Stop
-            </Button>
-          </>
-        ) : (
-          <span className="wf-topbar__run" title={blocker ?? undefined}>
-            <Button
+        <div
+          className="wf-topbar__run"
+          ref={runFocus.ref}
+          onFocus={runFocus.onFocus}
+          onBlur={runFocus.onBlur}
+        >
+          {running ? (
+            <>
+              <span className="wf-elapsed" aria-label="Elapsed time" role="timer">
+                {formatDuration(elapsed)}
+              </span>
+              <Button variant="danger" icon="debug-stop" onClick={actions.cancelRun}>
+                Stop
+              </Button>
+            </>
+          ) : (
+            <SplitButton
               variant="run"
               icon="play"
               disabled={blocker !== null}
-              aria-describedby={blocker ? reasonId : undefined}
-              onClick={start}
+              disabledReason={blocker ?? undefined}
+              onClick={() => start('run')}
+              moreLabel="More run options"
+              moreDisabled={simulateBlocker !== null}
+              moreDisabledReason={simulateBlocker ?? undefined}
+              menuLabel="Run options"
+              items={[
+                {
+                  label: 'Run',
+                  icon: 'play',
+                  disabled: blocker !== null,
+                  description: blocker ?? undefined,
+                  onSelect: () => start('run'),
+                },
+                {
+                  label: 'Simulate',
+                  icon: 'beaker',
+                  description: 'Use mocks; nothing runs',
+                  onSelect: () => start('simulate'),
+                },
+                { separator: true },
+                { label: 'Edit simulation mocks', icon: 'go-to-file', onSelect: actions.openSimulationFile },
+              ]}
             >
               Run
-            </Button>
-            {blocker ? (
-              <span id={reasonId} className="if-visually-hidden">
-                {blocker}
-              </span>
-            ) : null}
-          </span>
-        )}
+            </SplitButton>
+          )}
+        </div>
       </div>
       {asking && doc ? (
         <InputsDialog
+          mode={asking}
           workflowName={name}
           uri={doc.uri}
           inputs={inputs}
-          onClose={() => setAsking(false)}
+          onClose={() => setAsking(null)}
           onRun={(values) => {
-            setAsking(false);
-            actions.run(values);
+            setAsking(null);
+            if (asking === 'run') actions.run(values);
+            else actions.simulate(values);
           }}
         />
       ) : null}
+      {doc ? <RunFromHereHost workflowName={name} /> : null}
     </header>
   );
 }

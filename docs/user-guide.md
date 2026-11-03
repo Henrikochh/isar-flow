@@ -38,15 +38,16 @@ YAML text are two views of the same file and stay in sync.
 
 Where files live:
 
-| File                           | Location                                                                                                   |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| Workspace agents               | `.isarflow/agents/<id>.agent.yaml` in a workspace folder. Shared with everyone who clones the repository.  |
-| User agents                    | `agents/` in the extension's global storage. Available in all your workspaces.                             |
-| Workflows                      | Anywhere in the workspace (`node_modules` is skipped). New workflows go to `.isarflow/workflows/`.         |
-| Endpoints                      | The `isarFlow.providers` setting. API keys are kept in VS Code's secret storage.                           |
-| Run history, approved commands | VS Code's storage for the workspace.                                                                       |
-| Review data, worktrees         | VS Code's storage for the workspace ([Reviewing changes](#reviewing-changes)).                             |
-| Run snapshots                  | In a git repository, commits under `refs/isarflow/runs/`, not on any branch. Removed with the run history. |
+| File                           | Location                                                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Workspace agents               | `.isarflow/agents/<id>.agent.yaml` in a workspace folder. Shared with everyone who clones the repository.       |
+| User agents                    | `agents/` in the extension's global storage. Available in all your workspaces.                                  |
+| Workflows                      | Anywhere in the workspace (`node_modules` is skipped). New workflows go to `.isarflow/workflows/`.              |
+| Simulation mocks               | `.isarflow/simulations/<workflow file name>.sim.yaml` in a workspace folder ([Test mode](#test-mode-simulate)). |
+| Endpoints                      | The `isarFlow.providers` setting. API keys are kept in VS Code's secret storage.                                |
+| Run history, approved commands | VS Code's storage for the workspace.                                                                            |
+| Review data, worktrees         | VS Code's storage for the workspace ([Reviewing changes](#reviewing-changes)).                                  |
+| Run snapshots                  | In a git repository, commits under `refs/isarflow/runs/`, not on any branch. Removed with the run history.      |
 
 When a workspace agent and a user agent have the same id, workflows use the workspace agent. The sidebar
 marks the hidden user agent.
@@ -890,9 +891,14 @@ many had no price.
 A workflow runs once at a time; starting it again while it runs is refused. Runs use the workflow as it is
 in the editor, unsaved changes included.
 
+Two more ways to run save time while you build a workflow: [Run from here](#run-from-here) continues an
+earlier run at a block, and [Simulate](#test-mode-simulate) runs the workflow with mocks, without running
+anything.
+
 ### Before the run
 
-1. **Workspace Trust**: in Restricted Mode nothing runs ([Restricted Mode](#restricted-mode)).
+1. **Workspace Trust**: in Restricted Mode nothing runs ([Restricted Mode](#restricted-mode)); you can still
+   simulate.
 2. **Validation**: a workflow with errors does not start; Isar Flow names the number of problems and offers
    **Show problems**.
 3. **Inputs**: the river editor shows a dialog with one field per input (a larger field for `multiline`
@@ -931,6 +937,10 @@ In an untrusted workspace (Restricted Mode) you can open, view and edit workflow
 runs: starting a run shows a message with a **Manage Workspace Trust** button, and **Try it** asks you to
 trust the workspace first. Endpoints that the
 workspace's `.vscode/settings.json` defines are ignored; only your user endpoints are used.
+
+You can still [simulate](#test-mode-simulate) workflows: a simulated run runs no commands, calls no models
+and changes no files. Secrets aren't available to it, so `${{ secrets.* }}` are empty. Live values of earlier
+runs show too ([Live values](#live-values)). **Run from here** needs a trusted workspace.
 
 ### During the run
 
@@ -979,7 +989,12 @@ workspace. Open them from **Runs** in the top bar, the **Runs** list of the work
 runs** in the sidebar: the canvas then shows that run's statuses, outputs, time and tokens, and its review.
 The lists show what happened to a run's changes: **2 to review** while files wait for a decision, or
 **3 kept, 1 reverted**. Very large runs are trimmed to 1 MB when they are saved. When a run drops out of the
-history, its snapshots, review data and worktree are removed too.
+history, its snapshots, review data and worktree are removed too. Simulated runs are counted separately, so
+simulating never pushes a real run (and its review) out of the history.
+
+The lists also mark how a run started: **Resumed** for a run that continued another one (hover it for
+"Resumed from tests") and **Simulated** for a simulated run. A failed or cancelled run offers **Run from
+<block>** in the **Runs** menu for the block where it stopped ([Run from here](#run-from-here)).
 
 ### Reviewing changes
 
@@ -1054,6 +1069,162 @@ removed.
   build output are usually ignored.
 - Switching **Run in** back to **Workspace** also removes the setup commands, after you confirm it.
 
+### Run from here
+
+Changed a block late in a workflow? **Run from here** continues a finished, failed or cancelled run at a
+block, so you don't wait for everything before it again.
+
+- On the canvas, show the run (the one that just ended, or a past run from **Runs**), right-click a block
+  and choose **Run from here**. The block's **Run output** in the inspector has the same button.
+- In the **Runs** menu, a failed or cancelled run offers **Run from <block>** for the block where it stopped.
+- In the YAML, right-click inside a block and choose **Run from here**, or run **Isar Flow: Run from here**:
+  it continues the newest run that wasn't simulated at the block under the cursor, or asks for the block.
+  It shows the same warnings as the dialog (see below) and asks before it starts.
+
+What runs and what is reused:
+
+- Blocks before the chosen block, in the order of the file, don't run again. Their results from that run
+  are reused: templates like `${{ steps.tests.output }}` read them, and their cards show **Reused** with no
+  time or tokens.
+- A loop that contains the block continues at the iteration where the block last ran, without checking its
+  condition for that iteration. If you lowered its `maxIterations` below that iteration, the iteration still
+  runs, then the loop stops as it does at its limit ([Loops](#9-loops)).
+- An If that contains the block takes the branch with the block, whatever its condition says now.
+- From the chosen block on, everything runs normally, including the rest of the loop and the blocks after it.
+  Blocks after the chosen one inside a continued loop keep their results from that iteration until they run
+  again, and show **Reused** until then.
+- The run gets the inputs of that run. When the workflow has inputs, the dialog fills them in and you can
+  change them.
+- Commands are confirmed as for any run ([Command confirmation](#command-confirmation)), and the workspace
+  must be trusted.
+
+![Run from here: the dialog says which results are reused and warns about a block that changed](images/workflow-resume-dialog-dark.png)
+
+Before the run starts, the dialog says which results are reused and where loops continue. Under **Check
+before running** it warns when:
+
+- blocks before the chosen one changed since that run (Isar Flow compares each block's YAML), so their
+  results may be outdated. Runs saved by older versions of Isar Flow can't be checked;
+- blocks have no result in that run, so expressions that read them get empty values;
+- saved results were shortened to fit the history, or contain a secret: blocks after them get `••••••`
+  instead of the value;
+- a loop is past its new limit, or an If took the other branch in that run;
+- agents with `session: continue` start a new conversation (conversations aren't saved with runs);
+- the workflow runs in a [separate worktree](#running-in-a-separate-worktree): the new worktree starts from
+  your workspace as it is now, not from where that run stopped;
+- you reverted files of that run: the blocks from the chosen one on see the files as they are now.
+
+Without inputs and warnings, the run starts at once. The new run is a run of its own: the Start marker says
+**Resumed from <block>**, the history marks it **Resumed**, and its time, tokens, cost and token budget count
+only the blocks that ran.
+
+Run from here isn't offered while the workflow runs, for simulated runs (run the workflow, then run from a
+block), in Restricted Mode, or while the workflow has problems. A run that dropped out of the history can't
+be continued ("That run is no longer in the history. Run the workflow instead."), and neither can a block
+that was removed from the workflow.
+
+### Live values
+
+After a run, templates show what they evaluated to.
+
+- **Canvas:** hover a `${{ … }}` template on a block card. The card shows its value in the run on the canvas
+  (**This run**), or in the newest run when the canvas shows none (**Last run**), with the run's status and
+  time and the value's type.
+- **Inspector:** under a field with templates, open **Values from the last run** to see the value of each
+  template; **Copy** copies one.
+- **Conditions:** If and Loop headers and the summary of the condition builder show **Last run: true** or
+  **Last run: false**.
+- When the newest run was a simulation, the labels say so: **Last simulation: true**, **Values from the last
+  simulation**, and **This simulation** while a simulated run is shown, so mock values are never mistaken for
+  real ones.
+- **YAML:** rest the pointer on a template in a `.workflow.yaml` file. The hover shows its value in the
+  running run, or else in the newest run, for example **Value in the last run** (failed, 4 min ago).
+
+![Hovering a template on a block card shows its value in the last run](images/workflow-live-hover-dark.png)
+
+Values longer than 2 KB are cut and marked as shortened, and secrets show as `••••••`. Environment values are
+never saved with runs, so `env.*` shows no value. `loop.*` shows the loop's last iteration in that run. Live
+values only read saved runs, so they also work in Restricted Mode.
+
+### Test mode (Simulate)
+
+**Simulate** runs a workflow without running anything: console commands don't run, models aren't called,
+files don't change, and approvals are answered automatically. Every block gets its result from mocks you
+write, so you can check loops, conditions and templates in seconds and without tokens.
+
+Start a simulation from the arrow next to **Run** (**Simulate**; it asks for the inputs like Run), the
+**Simulate** CodeLens above the YAML, **Simulate workflow** in the Explorer context menu, Alt-click on the
+Run button in the editor title, or **Isar Flow: Simulate workflow**. Simulate also works in Restricted Mode: the Restricted Mode banner has a **Simulate** button. Simulate never
+saves the workflow; it simulates the text as it is, unsaved edits included.
+
+**The simulation file.** Mocks live in `.isarflow/simulations/<workflow file name>.sim.yaml` in the workspace
+folder, for example `.isarflow/simulations/review-loop.sim.yaml` for `review-loop.workflow.yaml`, wherever
+the workflow is in the folder. (A workflow outside every workspace folder uses `.isarflow/simulations` next to
+it, and an existing `.sim.yml` is used when there is no `.sim.yaml`.) Two workflows with the same file name in
+one folder share the file. A file for the review loop of the examples:
+
+```yaml
+version: 1
+approvals: approve # or reject: how approval blocks without mocks are answered
+blocks:
+  tests:
+    - exitCode: 1
+      output: 1 failed
+    - exitCode: 0
+      output: 32 passed
+  review:
+    - json: { approved: false, issues: [Add a test for empty codes] }
+    - json: { approved: true, issues: [] }
+  fix:
+    - text: Added the missing test.
+```
+
+- Each block id under `blocks:` has a list of results. Each call of the block takes the next one, and the last
+  one repeats. Retries and loop rounds count as calls, so the review loop above fails its tests in round 1
+  and passes in round 2.
+- Console blocks use `exitCode` and `output`. Agents use `text`, or `json` for agents with JSON answers (text
+  that contains JSON works too). Approvals use `approved` and `comment`. `error` fails the call with that
+  message, on any block:
+
+  ```yaml
+  blocks:
+    approve_release:
+      - approved: false
+        comment: Not this week
+    publish:
+      - error: The registry is not reachable.
+  ```
+
+- Blocks without mocks get defaults: console blocks exit with 0 and print nothing, agents answer
+  `(simulated answer)`, agents with JSON answers answer sample JSON built from their JSON fields, and
+  approvals are approved (rejected with `approvals: reject`).
+- With the YAML extension, the file is checked as you type. The workflow editor also warns about block ids
+  that aren't in the workflow, mocks for loop, if, break and stop blocks, fields of another block type, and
+  JSON that doesn't match the block's JSON fields.
+- While the file has errors, Simulate doesn't start: "Fix .isarflow/simulations/review-loop.sim.yaml before
+  simulating: …" with **Open simulation file**. Common mistakes get a hint, for example block ids at the top
+  of the file ("Put the mocks of block tests under blocks:") or a field of another block type.
+
+**Editing mocks in the inspector.** Select a console, agent or approval block and open **Simulation**. It
+lists the results Simulate uses for the block, one per call: an exit code and output for console blocks, an
+answer for agents (a new result of a JSON agent starts with sample JSON), **Approve** or **Reject** and a
+comment for approvals. **Add result** adds one; move or remove results with the buttons next to them, and turn
+on **Fail this call** to fail a call with an error message. Changes are saved to the simulation file as you
+type, comments in the file stay. **Open simulation file**, or **Edit simulation mocks** in the menu of the
+arrow next to **Run**, opens the file (created from a short template when it doesn't exist yet). Renaming a
+block on the canvas moves its mocks too. While the file has errors, the section only offers to open it.
+
+![The Simulation section of the tests block: one failing and one passing result](images/workflow-simulation-light.png)
+
+**Simulated runs** are easy to tell apart from real runs: they use the blue enzian color and a beaker icon
+instead of the run colors, and the canvas pins a **Simulated run** banner (**Simulating** while it runs) with
+an **Edit mocks** link. Blocks still run one at a time, and the run output of a console
+block says which result it used, for example "Simulated: result 1 of 2." They ask for no command
+confirmation, take no snapshot, and show no review, notification or terminal output; the status bar says
+**<workflow> (simulated)**. They are saved to the history and marked **Simulated** on the Start marker, in
+the **Runs** menu, the run history and the sidebar. Their cards show no time or cost, they use no tokens, and
+they are left out of the averages of the last 20 runs. A simulated run can't be continued with Run from here.
+
 ## 13. Secrets
 
 Run **Isar Flow: Set workflow secret**, enter a name (letters, digits and `_`, not starting with a digit)
@@ -1099,6 +1270,9 @@ All commands are in the Command Palette under **Isar Flow**.
 | New workflow             | Asks for a name and a template and opens the new workflow.                 |
 | New agent                | Asks for a name, a starter and the scope and opens the new agent.          |
 | Run workflow             | Runs the active workflow, or asks which one to run.                        |
+| Simulate workflow        | Simulates the active workflow with its mocks, or asks which one.           |
+| Run from here            | Continues the newest run at the block under the cursor, or asks for one.   |
+| Open simulation file     | Opens the workflow's `.sim.yaml`, created from a template when needed.     |
 | Stop run                 | Stops the running workflow, or asks which one when several run.            |
 | Open in Isar Flow editor | Opens a workflow or agent YAML file in the river or agent editor.          |
 | Open YAML                | Opens the YAML of the workflow or agent beside its editor.                 |
@@ -1203,3 +1377,8 @@ Start with **Isar Flow: Show log**: activation, model discovery, runs and failed
 | The review card doesn't list a file a command changed                   | Without git, only files that agents wrote are listed. Run `git init` in the folder to cover console commands too.                                                                             |
 | A file can't be reverted                                                | Its state before the run wasn't saved: it was larger than 2 MB without git, or it is a symbolic link. Restore it from version control.                                                        |
 | Check setup reports an endpoint as unreachable                          | The endpoint didn't answer within 30 s. Check that the server runs and the base URL is right, then select **Run again**.                                                                      |
+| **Run from here** is disabled                                           | Hover it to see why: no finished run is shown, the workflow is running or has problems, the run was simulated, or the workspace is not trusted.                                               |
+| "That run is no longer in the history"                                  | The run dropped out of the history (`isarFlow.historyLimit`). Run the whole workflow, then run from a block of the new run.                                                                   |
+| "Fix … before simulating"                                               | Select **Open simulation file** and fix the line the message names. Each block id needs a list of results (`- exitCode: 0`), not a single result.                                             |
+| A simulated block uses the wrong result                                 | Each call takes the next result and the last one repeats; retries and loop rounds count as calls. Check that the block id under `blocks:` matches the block (the editor warns otherwise).     |
+| A live value says the block has no result                               | The block didn't run in that run, or it is in the other branch of an If. Run the workflow again; hovers show the newest run.                                                                  |

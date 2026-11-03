@@ -1,8 +1,8 @@
 import { type ButtonHTMLAttributes, forwardRef } from 'react';
 import { Spinner } from './Display';
 
-/** `link`: inline text in the link color, for a suggestion inside a hint. */
-export type ButtonVariant = 'primary' | 'run' | 'secondary' | 'ghost' | 'danger' | 'link';
+/** `link`: inline text in the link color, for a suggestion inside a hint. `simulate`: confirms a simulation. */
+export type ButtonVariant = 'primary' | 'run' | 'simulate' | 'secondary' | 'ghost' | 'danger' | 'link';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;

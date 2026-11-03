@@ -39,6 +39,11 @@ status on the canvas, console output in a terminal and a history of past runs.
   VS Code's secret storage, retries and fallback models.
 - **Live runs**: block status and loop iterations on the canvas, rendered prompts and outputs in the
   inspector, console output mirrored to a terminal, inline approvals, a run history.
+- **Build faster**: **Run from here** continues a finished run at any block and reuses the results before it,
+  even inside a loop, and warns when blocks changed since. **Live values** show what a `${{ … }}` template
+  evaluated to in the last run when you hover it on the canvas, in the inspector or in the YAML editor.
+  **Simulate** runs a workflow with mocks from a `.sim.yaml` file, edited in the inspector: no commands, no
+  model calls, no file changes, so you can test loops and conditions in seconds, even in Restricted Mode.
 - **Safety**: runs need a trusted workspace, console commands are confirmed before they run, agent tools stay
   inside the workflow's folder, every change can be reviewed and reverted, loops need a limit, and an optional
   token budget stops expensive runs.
@@ -62,8 +67,14 @@ status on the canvas, console output in a terminal and a history of past runs.
    **Run**, describe the task and confirm the commands. Watch the blocks light up; the loop repeats until
    the tests pass and the reviewer approves (at most 5 rounds).
 
+To try the loop without models first, select the arrow next to **Run** and choose **Simulate**. Nothing runs:
+every block gets a mocked result. Copy the [example mocks](examples/.isarflow/simulations/review-loop.sim.yaml)
+to `.isarflow/simulations/<workflow file name>.sim.yaml` to see the tests fail once and the reviewer approve
+in round 2.
+
 The [user guide](docs/user-guide.md) explains every block, expressions, agents, models, runs, reviewing
-changes and security in detail. The [examples](examples/) folder has ready-made workflows and agents.
+changes, Run from here, live values, test mode and security in detail. The [examples](examples/) folder has
+ready-made workflows, agents and simulation mocks.
 
 <p>
   <img src="docs/images/sidebar-agents-dark.png" alt="The sidebar with agents and model endpoints" width="260">

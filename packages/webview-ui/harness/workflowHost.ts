@@ -1,30 +1,42 @@
 /**
  * Workflow editor side of the mock host: real core ops, validation and engine, a scripted engine host, a seeded
- * run history and reviews of the files runs changed.
+ * run history, reviews of the files runs changed, the simulation file and runs that simulate or continue a past run.
  */
 import {
   applyWorkflowOps,
+  createSimulationHost,
+  liveContext,
   newWorkflowText,
   parseWorkflowText,
   reduceRunEvent,
-  runRecordSummary,
-  runWorkflow,
+  resumeOptions,
   validateWorkflow,
   workflowTemplate,
   type ApprovalResult,
   type EngineHost,
   type HostToWorkflowEditor,
-  type ReviewCounts,
+  type ResumeOptions,
   type ReviewDecision,
   type ReviewFile,
-  type RunEvent,
-  type RunRecordSummary,
   type RunReview,
   type RunView,
   type Workflow,
   type WorkflowDocumentState,
   type WorkflowEditorToHost,
 } from '@isar-flow/core';
+import { buildFasterText, prepareBuildFaster } from './buildFasterScenarios';
+import {
+  collectEvents,
+  createFakeHost,
+  DAY,
+  type FakeHostOptions,
+  HOUR,
+  MINUTE,
+  pastRun,
+  type PastRun,
+  viewOf,
+  WORKFLOW_URI,
+} from './fakeEngine';
 import {
   AGENTS,
   ALL_BLOCKS_WORKFLOW_TEXT,
@@ -33,7 +45,7 @@ import {
   LONG_TEXT_WORKFLOW_TEXT,
   NESTED_WORKFLOW_TEXT,
 } from './fixtures';
-import { markReady, probe, sleep, type Send } from './mockShared';
+import { markReady, probe, type Send } from './mockShared';
 import {
   countsOf,
   doneReview,
@@ -46,8 +58,7 @@ import {
   withOmittedPending,
   worktreeReview,
 } from './reviews';
-
-const WORKFLOW_URI = 'file:///c%3A/work/shop/.isarflow/workflows/review-loop.workflow.yaml';
+import { simulationMock } from './simulationMock';
 
 function scenarioWorkflowText(scenario: string): string {
   const review = workflowTemplate('review-loop', 'Review until approved');
@@ -90,176 +101,9 @@ function scenarioWorkflowText(scenario: string): string {
       return result.text;
     }
     default:
-      return review;
+      return buildFasterText(scenario, review);
   }
 }
-
-interface FakeHostOptions {
-  failTests?: boolean;
-  /** The reviewer approves from this round on (default 2). */
-  approveAfter?: number;
-  delayMs?: number;
-  approval?: (stepId: string, message: string) => Promise<ApprovalResult>;
-}
-
-const PASSING = [
-  '> shop@1.4.0 test',
-  '> vitest run',
-  '',
-  ' ✓ src/cart.test.ts (12 tests)',
-  ' ✓ src/checkout.test.ts (20 tests)',
-  '',
-  ' Tests  32 passed (32)',
-];
-const FAILING = [
-  '> shop@1.4.0 test',
-  '> vitest run',
-  '',
-  ' ✓ src/cart.test.ts (12 tests)',
-  ' ✗ src/checkout.test.ts > applies the voucher once',
-  '   AssertionError: expected 18.9 to be 19.9',
-  '',
-  ' Tests  1 failed | 31 passed (32)',
-];
-
-/** Scripted host: tests fail once, the reviewer approves on round `approveAfter`; agents report tools and tokens. */
-function createFakeHost(options: FakeHostOptions = {}): EngineHost {
-  const calls = new Map<string, number>();
-  const count = (id: string) => {
-    const n = (calls.get(id) ?? 0) + 1;
-    calls.set(id, n);
-    return n;
-  };
-  const pause = async (signal: AbortSignal) => {
-    if (!options.delayMs) return;
-    await sleep(options.delayMs * (0.6 + Math.random() * 0.8));
-    if (signal.aborted) throw new Error('Cancelled');
-  };
-  return {
-    async runConsole(req, io) {
-      const n = count(req.stepId);
-      const failing = options.failTests || n === 1;
-      const lines = failing ? FAILING : PASSING;
-      for (const line of lines) {
-        io.log(failing && line.includes('✗') ? 'stderr' : 'stdout', `${line}\n`);
-        await pause(io.signal);
-      }
-      const output = lines.join('\n') + '\n';
-      return { exitCode: failing ? 1 : 0, stdout: output, stderr: '', output, timedOut: false };
-    },
-    async runAgent(req, io) {
-      const n = count(req.stepId);
-      await pause(io.signal);
-      if (req.output?.format === 'json') {
-        const approved = n >= (options.approveAfter ?? 2);
-        const json = approved
-          ? { approved: true, issues: [] }
-          : {
-              approved: false,
-              issues: [
-                'Voucher is applied twice when the cart is re-validated',
-                'Missing test for expired vouchers',
-              ],
-            };
-        const text = JSON.stringify(json, null, 2);
-        io.log('agent', text);
-        const usage = { inputTokens: 5_200 + 900 * n, outputTokens: 310 + 40 * n };
-        return { text, json, model: req.agent.model, usage, turns: 2, toolCalls: 2, messages: [] };
-      }
-      const implement = req.stepId === 'implement';
-      const text = implement
-        ? 'Added voucher support to the checkout: `applyVoucher()` in src/checkout.ts, a `vouchers` table migration and 6 new tests.'
-        : 'Fixed the double application by memoising the voucher total and added a test for expired vouchers.';
-      io.log('tool', 'readFile src/checkout.ts → 214 lines\n');
-      await pause(io.signal);
-      io.log('tool', 'editFile src/checkout.ts → replaced 1 occurrence\n');
-      for (const word of text.split(' ')) {
-        io.log('agent', word + ' ');
-        if (options.delayMs) await sleep(25);
-      }
-      const usage = implement
-        ? { inputTokens: 18_400, outputTokens: 1_250 }
-        : { inputTokens: 12_900 + 2_100 * n, outputTokens: 860 + 120 * n };
-      return {
-        text,
-        model: req.agent.model,
-        usage,
-        turns: implement ? 4 : 3,
-        toolCalls: implement ? 7 : 4,
-        messages: [],
-      };
-    },
-    async requestApproval(req) {
-      return options.approval ? options.approval(req.stepId, req.message) : { approved: true };
-    },
-  };
-}
-
-function harnessAgents() {
-  const definitions: Record<string, { name: string; model: string }> = {};
-  for (const a of AGENTS) definitions[a.id] = { name: a.name, model: a.model };
-  return definitions;
-}
-
-interface CollectOptions {
-  runId?: string;
-  /** Start of the scripted clock. Runs with `onEvent` are live and use the real clock. */
-  startedAt?: number;
-  /** Scripted time per event, so past runs differ in duration. */
-  tickMs?: number;
-  signal?: AbortSignal;
-  onEvent?: (event: RunEvent) => void;
-}
-
-async function collectEvents(
-  workflow: Workflow,
-  host: EngineHost,
-  {
-    runId = 'run-live',
-    startedAt = Date.UTC(2026, 9, 26, 9, 26),
-    tickMs = 1700,
-    signal,
-    onEvent,
-  }: CollectOptions = {},
-) {
-  let clock = startedAt;
-  const events: RunEvent[] = [];
-  const generator = runWorkflow(workflow, {
-    runId,
-    inputs: { task: 'Add voucher codes to the checkout' },
-    host,
-    agents: harnessAgents(),
-    workspaceRoot: 'C:/work/shop',
-    signal,
-    now: onEvent ? undefined : () => (clock += tickMs),
-  });
-  for (;;) {
-    const next = await generator.next();
-    if (next.done) break;
-    events.push(next.value);
-    onEvent?.(next.value);
-  }
-  return events;
-}
-
-function viewOf(events: RunEvent[]): RunView | null {
-  return events.reduce<RunView | null>((view, event) => reduceRunEvent(view, event), null);
-}
-
-/** A finished run as the host keeps it: the summary for the history list and the view to show it again. */
-interface PastRun {
-  summary: RunRecordSummary;
-  view: RunView;
-}
-
-function pastRun(view: RunView, review?: ReviewCounts): PastRun {
-  const summary = runRecordSummary(view, WORKFLOW_URI);
-  return { summary: review ? { ...summary, review } : summary, view };
-}
-
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
 
 /** Runs of the review workflow from before the harness opened, newest first; they differ in rounds and pace. */
 const SEEDS: { runId: string; ago: number; tickMs: number; host: FakeHostOptions }[] = [
@@ -332,6 +176,13 @@ export interface WorkflowHostOptions {
   liveDelayMs?: number;
 }
 
+/** How a live run starts: a normal run, a simulation, or a run that continues a past one at a block. */
+interface StartOptions {
+  inputs?: Record<string, unknown>;
+  simulated?: boolean;
+  resumeFrom?: { runId: string; stepId: string };
+}
+
 export function workflowHost(
   scenario: string,
   send: Send<HostToWorkflowEditor>,
@@ -341,6 +192,7 @@ export function workflowHost(
   probe.workflowText = () => text;
   const openedDiffs: { runId: string; path: string }[] = [];
   probe.openedDiffs = () => openedDiffs;
+  const simulation = simulationMock(scenario, send);
   let controller: AbortController | undefined;
   let liveView: RunView | null = null;
   /** Finished runs, newest first; `selectRun` shows them again. */
@@ -349,8 +201,18 @@ export function workflowHost(
   const reviews = new Map<string, { review: RunReview; omitted: ReviewDecision }>();
   /** Run shown on the canvas: reviews are sent for it only. */
   let shownRunId: string | null = null;
-  const sendHistory = () => send({ type: 'history', runs: history.map((run) => run.summary) });
+  /** Newest run whose context was sent as `lastRunContext`; undefined before the first one. */
+  let contextRunId: string | null | undefined;
+  const sendHistory = () => {
+    send({ type: 'history', runs: history.map((run) => run.summary) });
+    // Like the extension: live values read the newest finished run.
+    const newest = history[0];
+    if ((newest?.summary.runId ?? null) === contextRunId) return;
+    contextRunId = newest?.summary.runId ?? null;
+    send({ type: 'lastRunContext', context: newest ? liveContext(newest.view) : null });
+  };
   const pendingApprovals = new Map<string, (result: ApprovalResult) => void>();
+  const currentWorkflow = () => parseWorkflowText(text).workflow;
 
   const sendReview = () =>
     send({ type: 'review', review: (shownRunId && reviews.get(shownRunId)?.review) || null });
@@ -411,6 +273,21 @@ export function workflowHost(
     const workflow = parseWorkflowText(text).workflow;
     if (!workflow) return;
     const makeReview = SCENARIO_REVIEWS[scenario];
+    const handled = await prepareBuildFaster(scenario, {
+      workflow,
+      history: () => history,
+      setHistory: (runs) => {
+        history = runs;
+        sendHistory();
+      },
+      showRun,
+      send,
+      simulationFile: () => {
+        const mocks = simulation.load(workflow);
+        return 'file' in mocks ? mocks.file : {};
+      },
+    });
+    if (handled) return;
     if (scenario === 'running') {
       const events = await collectEvents(workflow, createFakeHost());
       const cut = events.findIndex(
@@ -473,14 +350,31 @@ export function workflowHost(
     }
   };
 
-  const startRun = async () => {
-    const workflow = parseWorkflowText(text).workflow;
-    if (!workflow) return;
-    controller = new AbortController();
-    liveView = null;
-    const runId = `run-${Date.now().toString(36)}`;
+  /** The engine host of a live run, or why it can't start (shown as a message by the extension). */
+  const liveHost = (
+    workflow: Workflow,
+    runId: string,
+    { simulated, resumeFrom }: StartOptions,
+  ): { host: EngineHost; resume?: ResumeOptions } | { error: string } => {
+    if (simulated) {
+      const mocks = simulation.load(workflow);
+      if ('error' in mocks) return mocks;
+      return { host: createSimulationHost({ file: mocks.file, delayMs: liveDelayMs }) };
+    }
+    let resume: ResumeOptions | undefined;
+    if (resumeFrom) {
+      const source = history.find((run) => run.summary.runId === resumeFrom.runId);
+      if (!source) return { error: 'That run is no longer in the history. Run the workflow instead.' };
+      try {
+        resume = resumeOptions(workflow, source.view, resumeFrom.stepId);
+      } catch (error) {
+        return { error: (error as Error).message };
+      }
+    }
     const host = createFakeHost({
       delayMs: liveDelayMs,
+      // A resumed run gets past the failing tests it was started to retry.
+      ...(resume ? { passTests: true, approveAfter: 1 } : {}),
       approval: (stepId, message) =>
         new Promise<ApprovalResult>((resolve) => {
           const requestId = `approval-${Math.random().toString(36).slice(2)}`;
@@ -488,9 +382,26 @@ export function workflowHost(
           send({ type: 'approvalRequest', prompt: { requestId, runId, stepId, message } });
         }),
     });
-    await collectEvents(workflow, host, {
+    return resume ? { host, resume } : { host };
+  };
+
+  const startRun = async (options: StartOptions = {}) => {
+    const workflow = currentWorkflow();
+    if (!workflow) return;
+    const runId = `run-${Date.now().toString(36)}`;
+    const engine = liveHost(workflow, runId, options);
+    if ('error' in engine) {
+      console.info('[mock host]', engine.error);
+      return;
+    }
+    controller = new AbortController();
+    liveView = null;
+    await collectEvents(workflow, engine.host, {
       runId,
       signal: controller.signal,
+      ...(options.inputs ? { inputs: options.inputs } : {}),
+      ...(engine.resume ? { resume: engine.resume } : {}),
+      ...(options.simulated ? { simulated: true } : {}),
       onEvent: (event) => {
         // The canvas switches to the live run when it starts.
         if (event.type === 'run-start') shownRunId = runId;
@@ -501,7 +412,8 @@ export function workflowHost(
     const finished: RunView | null = liveView;
     if (!finished) return;
     history = [pastRun(finished), ...history];
-    const review = liveReview(finished);
+    // A simulation changes no files.
+    const review = options.simulated ? null : liveReview(finished);
     if (review) setReview(runId, review);
     else sendHistory();
   };
@@ -534,6 +446,7 @@ export function workflowHost(
         // 'syntax': the file was readable before the last keystroke, so the canvas keeps the last valid model.
         if (scenario === 'syntax') send({ type: 'document', doc: doc(scenarioWorkflowText('default')) });
         send({ type: 'document', doc: doc() });
+        simulation.sendState(currentWorkflow());
         send({ type: 'catalog', agents: AGENTS, catalog: CATALOG });
         send({ type: 'trust', trusted: scenario !== 'untrusted' });
         void (async () => {
@@ -548,12 +461,23 @@ export function workflowHost(
         if (result.error) send({ type: 'opsFailed', error: result.error });
         else {
           text = result.text;
+          for (const op of message.ops) if (op.op === 'renameStep') simulation.rename(op.stepId, op.newId);
           send({ type: 'document', doc: doc() });
+          simulation.sendState(currentWorkflow());
         }
         break;
       }
       case 'run':
         void startRun();
+        break;
+      case 'simulate':
+        void startRun({ inputs: message.inputs, simulated: true });
+        break;
+      case 'runFromHere':
+        void startRun({
+          inputs: message.inputs,
+          resumeFrom: { runId: message.runId, stepId: message.stepId },
+        });
         break;
       case 'cancelRun':
         controller?.abort();
@@ -579,6 +503,13 @@ export function workflowHost(
       // The extension opens VS Code's diff editor; the harness only notes the request.
       case 'openReviewDiff':
         openedDiffs.push({ runId: message.runId, path: message.path });
+        break;
+      case 'setSimulationMocks':
+        simulation.setMocks(message.stepId, message.results, currentWorkflow());
+        break;
+      // The extension opens the file beside the editor; the harness only counts the requests.
+      case 'openSimulationFile':
+        simulation.open();
         break;
       default:
         console.info('[mock host] workflow message', message);

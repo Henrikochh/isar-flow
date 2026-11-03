@@ -110,6 +110,7 @@ Companion to the spec (§9). Every webview must follow this brief so the product
 ```
 
 ### Top bar (48 px)
+
 - Workflow name in display font 19 px, editable inline (click → TextInput, Enter/blur commits `updateWorkflow`).
 - File name muted after it. Validation pill: "Ready" (almgruen check) or "N problems" (alpenrose/foehn) —
   click opens a popover listing diagnostics (icon, message, block id); clicking one selects the block, or
@@ -119,6 +120,7 @@ Companion to the spec (§9). Every webview must follow this brief so the product
   Stop (variant danger, icon `debug-stop`). Run disabled when untrusted or invalid (tooltip says why).
 
 ### Palette (220 px, collapsible to 48 px icon rail)
+
 - "Blocks": one draggable item per block type: Stone + label + one-line description (STEP_TYPE_INFO).
   Click inserts after the selected block (or at the end of the root list).
 - "Agents": every agent as a draggable item (AgentStone + name); dropping creates an agent block with
@@ -126,6 +128,7 @@ Companion to the spec (§9). Every webview must follow this brief so the product
 - Footer link "New agent".
 
 ### Canvas — the river
+
 - Scrolls both ways; content centered with 48 px padding; dot-free plain background (`--if-bg`).
 - Zoom: Ctrl/Cmd + wheel and a small control bottom-right (−, percentage, +, fit) using CSS `zoom` (0.5–1.5).
 - **River**: a 3 px vertical line (`--if-river`) through the center of each list. Start marker at the top
@@ -171,6 +174,7 @@ Companion to the spec (§9). Every webview must follow this brief so the product
   only; dropping a container into itself is impossible (its slots are disabled while dragging it).
 
 ### Inspector (360 px, right)
+
 - No selection: **Workflow** panel — Name, Description, Inputs (rows: name, type, required, default,
   description; "Add input"), Environment variables (key/value rows), and the run history list.
 - Block selected: header with Stone, editable name (placeholder = id), id field (code font; commits
@@ -211,6 +215,7 @@ Companion to the spec (§9). Every webview must follow this brief so the product
   turns muted.
 
 ### Dialogs and banners
+
 - Run with inputs → Dialog "Run <name>" with one Field per input (TextArea when multiline), values
   remembered per workflow (setViewState), primary button "Run workflow".
 - Approval pending → Banner success-toned pinned at top of the canvas: "Approval needed" + message,
@@ -219,7 +224,12 @@ Companion to the spec (§9). Every webview must follow this brief so the product
 - YAML syntax error → Banner error over the canvas: "The YAML can't be read: <message> (line N)" with
   "Show in YAML"; the canvas keeps rendering the last valid model at 60 % opacity.
 - Ops error → dismissible Banner error.
-- Restricted mode → Banner warning, Run disabled.
+- Restricted mode → Banner warning, Run disabled; the banner offers a Simulate action.
+- Simulated runs never look like real runs. They use the enzian tone and the beaker icon (Chip tone
+  `simulated`, Banner tone `simulated`, Button variant `simulate`, token `--if-on-enzian`), never the isar/run
+  colors. The canvas pins a Banner "Simulated run" ("Simulating" while it runs) with an inline "Edit mocks"
+  link, and live-value labels say "Last simulation" / "This simulation" instead of "Last run" / "This run".
+  Run stays the primary action; Simulate lives in the split button's menu.
 - Empty workflow → river Start/End markers with a centered EmptyState between them: "Add your first block"
   / "Drag a block from the left or click one to add it." / buttons "Add agent", "Add console command".
 

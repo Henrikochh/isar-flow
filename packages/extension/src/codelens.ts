@@ -10,6 +10,7 @@ export function codeLensCommands(uri: vscode.Uri): vscode.Command[] {
     case 'workflow':
       return [
         { title: '$(play) Run workflow', command: 'isarFlow.runWorkflow', arguments: [uri] },
+        { title: '$(beaker) Simulate', command: 'isarFlow.simulateWorkflow', arguments: [uri] },
         { title: '$(type-hierarchy) Open in canvas', command: 'isarFlow.openInCanvas', arguments: [uri] },
       ];
     case 'agent':

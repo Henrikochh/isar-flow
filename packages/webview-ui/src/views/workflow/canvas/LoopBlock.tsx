@@ -6,6 +6,7 @@ import { CardBadge, TypeStone } from './BlockCard';
 import { BreakableCode } from './BreakableCode';
 import { type BlockEntry, textOf } from './model';
 import { cx } from '../cx';
+import { LastRunConditionChip } from '../live/conditionResult';
 import { RiverList } from './River';
 import { loopProgress } from './runOverlay';
 import { loopSummary } from './summaries';
@@ -102,6 +103,7 @@ export function LoopBlock({ entry }: { entry: BlockEntry }) {
           </div>
         </div>
         <div className="wf-loop__aside">
+          <LastRunConditionChip step={step} />
           {progressLabel ? (
             <span
               className={cx('wf-iter', progress?.running && 'wf-iter--live')}

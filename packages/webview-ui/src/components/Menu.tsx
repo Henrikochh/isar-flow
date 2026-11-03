@@ -50,6 +50,7 @@ export function MenuItem({
   current,
   title,
   wrap,
+  indent,
 }: {
   children: ReactNode;
   description?: ReactNode;
@@ -64,12 +65,19 @@ export function MenuItem({
   title?: string;
   /** Let long labels wrap instead of truncating them (e.g. problem messages). */
   wrap?: boolean;
+  /** Indents the item under the one above it, as its follow-up action. */
+  indent?: boolean;
 }) {
   return (
     <button
       type="button"
       role="menuitem"
-      className={['if-menu__item', current && 'if-menu__item--current', wrap && 'if-menu__item--wrap']
+      className={[
+        'if-menu__item',
+        current && 'if-menu__item--current',
+        wrap && 'if-menu__item--wrap',
+        indent && 'if-menu__item--indent',
+      ]
         .filter(Boolean)
         .join(' ')}
       aria-disabled={disabled || undefined}

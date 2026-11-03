@@ -155,3 +155,11 @@ describe('workflow store: review of the shown run', () => {
     expect(next.review?.runId).toBe('run-9');
   });
 });
+
+describe('workflow store: a start asked for outside the top bar', () => {
+  it('keeps the requested mode until the top bar takes it', () => {
+    const asked = run(initialWorkflowUiState, { type: 'requestStart', mode: 'simulate' });
+    expect(asked.startRequest).toBe('simulate');
+    expect(run(asked, { type: 'clearStartRequest' }).startRequest).toBeNull();
+  });
+});

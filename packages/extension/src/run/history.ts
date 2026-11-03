@@ -44,13 +44,25 @@ function truncate(text: string, max: number): string {
   return `${text.slice(0, max)}\n… [truncated: ${text.length - max} more characters were not saved]`;
 }
 
-function trimValue(value: unknown, max: number, depth = 0): unknown {
-  if (typeof value === 'string') return truncate(value, max);
+/** `cut.done` turns true when a string was shortened or a nested part was dropped. */
+function trimValue(
+  value: unknown,
+  max: number,
+  cut: { done: boolean } = { done: false },
+  depth = 0,
+): unknown {
+  if (typeof value === 'string') {
+    if (value.length > max) cut.done = true;
+    return truncate(value, max);
+  }
   if (typeof value !== 'object' || value === null) return value;
-  if (depth >= MAX_DEPTH) return '[nested too deeply to save]';
-  if (Array.isArray(value)) return value.map((item) => trimValue(item, max, depth + 1));
+  if (depth >= MAX_DEPTH) {
+    cut.done = true;
+    return '[nested too deeply to save]';
+  }
+  if (Array.isArray(value)) return value.map((item) => trimValue(item, max, cut, depth + 1));
   const out: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value)) out[key] = trimValue(item, max, depth + 1);
+  for (const [key, item] of Object.entries(value)) out[key] = trimValue(item, max, cut, depth + 1);
   return out;
 }
 
@@ -60,13 +72,14 @@ function trimStep(step: StepRunView, level: { logs: number; chars: number }): St
     stream: line.stream,
     text: truncate(line.text, level.chars),
   }));
+  const cut = { done: false };
+  const output = step.output === undefined ? undefined : trimValue(step.output, level.chars, cut);
   return {
     ...step,
     ...(step.detail !== undefined && { detail: truncate(step.detail, level.chars) }),
     ...(step.error !== undefined && { error: truncate(step.error, level.chars) }),
-    ...(step.output !== undefined && {
-      output: trimValue(step.output, level.chars) as StepRunView['output'],
-    }),
+    ...(output !== undefined && { output: output as StepRunView['output'] }),
+    ...(cut.done && { outputTrimmed: true }),
     logs,
     ...(dropped && { logsTruncated: true }),
   };
@@ -83,16 +96,24 @@ function trimAt(view: RunView, level: { logs: number; chars: number }): RunView 
   };
 }
 
-/** Last resort: statuses and errors only. */
+/**
+ * Last resort: statuses, errors, metrics and what Run from here and the run summary read (start time, loop
+ * position, reused). Outputs are dropped and marked as trimmed.
+ */
 function skeleton(view: RunView): RunView {
   const steps: Record<string, StepRunView> = {};
   for (const [id, step] of Object.entries(view.steps)) {
     steps[id] = {
       status: step.status,
       executions: step.executions,
+      ...(step.startedAt !== undefined && { startedAt: step.startedAt }),
+      ...(step.iteration !== undefined && { iteration: step.iteration }),
+      ...(step.loop !== undefined && { loop: step.loop }),
       ...(step.durationMs !== undefined && { durationMs: step.durationMs }),
       ...(step.error !== undefined && { error: truncate(step.error, 200) }),
       ...(step.metrics !== undefined && { metrics: step.metrics }),
+      ...(step.reused && { reused: true }),
+      ...((step.outputTrimmed || step.output !== undefined) && { outputTrimmed: true }),
       logs: [],
       ...(step.logs.length > 0 && { logsTruncated: true }),
     };
@@ -137,7 +158,7 @@ function parseView(text: string | undefined, runId: string): RunView | undefined
 
 /**
  * Run history: trimmed RunViews as JSON in `store` (key = run id), summaries in the `index` memento.
- * `limit` is read on every save and applies per workflow.
+ * `limit` is read on every save and applies per workflow, to real and to simulated runs separately.
  */
 export function createRunHistory(
   store: HistoryStore,
@@ -177,10 +198,13 @@ export function createRunHistory(
     };
     const sorted = [summary, ...records.filter((r) => r.runId !== view.runId)].sort(newestFirst);
     const max = maxPerWorkflow();
+    // Real and simulated runs are limited separately: a simulation never pushes out a real run and its review.
+    const simulated = summary.simulated === true;
     const removed: string[] = [];
     let kept = 0;
     records = sorted.filter((record) => {
-      if (record.workflowUri !== workflowUri || ++kept <= max) return true;
+      if (record.workflowUri !== workflowUri || (record.simulated === true) !== simulated) return true;
+      if (++kept <= max) return true;
       removed.push(record.runId);
       return false;
     });

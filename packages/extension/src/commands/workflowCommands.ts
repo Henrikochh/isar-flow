@@ -1,10 +1,16 @@
 import * as vscode from 'vscode';
-import type { Services } from '../contracts';
+import { parseWorkflowText, resumePreview } from '@isar-flow/core';
+import type { RunHistory, Services, SimulationStore } from '../contracts';
 import { fileKind, fileNameOf } from '../editors/files';
 import { AGENT_EDITOR_VIEW_TYPE, WORKFLOW_EDITOR_VIEW_TYPE } from '../editors/host';
+import { blockAt } from '../liveValues/hover';
+import { blockLabel, resumeWarnings } from '../run/resumeWarnings';
 
 export const WORKFLOW_COMMAND_IDS = [
   'isarFlow.runWorkflow',
+  'isarFlow.simulateWorkflow',
+  'isarFlow.runFromHere',
+  'isarFlow.openSimulationFile',
   'isarFlow.cancelRun',
   'isarFlow.openInCanvas',
   'isarFlow.openYaml',
@@ -12,11 +18,15 @@ export const WORKFLOW_COMMAND_IDS = [
 ] as const;
 
 const NEW_WORKFLOW = 'New workflow';
+const RUN_FROM_HERE = 'Run from here';
 
 /** The parts of Services the commands use. */
 export interface WorkflowCommandServices {
   workflows: Pick<Services['workflows'], 'list'>;
-  runs: Pick<Services['runs'], 'start' | 'cancel' | 'active'>;
+  runs: Pick<Services['runs'], 'start' | 'cancel' | 'active'> & {
+    history: Pick<RunHistory, 'list' | 'getAsync'>;
+    simulations?: Pick<SimulationStore, 'open'>;
+  };
   output: Pick<Services['output'], 'show'>;
 }
 
@@ -24,18 +34,31 @@ export interface WorkflowCommandServices {
 export interface WorkflowCommandUi {
   /** File shown in the active editor tab (text or custom editor). */
   activeUri(): vscode.Uri | undefined;
+  /** Text and cursor of the active text editor when it shows `uri`. */
+  cursor(uri: vscode.Uri): { text: string; line: number; character: number } | undefined;
+  readText(uri: vscode.Uri): Thenable<string>;
   showQuickPick<T extends vscode.QuickPickItem>(
     items: T[],
     options: vscode.QuickPickOptions,
   ): Thenable<T | undefined>;
   showInfo(message: string, ...actions: string[]): Thenable<string | undefined>;
   showError(message: string): Thenable<unknown>;
+  /** Modal warning; resolves to `button` when it was chosen. */
+  confirm(message: string, detail: string, button: string): Thenable<string | undefined>;
   executeCommand(command: string, ...args: unknown[]): Thenable<unknown>;
 }
 
 export interface WorkflowCommands {
   /** Returns the run id, or undefined when nothing was started. */
   runWorkflow(arg?: unknown): Promise<string | undefined>;
+  /** Test mode: runs the workflow with its mocks. Returns the run id, or undefined when nothing was started. */
+  simulateWorkflow(arg?: unknown): Promise<string | undefined>;
+  /**
+   * Continues a run at a block: `{ uri, runId?, stepId? }`, else the newest real run of the active workflow at
+   * the block under the cursor (or a picked one). Returns the run id, or undefined when nothing was started.
+   */
+  runFromHere(arg?: unknown): Promise<string | undefined>;
+  openSimulationFile(arg?: unknown): Promise<void>;
   cancelRun(arg?: unknown): Promise<void>;
   openInCanvas(arg?: unknown): Promise<void>;
   openYaml(arg?: unknown): Promise<void>;
@@ -63,6 +86,9 @@ function runIdArg(arg: unknown): string | undefined {
   if (typeof arg === 'string') return arg;
   return isRecord(arg) && typeof arg.runId === 'string' ? arg.runId : undefined;
 }
+
+const stepIdArg = (arg: unknown) =>
+  isRecord(arg) && typeof arg.stepId === 'string' ? arg.stepId : undefined;
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -101,22 +127,87 @@ export function createWorkflowCommands(
     }
   };
 
+  /** The workflow passed as argument, else the one in the active editor, else one the user picks. */
+  const workflowArg = async (arg: unknown, placeHolder: string): Promise<vscode.Uri | undefined> => {
+    const given = uriArg(arg);
+    if (given && fileKind(given.path) !== 'workflow') {
+      void ui.showError(
+        `${fileNameOf(given)} is not a workflow. Workflow files end in .workflow.yaml or .workflow.yml.`,
+      );
+      return undefined;
+    }
+    const active = ui.activeUri();
+    return (
+      given ?? (active && fileKind(active.path) === 'workflow' ? active : await pickWorkflow(placeHolder))
+    );
+  };
+
+  /** The block under the YAML cursor, else one the user picks (`stoppedAt` is marked). */
+  const pickBlock = async (uri: vscode.Uri, stoppedAt: string | undefined): Promise<string | undefined> => {
+    const cursor = ui.cursor(uri);
+    const { stepRanges } = parseWorkflowText(cursor?.text ?? (await ui.readText(uri)));
+    const atCursor = cursor && blockAt(stepRanges, cursor);
+    if (atCursor) return atCursor;
+    const items = Object.keys(stepRanges).map((id) => ({
+      label: id,
+      ...(id === stoppedAt && { description: 'Where that run stopped' }),
+    }));
+    const picked = await ui.showQuickPick(items, { placeHolder: 'Choose the block to run from' });
+    return picked?.label;
+  };
+
+  /**
+   * Shows what to check before a run continues (changed or missing results, …), like the canvas dialog does, and
+   * resolves to false when the user cancels. Runs and blocks the run manager refuses pass, so it says why.
+   */
+  const confirmResume = async (uri: vscode.Uri, runId: string, stepId: string): Promise<boolean> => {
+    const saved = runs.history.list(uri.toString()).some((record) => record.runId === runId);
+    const source = saved ? await runs.history.getAsync(runId) : undefined;
+    if (!source) return true;
+    const { workflow } = parseWorkflowText(ui.cursor(uri)?.text ?? (await ui.readText(uri)));
+    if (!workflow) return true;
+    const preview = resumePreview(workflow, source, stepId);
+    const warnings = preview.blocker === undefined ? resumeWarnings(preview, workflow) : [];
+    if (warnings.length === 0) return true;
+    const message = `Run ${workflow.name} from ${blockLabel(workflow, stepId)}?`;
+    return (await ui.confirm(message, warnings.join('\n'), RUN_FROM_HERE)) === RUN_FROM_HERE;
+  };
+
   return {
     async runWorkflow(arg) {
-      const given = uriArg(arg);
-      if (given && fileKind(given.path) !== 'workflow') {
-        void ui.showError(
-          `${fileNameOf(given)} is not a workflow. Workflow files end in .workflow.yaml or .workflow.yml.`,
-        );
+      const uri = await workflowArg(arg, 'Choose a workflow to run');
+      return uri && runs.start(uri);
+    },
+
+    async simulateWorkflow(arg) {
+      const uri = await workflowArg(arg, 'Choose a workflow to simulate');
+      return uri && runs.start(uri, undefined, { simulate: true });
+    },
+
+    async runFromHere(arg) {
+      const uri = await workflowArg(arg, 'Choose a workflow to continue');
+      if (!uri) return undefined;
+      // Simulated runs can't be continued, so the newest real run is the one to continue.
+      const source = runs.history.list(uri.toString()).find((record) => !record.simulated);
+      const runId = (isRecord(arg) && runIdArg(arg)) || source?.runId;
+      if (!runId) {
+        void ui.showInfo(`${fileNameOf(uri)} has no run to continue. Run it first, then run from a block.`);
         return undefined;
       }
-      const active = ui.activeUri();
-      const uri =
-        given ??
-        (active && fileKind(active.path) === 'workflow'
-          ? active
-          : await pickWorkflow('Choose a workflow to run'));
-      return uri && runs.start(uri);
+      const stepId = stepIdArg(arg) ?? (await pickBlock(uri, source?.stoppedAt));
+      if (!stepId || !(await confirmResume(uri, runId, stepId))) return undefined;
+      // Inputs default to that run's; the run manager says why a run can't continue.
+      return runs.start(uri, undefined, { resume: { runId, stepId } });
+    },
+
+    async openSimulationFile(arg) {
+      const uri = await workflowArg(arg, 'Choose a workflow to edit its simulation mocks');
+      if (!uri || !runs.simulations) return;
+      try {
+        await runs.simulations.open(uri);
+      } catch (error) {
+        void ui.showError(`Could not open the simulation file: ${errorText(error)}`);
+      }
     },
 
     async cancelRun(arg) {
@@ -189,13 +280,22 @@ const vscodeUi: WorkflowCommandUi = {
     if (input instanceof vscode.TabInputCustom || input instanceof vscode.TabInputText) return input.uri;
     return vscode.window.activeTextEditor?.document.uri;
   },
+  cursor(uri) {
+    const editor = vscode.window.activeTextEditor;
+    if (editor?.document.uri.toString() !== uri.toString()) return undefined;
+    const { line, character } = editor.selection.active;
+    return { text: editor.document.getText(), line, character };
+  },
+  readText: (uri) => vscode.workspace.openTextDocument(uri).then((document) => document.getText()),
   showQuickPick: (items, options) => vscode.window.showQuickPick(items, options),
   showInfo: (message, ...actions) => vscode.window.showInformationMessage(message, ...actions),
   showError: (message) => vscode.window.showErrorMessage(message),
+  confirm: (message, detail, button) =>
+    vscode.window.showWarningMessage(message, { modal: true, detail }, button),
   executeCommand: (command, ...args) => vscode.commands.executeCommand(command, ...args),
 };
 
-/** Registers run, stop, open-in-canvas, open-YAML and show-log commands. */
+/** Registers run, simulate, run-from-here, stop, open (canvas, YAML, simulation file) and show-log commands. */
 export function registerWorkflowCommands(
   services: Services,
   ui: WorkflowCommandUi = vscodeUi,
@@ -216,6 +316,15 @@ export function registerWorkflowCommands(
     };
   return vscode.Disposable.from(
     vscode.commands.registerCommand('isarFlow.runWorkflow', guarded('Run workflow', commands.runWorkflow)),
+    vscode.commands.registerCommand(
+      'isarFlow.simulateWorkflow',
+      guarded('Simulate workflow', commands.simulateWorkflow),
+    ),
+    vscode.commands.registerCommand('isarFlow.runFromHere', guarded('Run from here', commands.runFromHere)),
+    vscode.commands.registerCommand(
+      'isarFlow.openSimulationFile',
+      guarded('Open simulation file', commands.openSimulationFile),
+    ),
     vscode.commands.registerCommand('isarFlow.cancelRun', guarded('Stop run', commands.cancelRun)),
     vscode.commands.registerCommand(
       'isarFlow.openInCanvas',

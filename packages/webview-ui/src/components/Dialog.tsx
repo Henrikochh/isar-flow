@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef } from 'react';
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useLayoutEffect, useRef } from 'react';
 import { IconButton } from './Button';
 
 const FOCUSABLE =
@@ -30,14 +30,19 @@ export function Dialog({
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
+  const previous = useRef<HTMLElement | null>(null);
+
+  // Before the first paint: no frame shows the dialog while keys still go to the button that opened it.
+  useLayoutEffect(() => {
+    previous.current = document.activeElement as HTMLElement | null;
     const first = ref.current?.querySelector<HTMLElement>(
       'input, textarea, select, button:not([data-dialog-close]), [tabindex]:not([tabindex="-1"])',
     );
     first?.focus();
-    return () => previous?.focus?.();
   }, []);
+
+  // Back where it came from on close; after the commit, so React sees that focus (its events are off during one).
+  useEffect(() => () => previous.current?.focus?.(), []);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {

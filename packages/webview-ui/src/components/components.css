@@ -41,6 +41,15 @@
 .if-btn--run:hover:not(:disabled) {
   background: color-mix(in srgb, var(--if-isar) 86%, var(--if-fg));
 }
+/* Confirms a simulation: filled like Run, in the simulation tone, so it is never mistaken for a real run. */
+.if-btn--simulate {
+  background: var(--if-enzian);
+  color: var(--if-on-enzian);
+  font-weight: 600;
+}
+.if-btn--simulate:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--if-enzian) 86%, var(--if-fg));
+}
 .if-btn--secondary {
   background: var(--if-button-secondary-bg);
   color: var(--if-button-secondary-fg);
@@ -118,6 +127,57 @@ body.vscode-high-contrast-light .if-btn {
 .if-icon-btn--l {
   width: 28px;
   height: 28px;
+}
+
+/* ---------- Split button (primary action + chevron menu) ---------- */
+.if-split {
+  display: inline-flex;
+  align-items: stretch;
+  /* The 1px gap between the halves is the divider. */
+  gap: 1px;
+}
+.if-split__part {
+  display: inline-flex;
+}
+.if-split__main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.if-split__more {
+  width: 24px;
+  height: 28px;
+  border-radius: 0 var(--if-radius-m) var(--if-radius-m) 0;
+}
+.if-split__more--run {
+  background: var(--if-isar);
+  color: var(--if-on-isar);
+}
+.if-split__more--run:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--if-isar) 86%, var(--if-fg));
+  color: var(--if-on-isar);
+}
+.if-split__more--primary {
+  background: var(--if-button-bg);
+  color: var(--if-button-fg);
+}
+.if-split__more--primary:hover:not(:disabled) {
+  background: var(--if-button-hover);
+  color: var(--if-button-fg);
+}
+.if-split__more--secondary {
+  background: var(--if-button-secondary-bg);
+  color: var(--if-button-secondary-fg);
+}
+.if-split__more--secondary:hover:not(:disabled) {
+  background: var(--if-button-secondary-hover);
+  color: var(--if-button-secondary-fg);
+}
+.if-split__more:disabled {
+  opacity: 0.5;
+}
+body.vscode-high-contrast .if-split__more,
+body.vscode-high-contrast-light .if-split__more {
+  border-color: var(--if-border-strong);
 }
 
 /* ---------- Field ---------- */
@@ -533,6 +593,12 @@ body.vscode-high-contrast-light .if-segmented__item[aria-selected='true'] {
   background: color-mix(in srgb, var(--if-alpenrose) 18%, transparent);
   color: color-mix(in srgb, var(--if-alpenrose) var(--if-ink-strength), var(--if-fg));
 }
+/* A simulated run (see Banner simulated). It also sits on enzian washes (loop headers), so its ink leans further
+   to the text color than other toned chips. */
+.if-chip--simulated {
+  background: color-mix(in srgb, var(--if-enzian) 18%, transparent);
+  color: color-mix(in srgb, var(--if-enzian) min(var(--if-ink-strength), 72%), var(--if-fg));
+}
 .if-chip--outline {
   background: transparent;
   border: 1px solid var(--if-border);
@@ -547,10 +613,12 @@ body.vscode-high-contrast-light .if-chip {
   border: 1px solid var(--if-border);
 }
 body.vscode-high-contrast .if-chip--isar,
+body.vscode-high-contrast .if-chip--simulated,
 body.vscode-high-contrast .if-chip--success,
 body.vscode-high-contrast .if-chip--warning,
 body.vscode-high-contrast .if-chip--error,
 body.vscode-high-contrast-light .if-chip--isar,
+body.vscode-high-contrast-light .if-chip--simulated,
 body.vscode-high-contrast-light .if-chip--success,
 body.vscode-high-contrast-light .if-chip--warning,
 body.vscode-high-contrast-light .if-chip--error {
@@ -633,6 +701,12 @@ body.vscode-high-contrast-light .if-stone {
 }
 .if-banner--success {
   --tone: var(--if-almgruen);
+}
+/* A simulated run is on the canvas: the enzian tone and the beaker, never the colors of a real run. */
+.if-banner--simulated {
+  --tone: var(--if-enzian);
+  --tone-bg: color-mix(in srgb, var(--tone) 14%, transparent);
+  --tone-border: color-mix(in srgb, var(--tone) 55%, transparent);
 }
 body.vscode-high-contrast .if-banner,
 body.vscode-high-contrast-light .if-banner {

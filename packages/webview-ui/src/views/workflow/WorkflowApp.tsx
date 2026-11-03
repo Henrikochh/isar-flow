@@ -8,6 +8,7 @@ import { Canvas } from './canvas/Canvas';
 import { EditorDnd } from './canvas/dnd';
 import { EditorProvider } from './editorContext';
 import { Inspector } from './inspector/Inspector';
+import { LiveDataProvider } from './live/LiveDataProvider';
 import { Palette } from './palette/Palette';
 import { ReviewCard } from './review/ReviewCard';
 import { WorkflowStoreProvider } from './store';
@@ -35,13 +36,16 @@ function WorkflowShell() {
 }
 
 export function WorkflowApp() {
-  // Effects run children first, so the store below has subscribed to host messages before 'ready' goes out.
+  // Effects run children first, so the store and the live data below have subscribed to host messages before
+  // 'ready' goes out.
   useEffect(() => {
     post({ type: 'ready' });
   }, []);
   return (
     <WorkflowStoreProvider>
-      <WorkflowShell />
+      <LiveDataProvider>
+        <WorkflowShell />
+      </LiveDataProvider>
     </WorkflowStoreProvider>
   );
 }

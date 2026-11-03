@@ -5,6 +5,7 @@
  *
  *   node scripts/interactions.mjs                   # every flow
  *   node scripts/interactions.mjs --only=sidebar    # flows whose name contains "sidebar"
+ *   node scripts/interactions.mjs --only=resume,simulat  # containing any of the comma-separated parts
  *   node scripts/interactions.mjs --headed --slow=150
  *
  * Every flow also fails on page errors and console errors; React reports key collisions and bad updates there.
@@ -23,7 +24,7 @@ import { chromium } from 'playwright';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
-const only = arg('only');
+const only = arg('only')?.split(',').filter(Boolean);
 const slowMo = Number(arg('slow') ?? 0);
 const headed = process.argv.includes('--headed');
 
@@ -529,11 +530,12 @@ flow('workflow: renaming an id updates its references', { view: 'workflow' }, as
   await id.fill('unit_tests');
   await id.press('Enter');
   await until(() => h.card('unit_tests').count(), 'the card has the new id');
-  const yaml = await h.workflowYaml();
-  check(
-    yaml.includes('steps.unit_tests.exitCode') && !yaml.includes('steps.tests.'),
-    'references use the new id',
-  );
+  // The canvas shows the new id before the host has written the YAML.
+  const yaml = await until(async () => {
+    const text = await h.workflowYaml();
+    return text.includes('steps.unit_tests.exitCode') && text;
+  }, 'the YAML uses the new id');
+  check(!yaml.includes('steps.tests.'), 'references use the new id');
   check((await h.card('unit_tests').getAttribute('aria-pressed')) === 'true', 'the block stays selected');
   check((await id.inputValue()) === 'unit_tests', 'the inspector shows the new id');
   await id.fill('review');
@@ -751,8 +753,15 @@ flow('workflow: Add ids gives every block an id', { view: 'workflow', scenario: 
 flow('workflow: Runs menu shows a past run', { view: 'workflow' }, async (h) => {
   const { page } = h;
   await page.getByRole('button', { name: /Runs/ }).click();
-  const items = page.getByRole('menu', { name: 'Runs' }).getByRole('menuitem');
+  const menu = page.getByRole('menu', { name: 'Runs' });
+  // Indented items are actions of the run above them ("Run from tests" under the failed run).
+  const items = menu.locator('[role="menuitem"]:not(.if-menu__item--indent)');
   checkEqual(await items.count(), 6, 'six past runs');
+  checkEqual(
+    (await menu.locator('.if-menu__item--indent').allInnerTexts()).map((text) => text.trim()),
+    ['Run from tests'],
+    'the failed run offers to run from where it stopped',
+  );
   check((await items.nth(0).innerText()).includes('2 to review'), 'the newest run has files to review');
   check(
     (await items.nth(1).innerText()).includes('3 kept, 1 reverted'),
@@ -1211,6 +1220,7 @@ for (const theme of ['dark', 'light', 'hc', 'hcl']) {
     ['sidebar', 'narrow-messy', 240, ['.sb-row--dimmed']],
     ['sidebar', 'narrow-messy-workflows', 240],
     ['sidebar', 'untrusted', 340],
+    ['sidebar', 'workflows-markers', 340, ['.codicon-beaker', '.codicon-run-below']],
     ['agent', 'default', 1280],
     ['agent', 'tryit', 1280],
     ['agent', 'invalid', 1280],
@@ -1330,7 +1340,7 @@ await loadFlowFiles();
 
 /* ---------------- runner ---------------- */
 
-const flows = FLOWS.filter((f) => !only || f.name.includes(only));
+const flows = FLOWS.filter((f) => !only || only.some((part) => f.name.includes(part)));
 // No file watching: an edit elsewhere in the repo (core is served from source) must not reload a page mid-flow.
 const server = await createServer({
   root,

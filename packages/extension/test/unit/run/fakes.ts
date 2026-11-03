@@ -1,6 +1,7 @@
-import type * as vscode from 'vscode';
-import { parseWorkflowText, type Workflow } from '@isar-flow/core';
-import type { RunTerminal } from '../../../src/contracts';
+import * as vscode from 'vscode';
+import { vi } from 'vitest';
+import { parseWorkflowText, type SimulationFile, type Workflow } from '@isar-flow/core';
+import type { RunTerminal, SimulationStore } from '../../../src/contracts';
 
 export class FakeMemento implements vscode.Memento {
   private readonly data = new Map<string, unknown>();
@@ -74,4 +75,27 @@ export function workflowOf(yaml: string): Workflow {
 /** Lets pending promise callbacks (and chained awaits) run. */
 export async function flush(times = 10): Promise<void> {
   for (let i = 0; i < times; i++) await new Promise((resolve) => setImmediate(resolve));
+}
+
+/** A simulation store whose `load` resolves with `mocks`, or rejects when `mocks` is an Error. */
+export function fakeSimulations(mocks: SimulationFile | Error = {}) {
+  const changes = new vscode.EventEmitter<{ uri: string }>();
+  return {
+    onDidChange: changes.event,
+    uriFor: (_uri: vscode.Uri) => vscode.Uri.file('/ws/.isarflow/simulations/fake.sim.yaml'),
+    state: vi.fn(async () => ({
+      path: '.isarflow/simulations/fake.sim.yaml',
+      exists: true,
+      file: mocks instanceof Error ? {} : mocks,
+      diagnostics: [],
+    })),
+    load: vi.fn(async (_uri: vscode.Uri) => {
+      if (mocks instanceof Error) throw mocks;
+      return mocks;
+    }),
+    setBlock: vi.fn(async () => undefined),
+    renameBlock: vi.fn(async () => undefined),
+    open: vi.fn(async (_uri: vscode.Uri) => undefined),
+    dispose: vi.fn(),
+  } satisfies SimulationStore;
 }

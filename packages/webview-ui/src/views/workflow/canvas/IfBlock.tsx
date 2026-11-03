@@ -8,6 +8,7 @@ import { CardHead, stateClasses } from './BlockCard';
 import { BreakableCode } from './BreakableCode';
 import type { BlockEntry } from './model';
 import { cx } from '../cx';
+import { LastRunConditionChip } from '../live/conditionResult';
 import { RiverList } from './River';
 import { type LaneState, laneState } from './runOverlay';
 import { describeSafely } from './summaries';
@@ -97,6 +98,7 @@ export function IfBlock({ entry }: { entry: BlockEntry }) {
               <span className="wf-card__placeholder">No condition yet</span>
             )}
           </div>
+          <LastRunConditionChip step={entry.step} className="wf-live-cond" />
         </div>
       </div>
       <div className="wf-split">

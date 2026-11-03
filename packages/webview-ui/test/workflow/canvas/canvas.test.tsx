@@ -1,13 +1,15 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   applyWorkflowOps,
   reduceRunEvent,
+  type LiveContext,
   type RunEvent,
   type RunView,
   type WorkflowOp,
 } from '@isar-flow/core';
 import { AGENTS, CATALOG } from '../../../harness/fixtures';
+import { WorkflowApp } from '../../../src/views/workflow/WorkflowApp';
 import {
   card,
   clearPosted,
@@ -471,5 +473,59 @@ describe('YAML that cannot be read', () => {
     clearPosted();
     fireEvent.click(screen.getByRole('button', { name: 'Show in YAML' }));
     expect(posted()).toEqual([{ type: 'openYaml' }]);
+  });
+});
+
+describe('live values', () => {
+  const context: LiveContext = {
+    runId: 'run-9',
+    startedAt: Date.now() - 60_000,
+    status: 'success',
+    inputs: { task: 'Add a dark mode toggle' },
+    steps: {},
+    loops: {},
+    env: [],
+    secrets: [],
+    workflow: { name: 'Review until approved', file: '' },
+    workspace: { root: '' },
+  };
+
+  it('listens for the last run before it posts ready', () => {
+    // A host that answers 'ready' at once must not be missed.
+    const answered: unknown[] = [];
+    const queue = Object.assign([] as unknown[], {
+      push(...messages: unknown[]) {
+        answered.push(...messages);
+        for (const message of messages) {
+          if ((message as { type: string }).type === 'ready')
+            window.dispatchEvent(new MessageEvent('message', { data: { type: 'lastRunContext', context } }));
+        }
+        return answered.length;
+      },
+    });
+    (window as unknown as { __posted?: unknown[] }).__posted = queue;
+    const { container } = render(<WorkflowApp />);
+    host({ type: 'document', doc: docFor(REVIEW_TEXT) });
+    expect(answered).toContainEqual({ type: 'ready' });
+    expect(within(card(container, 'implement')).getByText('inputs.task')).toHaveClass('wf-expr-live');
+    clearPosted();
+  });
+
+  it('shows the value of a card template on hover', () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderEditor();
+      host({ type: 'lastRunContext', context });
+      const token = within(card(container, 'implement')).getByText('inputs.task');
+      fireEvent.mouseEnter(token);
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(screen.getByRole('tooltip')).toHaveTextContent('Add a dark mode toggle');
+      // The card keeps its single tab stop.
+      expect(card(container, 'implement').querySelectorAll('[tabindex]')).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

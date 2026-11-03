@@ -1,0 +1,28 @@
+# Mocks for review-loop.workflow.yaml, used by Simulate (the arrow next to Run). Nothing runs: each block
+# gets the next result of its list, and the last one repeats. Copy this file to
+# .isarflow/simulations/<workflow file name>.sim.yaml in your workspace, for example
+# .isarflow/simulations/review-loop.sim.yaml. See "Test mode (Simulate)" in the user guide.
+version: 1
+approvals: approve # or reject: how approval blocks without mocks are answered
+blocks:
+  implement:
+    - text: Added voucher codes to the checkout.
+
+  # Round 1: a test fails and the reviewer asks for changes. Round 2: everything passes.
+  tests:
+    - exitCode: 1
+      output: |
+        FAIL src/checkout.test.ts
+          x rejects an expired voucher (12 ms)
+        Tests: 1 failed, 31 passed, 32 total
+    - exitCode: 0
+      output: 'Tests: 32 passed, 32 total'
+
+  review:
+    - json:
+        approved: false
+        issues: [Expired vouchers are accepted, Add a test for empty codes]
+    - json: { approved: true, issues: [] }
+
+  fix:
+    - text: Rejected expired vouchers and added a test for empty codes.

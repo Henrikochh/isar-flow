@@ -60,6 +60,36 @@ describe('top bar', () => {
     );
   });
 
+  it('says in Restricted Mode that the workflow can still be simulated', () => {
+    renderEditor(undefined, { trusted: false });
+    expect(
+      screen.getByText(
+        'Running is disabled until you trust this workspace. You can still simulate the workflow.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('simulates from the Restricted Mode banner, asking for the inputs first', () => {
+    renderEditor(undefined, { trusted: false });
+    const banner = screen
+      .getByText('Running is disabled until you trust this workspace. You can still simulate the workflow.')
+      .closest('.if-banner') as HTMLElement;
+    fireEvent.click(within(banner).getByRole('button', { name: 'Simulate' }));
+    const dialog = screen.getByRole('dialog', { name: 'Simulate Review until approved' });
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Try it' } });
+    clearPosted();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Simulate' }));
+    expect(posted()).toEqual([{ type: 'simulate', inputs: { task: 'Try it' } }]);
+  });
+
+  it('offers no Simulate in the banner when the workflow cannot run', () => {
+    renderEditor(docFor('version: 1\nname: Empty\nsteps: []\n'), { trusted: false });
+    const banner = screen
+      .getByText('Running is disabled until you trust this workspace. You can still simulate the workflow.')
+      .closest('.if-banner') as HTMLElement;
+    expect(within(banner).queryByRole('button', { name: 'Simulate' })).toBeNull();
+  });
+
   it('lists problems and jumps to the block', () => {
     const text = 'version: 1\nname: W\nsteps:\n  - id: a\n    type: agent\n    promt: hi\n';
     const { container } = renderEditor(docFor(text));
@@ -150,5 +180,152 @@ describe('banners', () => {
     expect(screen.getByText('The change could not be applied')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByText('The change could not be applied')).not.toBeInTheDocument();
+  });
+});
+
+describe('run options', () => {
+  const QUICK = 'version: 1\nname: Quick\nsteps:\n  - id: hello\n    type: console\n    run: echo hi\n';
+  const openOptions = () => fireEvent.click(screen.getByRole('button', { name: 'More run options' }));
+  const options = () => within(screen.getByRole('menu', { name: 'Run options' }));
+
+  it('lists Run, Simulate and Edit simulation mocks', () => {
+    renderEditor();
+    openOptions();
+    expect(
+      options()
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Run', 'SimulateUse mocks; nothing runs', 'Edit simulation mocks']);
+  });
+
+  it('simulates a workflow without inputs at once', () => {
+    renderEditor(docFor(QUICK));
+    openOptions();
+    clearPosted();
+    fireEvent.click(options().getByRole('menuitem', { name: /Simulate/ }));
+    expect(posted()).toEqual([{ type: 'simulate', inputs: {} }]);
+  });
+
+  it('asks for the inputs before simulating', () => {
+    renderEditor();
+    openOptions();
+    fireEvent.click(options().getByRole('menuitem', { name: /Simulate/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Simulate Review until approved' });
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Try vouchers' } });
+    clearPosted();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Simulate' }));
+    expect(posted()).toEqual([{ type: 'simulate', inputs: { task: 'Try vouchers' } }]);
+  });
+
+  it('runs from the menu like the Run button', () => {
+    renderEditor(docFor(QUICK));
+    openOptions();
+    clearPosted();
+    fireEvent.click(options().getByRole('menuitem', { name: 'Run' }));
+    expect(posted()).toEqual([{ type: 'run', inputs: {} }]);
+  });
+
+  it('opens the simulation file', () => {
+    renderEditor();
+    openOptions();
+    clearPosted();
+    fireEvent.click(options().getByRole('menuitem', { name: 'Edit simulation mocks' }));
+    expect(posted()).toEqual([{ type: 'openSimulationFile' }]);
+  });
+
+  it('keeps Simulate available in restricted mode', () => {
+    renderEditor(docFor(QUICK), { trusted: false });
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
+    openOptions();
+    expect(options().getByRole('menuitem', { name: /^Run/ })).toHaveAttribute('aria-disabled', 'true');
+    clearPosted();
+    fireEvent.click(options().getByRole('menuitem', { name: /Simulate/ }));
+    expect(posted()).toEqual([{ type: 'simulate', inputs: {} }]);
+  });
+
+  it('turns off Simulate too when the workflow cannot run', () => {
+    renderEditor(docFor('version: 1\nname: Empty\nsteps: []\n'));
+    expect(screen.getByRole('button', { name: 'More run options' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'More run options' })).toHaveAccessibleDescription(
+      'Add a block before running.',
+    );
+  });
+
+  it('keeps the keyboard focus in the run controls when Run turns into Stop and back', () => {
+    renderEditor(docFor(QUICK));
+    const run = screen.getByRole('button', { name: 'Run' });
+    run.focus();
+    fireEvent.click(run);
+    host({
+      type: 'runEvent',
+      event: { type: 'run-start', runId: 'r', workflowName: 'Quick', startedAt: 0, inputs: {} },
+    });
+    const stop = within(screen.getByRole('banner')).getByRole('button', { name: 'Stop' });
+    expect(stop).toHaveFocus();
+    host({
+      type: 'runEvent',
+      event: {
+        type: 'run-end',
+        runId: 'r',
+        status: 'success',
+        durationMs: 10,
+        usage: { inputTokens: 0, outputTokens: 0 },
+      },
+    });
+    expect(screen.getByRole('button', { name: 'Run' })).toHaveFocus();
+  });
+
+  it('moves the focus from Simulate to Stop when the simulation starts', () => {
+    renderEditor(docFor(QUICK), { trusted: false });
+    const more = screen.getByRole('button', { name: 'More run options' });
+    more.focus();
+    fireEvent.click(more);
+    fireEvent.click(options().getByRole('menuitem', { name: /Simulate/ }));
+    host({
+      type: 'runEvent',
+      event: {
+        type: 'run-start',
+        runId: 's',
+        workflowName: 'Quick',
+        startedAt: 0,
+        inputs: {},
+        simulated: true,
+      },
+    });
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Stop' })).toHaveFocus();
+    host({
+      type: 'runEvent',
+      event: {
+        type: 'run-end',
+        runId: 's',
+        status: 'success',
+        durationMs: 10,
+        usage: { inputTokens: 0, outputTokens: 0 },
+      },
+    });
+    // Run is off in Restricted Mode: the focus goes back to the run options.
+    expect(screen.getByRole('button', { name: 'More run options' })).toHaveFocus();
+  });
+
+  it('leaves the focus alone when it is elsewhere as a run starts', () => {
+    renderEditor(docFor(QUICK));
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    const yaml = screen.getByRole('button', { name: 'Open YAML' });
+    yaml.focus();
+    host({
+      type: 'runEvent',
+      event: { type: 'run-start', runId: 'r', workflowName: 'Quick', startedAt: 0, inputs: {} },
+    });
+    expect(yaml).toHaveFocus();
+  });
+
+  it('shows Stop instead while a simulated run is live', () => {
+    renderEditor();
+    host({
+      type: 'runEvent',
+      event: { type: 'run-start', runId: 's', workflowName: 'w', startedAt: 0, inputs: {}, simulated: true },
+    });
+    expect(screen.queryByRole('button', { name: 'More run options' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Stop' })).toBeInTheDocument();
   });
 });

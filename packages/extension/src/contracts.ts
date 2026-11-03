@@ -22,8 +22,12 @@ import type {
   RunView,
   SetupReport,
   ShellName,
+  SimulationFile,
+  SimulationResult,
+  SimulationState,
   ToolHost,
   ToolName,
+  Workflow,
   WorkflowSummary,
   WorkflowTemplateId,
 } from '@isar-flow/core';
@@ -332,6 +336,53 @@ export interface ActiveRun {
   view: RunView;
 }
 
+/* ---------- simulation files (src/simulation) ---------- */
+
+/**
+ * The simulation file of each workflow: `<workspace folder>/.isarflow/simulations/<name>.sim.yaml`, where name is
+ * the workflow file name without `.workflow.yaml` / `.workflow.yml` (an existing `.sim.yml` is used as well).
+ */
+export interface SimulationStore {
+  /** Fired when a simulation file is created, changed (unsaved edits included) or deleted; `uri` is that file. */
+  readonly onDidChange: vscode.Event<{ uri: string }>;
+  /** Where the simulation file of a workflow is (or would be). */
+  uriFor(workflowUri: vscode.Uri): vscode.Uri;
+  /**
+   * Reads (an open editor's text first) and checks the file against `workflow` (null: YAML and schema checks
+   * only). Never rejects: read errors become an error diagnostic.
+   */
+  state(workflowUri: vscode.Uri, workflow: Workflow | null): Promise<SimulationState>;
+  /**
+   * Mocks for a simulated run. Rejects with a user-facing message that names the file and the first error when
+   * the file has errors; a missing file gives no mocks.
+   */
+  load(workflowUri: vscode.Uri): Promise<SimulationFile>;
+  /**
+   * Replaces the mocks of one block (null or [] removes them), keeping comments and the other blocks; creates the
+   * file and its folder when needed. Writes to the same file run one after the other.
+   */
+  setBlock(workflowUri: vscode.Uri, stepId: string, results: SimulationResult[] | null): Promise<void>;
+  /** Moves the mocks of a renamed block to its new id; nothing happens when the file or the block has none. */
+  renameBlock(workflowUri: vscode.Uri, oldId: string, newId: string): Promise<void>;
+  /** Opens the file beside the active editor, created from a short template when it is missing. */
+  open(workflowUri: vscode.Uri): Promise<void>;
+  dispose(): void;
+}
+
+/** How a run starts besides the plain "Run". */
+export interface RunStartOptions {
+  /**
+   * Run from here: continue the saved run `runId` of the same workflow at block `stepId`. Blocks before it reuse
+   * that run's outputs; `inputs` default to that run's inputs (no prompt).
+   */
+  resume?: { runId: string; stepId: string };
+  /**
+   * Test mode: run with the simulation host and the workflow's mocks. No commands, model calls or file changes,
+   * so no command confirmation and no snapshots; allowed in Restricted Mode (without secrets).
+   */
+  simulate?: boolean;
+}
+
 export interface RunManager {
   readonly onEvent: vscode.Event<{ workflowUri: string; event: RunEvent }>;
   readonly onDidChangeRuns: vscode.Event<void>;
@@ -339,11 +390,18 @@ export interface RunManager {
   readonly approvals: ApprovalBroker;
   /** Review of runs that changed files; always set by createRunManager. */
   readonly reviews?: ReviewService;
+  /** Simulation files of the workflows; always set by createRunManager. */
+  readonly simulations?: SimulationStore;
   /**
    * Validates, asks for missing inputs (input boxes) when `inputs` is undefined, confirms console commands
    * when needed, then runs. Returns the run id, or undefined when the user cancelled or validation failed.
+   * `options` starts a run from a block of a saved run, or a simulated run.
    */
-  start(workflowUri: vscode.Uri, inputs?: Record<string, unknown>): Promise<string | undefined>;
+  start(
+    workflowUri: vscode.Uri,
+    inputs?: Record<string, unknown>,
+    options?: RunStartOptions,
+  ): Promise<string | undefined>;
   cancel(runId: string): void;
   active(workflowUri?: string): ActiveRun[];
   dispose(): void;

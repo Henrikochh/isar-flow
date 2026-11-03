@@ -1,5 +1,5 @@
-// Generates schemas/workflow.schema.json and schemas/agent.schema.json from @isar-flow/core, so the
-// `yamlValidation` contribution always matches the Zod schemas the extension validates with.
+// Generates schemas/workflow.schema.json, schemas/agent.schema.json and schemas/simulation.schema.json from
+// @isar-flow/core, so the `yamlValidation` contribution always matches the Zod schemas the extension validates with.
 import * as esbuild from 'esbuild';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const schemaDir = path.join(packageDir, 'schemas');
 
-const ENTRY = "export { workflowJsonSchema, agentJsonSchema } from '@isar-flow/core';";
+const ENTRY = "export { workflowJsonSchema, agentJsonSchema, simulationJsonSchema } from '@isar-flow/core';";
 
 /** Writes the file only when its content changed, so watchers are not triggered for nothing. */
 function writeIfChanged(file, content) {
@@ -33,11 +33,14 @@ export async function generateSchemas() {
       target: 'node20',
       logLevel: 'warning',
     });
-    const { workflowJsonSchema, agentJsonSchema } = createRequire(import.meta.url)(bundle);
+    const { workflowJsonSchema, agentJsonSchema, simulationJsonSchema } = createRequire(import.meta.url)(
+      bundle,
+    );
     fs.mkdirSync(schemaDir, { recursive: true });
     const written = [
       ['workflow.schema.json', workflowJsonSchema()],
       ['agent.schema.json', agentJsonSchema()],
+      ['simulation.schema.json', simulationJsonSchema()],
     ].filter(([name, schema]) =>
       writeIfChanged(path.join(schemaDir, name), `${JSON.stringify(schema, null, 2)}\n`),
     );

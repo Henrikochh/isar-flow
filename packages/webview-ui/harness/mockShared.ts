@@ -9,6 +9,10 @@ export const probe: {
   agentText?: () => string;
   /** Diffs the workflow editor asked to open, oldest first. */
   openedDiffs?: () => { runId: string; path: string }[];
+  /** Text of the workflow's simulation file. */
+  simulationText?: () => string;
+  /** How often the workflow editor asked to open the simulation file. */
+  openedSimulation?: () => number;
 } = {};
 
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "version": {
+      "description": "Isar Flow simulation file format version.",
+      "type": "number",
+      "const": 1
+    },
+    "approvals": {
+      "description": "How approval blocks without mocks are answered (default approve).",
+      "type": "string",
+      "enum": [
+        "approve",
+        "reject"
+      ]
+    },
+    "blocks": {
+      "description": "Mocked results per block id.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "exitCode": {
+              "description": "Console blocks: exit code (default 0).",
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "output": {
+              "description": "Console blocks: what the command printed.",
+              "type": "string"
+            },
+            "text": {
+              "description": "Agent blocks: the answer text.",
+              "type": "string"
+            },
+            "json": {
+              "description": "Agent blocks with a JSON answer: the answer."
+            },
+            "approved": {
+              "description": "Approval blocks: approve (true) or reject (false).",
+              "type": "boolean"
+            },
+            "comment": {
+              "description": "Approval blocks: the comment of the decision.",
+              "type": "string"
+            },
+            "error": {
+              "description": "Fails this call with the message, e.g. to simulate an unreachable model.",
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Results for this block, used in order; the last one repeats."
+      }
+    }
+  },
+  "additionalProperties": false,
+  "title": "Isar Flow simulation mocks"
+}

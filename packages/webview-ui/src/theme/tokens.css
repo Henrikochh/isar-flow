@@ -61,6 +61,8 @@
   --if-alpenrose: #f07a84;
   --if-almgruen: #7bd88f;
   --if-on-isar: #0b2622;
+  /* A simulated run takes the enzian tone (the one palette color no run status uses) and the beaker glyph. */
+  --if-on-enzian: #0f1633;
 
   --if-river: color-mix(in srgb, var(--if-isar) 62%, transparent);
   --if-river-width: 3px;
@@ -89,6 +91,7 @@ body.vscode-light {
   --if-alpenrose: #c02f3c;
   --if-almgruen: #2f7d3b;
   --if-on-isar: #ffffff;
+  --if-on-enzian: #ffffff;
   --if-wash-strength: 11%;
   --if-ink-strength: 72%;
   --if-river: color-mix(in srgb, var(--if-isar) 55%, transparent);
@@ -102,6 +105,7 @@ body.vscode-high-contrast {
   --if-alpenrose: #ff9aa2;
   --if-almgruen: #9cf0ad;
   --if-on-isar: #000000;
+  --if-on-enzian: #000000;
   --if-river: var(--if-isar);
   --if-wash-strength: 0%;
   --if-border: var(--vscode-contrastBorder, #6fc3df);
@@ -115,6 +119,7 @@ body.vscode-high-contrast-light {
   --if-alpenrose: #8f0f1c;
   --if-almgruen: #1b5627;
   --if-on-isar: #ffffff;
+  --if-on-enzian: #ffffff;
   --if-river: var(--if-isar);
   --if-wash-strength: 0%;
   --if-border: var(--vscode-contrastBorder, #0f4a85);

@@ -8,7 +8,15 @@ import type {
   SidebarToHost,
   WorkflowSummary,
 } from '@isar-flow/core';
-import { AGENTS, CATALOG, RECENT_RUNS, SETUP_REPORT, SETUP_REPORT_RUNNING, WORKFLOWS } from './fixtures';
+import {
+  AGENTS,
+  CATALOG,
+  MARKED_RUNS,
+  RECENT_RUNS,
+  SETUP_REPORT,
+  SETUP_REPORT_RUNNING,
+  WORKFLOWS,
+} from './fixtures';
 import { markReady, testModel, type Send } from './mockShared';
 
 /** Names, ids and paths at the edge of what people write, to check ellipses and wrapping (token "long"). */
@@ -53,6 +61,10 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
   const running = has('running') ? liveRun(WORKFLOWS[0], Date.now() - 70_000) : undefined;
   // "messy": what a lenient host may send for broken files and half-configured providers.
   const messy = has('messy');
+  // "markers": the newest runs are a simulated and a resumed one (Package B).
+  const markers = has('markers');
+  const lastRunOf = (workflow: WorkflowSummary) =>
+    MARKED_RUNS.find((run) => run.workflowUri === workflow.uri) ?? workflow.lastRun;
   const state: SidebarState = {
     hasWorkspace: !has('noworkspace'),
     trusted: !has('untrusted'),
@@ -95,7 +107,9 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
                 stepCount: 0,
               },
             ]
-          : [...WORKFLOWS],
+          : markers
+            ? WORKFLOWS.map((workflow) => ({ ...workflow, lastRun: lastRunOf(workflow) }))
+            : [...WORKFLOWS],
     catalog: messy
       ? {
           ...CATALOG,
@@ -127,7 +141,9 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
             },
             ...RECENT_RUNS,
           ]
-        : RECENT_RUNS,
+        : markers
+          ? [...MARKED_RUNS, ...RECENT_RUNS]
+          : RECENT_RUNS,
     activeRuns: running ? [running] : [],
     tab: ['workflows', 'untrusted', 'running', 'newworkflow'].some(has) ? 'workflows' : 'agents',
     setupCheck: has('setup') ? SETUP_REPORT : has('setuprunning') ? SETUP_REPORT_RUNNING : null,

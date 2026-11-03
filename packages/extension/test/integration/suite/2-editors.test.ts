@@ -74,7 +74,7 @@ describe('Editors', () => {
     assert.ok(diagnostics.every((d) => d.severity === vscode.DiagnosticSeverity.Error));
   });
 
-  it('shows Run and Open in canvas CodeLenses on workflow YAML', async () => {
+  it('shows Run, Simulate and Open in canvas CodeLenses on workflow YAML', async () => {
     const lenses = await waitFor(async () => {
       const found = await vscode.commands.executeCommand<vscode.CodeLens[]>(
         'vscode.executeCodeLensProvider',
@@ -84,7 +84,7 @@ describe('Editors', () => {
     }, 'CodeLenses');
     assert.deepEqual(
       lenses.map((lens) => lens.command?.command),
-      ['isarFlow.runWorkflow', 'isarFlow.openInCanvas'],
+      ['isarFlow.runWorkflow', 'isarFlow.simulateWorkflow', 'isarFlow.openInCanvas'],
     );
   });
 });

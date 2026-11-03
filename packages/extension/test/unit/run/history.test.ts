@@ -190,6 +190,29 @@ describe('run history and reviews', () => {
     expect(removed).toHaveBeenCalledWith({ workflowUri: A, runIds: ['a1'] });
   });
 
+  it('never drops a real run (and its review) to make room for a simulated one', async () => {
+    const store = memoryStore();
+    const history = createRunHistory(store, new FakeMemento(), () => 2);
+    const removed = vi.fn();
+    history.onDidRemove?.(removed);
+    await history.save(view('r1', 1), A);
+    await history.save(view('r2', 2), A);
+    await history.setReview?.('r1', { total: 2, kept: 0, reverted: 0, pending: 2 });
+    for (const [i, runId] of ['s1', 's2', 's3'].entries()) {
+      await history.save(view(runId, 10 + i, { simulated: true }), A);
+    }
+
+    expect(history.list(A).map((r) => r.runId)).toEqual(['s3', 's2', 'r2', 'r1']);
+    expect(history.list(A).find((r) => r.runId === 'r1')?.review?.pending).toBe(2);
+    expect(removed.mock.calls).toEqual([[{ workflowUri: A, runIds: ['s1'] }]]);
+    expect(store.files.has('r1')).toBe(true);
+
+    // Real runs make room among real runs only.
+    await history.save(view('r3', 20), A);
+    expect(history.list(A).map((r) => r.runId)).toEqual(['r3', 's3', 's2', 'r2']);
+    expect(removed).toHaveBeenLastCalledWith({ workflowUri: A, runIds: ['r1'] });
+  });
+
   it('keeps block metrics when a run is cut down to its skeleton', () => {
     const steps: RunView['steps'] = {};
     for (let i = 0; i < 6000; i++) {

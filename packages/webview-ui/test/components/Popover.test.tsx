@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import { describe, expect, it } from 'vitest';
 import { Menu, MenuItem, Popover } from '../../src/components';
@@ -73,5 +73,30 @@ describe('Popover', () => {
     fireEvent.keyDown(item, { key: 'Escape' });
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(anchor()).toHaveFocus();
+  });
+});
+
+describe('Popover focus on open', () => {
+  it('skips items that are disabled with aria-disabled', async () => {
+    function Disabled() {
+      const anchor = useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <button ref={anchor} type="button">
+            Actions
+          </button>
+          <Popover open anchorRef={anchor} onClose={() => undefined} label="Actions" role="none">
+            <Menu label="Actions">
+              <MenuItem disabled onSelect={() => undefined}>
+                Run from here
+              </MenuItem>
+              <MenuItem onSelect={() => undefined}>Move to…</MenuItem>
+            </Menu>
+          </Popover>
+        </>
+      );
+    }
+    render(<Disabled />);
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Move to…' })).toHaveFocus());
   });
 });

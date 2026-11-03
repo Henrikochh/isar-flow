@@ -2,6 +2,7 @@
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import type { InsertTarget, Workflow } from '@isar-flow/core';
 import { Menu, MenuItem, MenuSeparator, Popover } from '../../../components';
+import type { RunFromHereState } from '../runFromHere/model';
 import { MoveToMenu } from './MoveToMenu';
 
 export interface BlockMenuActions {
@@ -9,6 +10,9 @@ export interface BlockMenuActions {
   duplicate(stepId: string): void;
   remove(stepId: string): void;
   openYaml(stepId: string): void;
+  /** Run from here: continue the shown run at the block (see runFromHereState). */
+  runFromHere?(stepId: string): void;
+  runFromHereState?(stepId: string): RunFromHereState;
 }
 
 export interface BlockMenuRequest {
@@ -40,6 +44,8 @@ function BlockMenuContent({
     (items.find((item) => item.getAttribute('aria-disabled') !== 'true') ?? items[0])?.focus();
   }, [view]);
 
+  const resume = actions.runFromHere ? (actions.runFromHereState?.(stepId) ?? { ok: true }) : null;
+
   const run = (action: (id: string) => void) => () => {
     onClose();
     action(stepId);
@@ -58,6 +64,20 @@ function BlockMenuContent({
         />
       ) : (
         <Menu label="Block actions">
+          {resume ? (
+            <>
+              <MenuItem
+                leading={icon('run-below')}
+                disabled={!resume.ok}
+                description={resume.ok ? undefined : resume.reason}
+                wrap={!resume.ok}
+                onSelect={run((id) => actions.runFromHere?.(id))}
+              >
+                Run from here
+              </MenuItem>
+              <MenuSeparator />
+            </>
+          ) : null}
           <MenuItem leading={icon('move')} onSelect={() => setView('move')}>
             Move to…
           </MenuItem>

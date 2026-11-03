@@ -116,3 +116,11 @@ body.vscode-high-contrast-light .if-menu__item:focus-visible {
 .if-menu__item--wrap .if-menu__leading {
   margin-top: 2px;
 }
+.if-menu__item--wrap .if-menu__desc {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* A follow-up action of the item above it, e.g. "Run from tests" under a failed run. */
+.if-menu__item--indent {
+  padding-left: 34px;
+}

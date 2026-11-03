@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import type { RunView, WorkflowSummary } from '@isar-flow/core';
+import {
+  blockHashes,
+  parseWorkflowText,
+  type RunRecordSummary,
+  type RunView,
+  type WorkflowSummary,
+} from '@isar-flow/core';
 import type { ActiveRun } from '../../../src/contracts';
 import {
   createWorkflowCommands,
@@ -13,6 +19,16 @@ import {
 const WORKFLOW = 'file:///ws/.isarflow/workflows/build.workflow.yaml';
 const OTHER = 'file:///ws/deploy.workflow.yml';
 const AGENT = 'file:///ws/.isarflow/agents/coder.agent.yaml';
+const FLOW = `version: 1
+name: Build
+steps:
+  - id: first
+    type: console
+    run: echo one
+  - id: tests
+    type: console
+    run: npm test
+`;
 
 function summary(uri: string, name: string, valid = true): WorkflowSummary {
   return { uri, name, relativePath: uri.replace('file:///ws/', ''), valid, stepCount: 1 };
@@ -31,22 +47,65 @@ function activeRun(runId: string, workflowUri: string, workflowName: string): Ac
   return { runId, workflowUri, view };
 }
 
-function setup(options: { workflows?: WorkflowSummary[]; active?: ActiveRun[]; activeUri?: string } = {}) {
+function record(runId: string, extra: Partial<RunRecordSummary> = {}): RunRecordSummary {
+  return { runId, workflowUri: WORKFLOW, workflowName: 'Build', status: 'failure', startedAt: 1, ...extra };
+}
+
+/** A failed run of `text` that stopped at tests, with the block hashes of that text. */
+function savedRun(runId: string, text: string): RunView {
+  return {
+    runId,
+    workflowName: 'Build',
+    status: 'failure',
+    startedAt: 1,
+    inputs: {},
+    usage: { inputTokens: 0, outputTokens: 0 },
+    steps: {
+      first: { status: 'success', executions: 1, logs: [], output: { status: 'success', exitCode: 0 } },
+      tests: { status: 'failure', executions: 1, logs: [], output: { status: 'failure', exitCode: 1 } },
+    },
+    blockHashes: blockHashes(parseWorkflowText(text).workflow),
+  };
+}
+
+interface SetupOptions {
+  workflows?: WorkflowSummary[];
+  active?: ActiveRun[];
+  activeUri?: string;
+  history?: RunRecordSummary[];
+  /** Saved runs getAsync returns. */
+  saved?: RunView[];
+}
+
+type Cursor = { text: string; line: number; character: number };
+
+function setup(options: SetupOptions = {}) {
   const runs = options.active ?? [];
-  const services: WorkflowCommandServices = {
+  const history = options.history ?? [];
+  const services = {
     workflows: { list: vi.fn(() => options.workflows ?? []) },
     runs: {
-      start: vi.fn(async () => 'run-1'),
+      start: vi.fn<WorkflowCommandServices['runs']['start']>(async () => 'run-1'),
       cancel: vi.fn(),
       active: vi.fn((uri?: string) => runs.filter((r) => uri === undefined || r.workflowUri === uri)),
+      history: {
+        list: vi.fn((uri?: string) => history.filter((r) => uri === undefined || r.workflowUri === uri)),
+        getAsync: vi.fn(async (runId: string) => options.saved?.find((run) => run.runId === runId)),
+      },
+      simulations: { open: vi.fn(async (_uri: vscode.Uri) => undefined) },
     },
     output: { show: vi.fn() },
-  };
+  } satisfies WorkflowCommandServices;
   const ui = {
     activeUri: vi.fn(() => (options.activeUri ? vscode.Uri.parse(options.activeUri) : undefined)),
+    cursor: vi.fn((_uri: vscode.Uri) => undefined as Cursor | undefined),
+    readText: vi.fn(async (_uri: vscode.Uri) => FLOW),
     showQuickPick: vi.fn(),
     showInfo: vi.fn(async () => undefined as string | undefined),
     showError: vi.fn(async () => undefined),
+    confirm: vi.fn(
+      async (_message: string, _detail: string, _button: string) => undefined as string | undefined,
+    ),
     executeCommand: vi.fn(async (_command: string, ..._args: unknown[]) => undefined as unknown),
   } satisfies WorkflowCommandUi;
   return { services, ui, commands: createWorkflowCommands(services, ui) };
@@ -79,11 +138,183 @@ describe('workflow commands', () => {
       [
         'isarFlow.cancelRun',
         'isarFlow.openInCanvas',
+        'isarFlow.openSimulationFile',
         'isarFlow.openYaml',
+        'isarFlow.runFromHere',
         'isarFlow.runWorkflow',
         'isarFlow.showLog',
+        'isarFlow.simulateWorkflow',
       ].sort(),
     );
+  });
+
+  describe('simulateWorkflow', () => {
+    it('simulates the workflow passed as argument', async () => {
+      const { services, ui, commands } = setup({ activeUri: OTHER });
+      await expect(commands.simulateWorkflow({ uri: WORKFLOW })).resolves.toBe('run-1');
+      const [uri, inputs, options] = vi.mocked(services.runs.start).mock.calls[0];
+      expect([String(uri), inputs, options]).toEqual([WORKFLOW, undefined, { simulate: true }]);
+      expect(ui.showQuickPick).not.toHaveBeenCalled();
+    });
+
+    it('refuses a file that is not a workflow', async () => {
+      const { services, ui, commands } = setup();
+      await expect(commands.simulateWorkflow(AGENT)).resolves.toBeUndefined();
+      expect(services.runs.start).not.toHaveBeenCalled();
+      expect(ui.showError).toHaveBeenCalledWith(
+        'coder.agent.yaml is not a workflow. Workflow files end in .workflow.yaml or .workflow.yml.',
+      );
+    });
+
+    it('simulates the workflow in the active editor', async () => {
+      const { services, commands } = setup({ activeUri: OTHER });
+      await commands.simulateWorkflow();
+      expect(startedUri(services)).toBe(OTHER);
+      expect(vi.mocked(services.runs.start).mock.calls[0][2]).toEqual({ simulate: true });
+    });
+
+    it('asks which workflow to simulate when the active editor shows no workflow', async () => {
+      const { services, ui, commands } = setup({ workflows: [summary(WORKFLOW, 'Build')] });
+      ui.showQuickPick.mockImplementation(async (items: vscode.QuickPickItem[]) => items[0]);
+      await commands.simulateWorkflow();
+      expect(ui.showQuickPick.mock.calls[0][1]).toMatchObject({
+        placeHolder: 'Choose a workflow to simulate',
+      });
+      expect(startedUri(services)).toBe(WORKFLOW);
+
+      ui.showQuickPick.mockResolvedValue(undefined);
+      await expect(commands.simulateWorkflow()).resolves.toBeUndefined();
+      expect(services.runs.start).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('runFromHere', () => {
+    const started = (services: WorkflowCommandServices) => {
+      const [uri, inputs, options] = vi.mocked(services.runs.start).mock.calls[0];
+      return [String(uri), inputs, options];
+    };
+
+    it('continues the newest real run at the block under the cursor', async () => {
+      const history = [record('run-3', { simulated: true }), record('run-2'), record('run-1')];
+      const { services, ui, commands } = setup({ activeUri: WORKFLOW, history });
+      ui.cursor.mockReturnValue({ text: FLOW, line: 8, character: 9 });
+      await expect(commands.runFromHere()).resolves.toBe('run-1');
+      expect(started(services)).toEqual([
+        WORKFLOW,
+        undefined,
+        { resume: { runId: 'run-2', stepId: 'tests' } },
+      ]);
+      expect(ui.showQuickPick).not.toHaveBeenCalled();
+    });
+
+    it('asks for the block when the cursor is in none and marks where the run stopped', async () => {
+      const { services, ui, commands } = setup({
+        activeUri: WORKFLOW,
+        history: [record('run-2', { stoppedAt: 'tests' })],
+      });
+      ui.showQuickPick.mockImplementation(async (items: vscode.QuickPickItem[]) => items[1]);
+      await commands.runFromHere();
+      const [items, pickOptions] = ui.showQuickPick.mock.calls[0];
+      expect(items).toEqual([
+        expect.objectContaining({ label: 'first' }),
+        expect.objectContaining({ label: 'tests', description: 'Where that run stopped' }),
+      ]);
+      expect(pickOptions).toMatchObject({ placeHolder: 'Choose the block to run from' });
+      expect(started(services)[2]).toEqual({ resume: { runId: 'run-2', stepId: 'tests' } });
+
+      ui.showQuickPick.mockResolvedValue(undefined);
+      await expect(commands.runFromHere()).resolves.toBeUndefined();
+      expect(services.runs.start).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses the run and block passed as argument', async () => {
+      const { services, ui, commands } = setup();
+      await commands.runFromHere({ uri: WORKFLOW, runId: 'run-7', stepId: 'first' });
+      expect(started(services)).toEqual([
+        WORKFLOW,
+        undefined,
+        { resume: { runId: 'run-7', stepId: 'first' } },
+      ]);
+      expect(ui.readText).not.toHaveBeenCalled();
+    });
+
+    it('warns before reusing results that may be outdated and stops when that is cancelled', async () => {
+      const edited = FLOW.replace('echo one', 'echo uno');
+      const { services, ui, commands } = setup({
+        activeUri: WORKFLOW,
+        history: [record('run-2')],
+        saved: [savedRun('run-2', FLOW)],
+      });
+      ui.cursor.mockReturnValue({ text: edited, line: 8, character: 9 });
+      await expect(commands.runFromHere()).resolves.toBeUndefined();
+      expect(ui.confirm).toHaveBeenCalledWith(
+        'Run Build from tests?',
+        'first changed since that run, so its result may be outdated.',
+        'Run from here',
+      );
+      expect(services.runs.start).not.toHaveBeenCalled();
+
+      ui.confirm.mockResolvedValue('Run from here');
+      await expect(commands.runFromHere()).resolves.toBe('run-1');
+      expect(started(services)[2]).toEqual({ resume: { runId: 'run-2', stepId: 'tests' } });
+    });
+
+    it('lists blocks without a result and starts at once when nothing needs checking', async () => {
+      const added = FLOW.replace(
+        '  - id: tests',
+        '  - id: lint\n    type: console\n    run: lint\n  - id: tests',
+      );
+      const { services, ui, commands } = setup({
+        history: [record('run-2')],
+        saved: [savedRun('run-2', FLOW)],
+      });
+      ui.readText.mockResolvedValue(added);
+      await commands.runFromHere({ uri: WORKFLOW, runId: 'run-2', stepId: 'tests' });
+      expect(ui.confirm.mock.calls[0][1]).toBe(
+        'lint has no result in that run; expressions that read it get empty values.',
+      );
+      expect(services.runs.start).not.toHaveBeenCalled();
+
+      ui.readText.mockResolvedValue(FLOW);
+      await expect(commands.runFromHere({ uri: WORKFLOW, runId: 'run-2', stepId: 'tests' })).resolves.toBe(
+        'run-1',
+      );
+      expect(ui.confirm).toHaveBeenCalledTimes(1);
+      expect(services.runs.start).toHaveBeenCalledTimes(1);
+    });
+
+    it('explains that the workflow must run first', async () => {
+      const { services, ui, commands } = setup({
+        activeUri: WORKFLOW,
+        history: [record('run-1', { simulated: true })],
+      });
+      await expect(commands.runFromHere()).resolves.toBeUndefined();
+      expect(ui.showInfo).toHaveBeenCalledWith(
+        'build.workflow.yaml has no run to continue. Run it first, then run from a block.',
+      );
+      expect(services.runs.start).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('openSimulationFile', () => {
+    it('opens the simulation file of the workflow', async () => {
+      const { services, commands } = setup({ activeUri: OTHER });
+      await commands.openSimulationFile({ uri: WORKFLOW });
+      await commands.openSimulationFile();
+      expect(services.runs.simulations.open.mock.calls.map(([uri]) => String(uri))).toEqual([
+        WORKFLOW,
+        OTHER,
+      ]);
+    });
+
+    it('says why the file could not be opened', async () => {
+      const { services, ui, commands } = setup({ activeUri: WORKFLOW });
+      services.runs.simulations.open.mockRejectedValue(new Error('The folder is read-only.'));
+      await commands.openSimulationFile();
+      expect(ui.showError).toHaveBeenCalledWith(
+        'Could not open the simulation file: The folder is read-only.',
+      );
+    });
   });
 
   describe('runWorkflow', () => {

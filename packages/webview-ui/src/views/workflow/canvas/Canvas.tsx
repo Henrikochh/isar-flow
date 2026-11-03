@@ -1,10 +1,11 @@
 /** The river canvas: scrolls both ways, zooms, and renders the workflow as one stream from Start to End. */
-import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, EmptyState } from '../../../components';
 import { useEditor } from '../editorContext';
+import { runFromHereState } from '../runFromHere/model';
 import { useWorkflowActions, useWorkflowState } from '../store';
-import { BlockMenu, type BlockMenuRequest } from './BlockMenu';
+import { BlockMenu, type BlockMenuActions, type BlockMenuRequest } from './BlockMenu';
 import { CanvasDataProvider, useCanvas } from './canvasContext';
 import { justDragged, useDragItem } from './dnd';
 import { EndMarker, StartMarker } from './Markers';
@@ -66,7 +67,7 @@ function River() {
   const empty = model.root.entries.length === 0;
   return (
     <>
-      <StartMarker workflow={workflow} />
+      <StartMarker workflow={workflow} run={run} />
       {empty ? <EmptyRiver /> : <RiverList list={model.root} owner={null} />}
       <EndMarker run={run} />
     </>
@@ -111,7 +112,7 @@ function useBlockMenu(scrollRef: RefObject<HTMLElement | null>) {
 
 export function Canvas() {
   const { workflow, stale, model } = useEditor();
-  const { selection, approvals } = useWorkflowState();
+  const { selection, approvals, run, trusted, doc } = useWorkflowState();
   const drag = useDragItem();
   const scrollRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -122,7 +123,18 @@ export function Canvas() {
   const { onKeyDown, blockActions } = useCanvasKeyboard(scrollRef, menu.open);
   useEdgeScroll(scrollRef, drag !== null);
   useFollowRun(scrollRef);
-  const { select } = useWorkflowActions();
+  const { select, requestResume } = useWorkflowActions();
+  const docValid = doc?.valid ?? false;
+  const menuActions = useMemo<BlockMenuActions>(
+    () => ({
+      ...blockActions,
+      runFromHereState: (stepId) => runFromHereState(run, trusted, docValid, stepId),
+      runFromHere: (stepId) => {
+        if (run) requestResume(run.runId, stepId);
+      },
+    }),
+    [blockActions, run, trusted, docValid, requestResume],
+  );
 
   // Reveal the selected block (also when the host asks to focus one).
   useEffect(() => {
@@ -179,7 +191,7 @@ export function Canvas() {
           request={menu.request}
           anchorRef={menu.anchorRef}
           workflow={workflow}
-          actions={blockActions}
+          actions={menuActions}
           onClose={menu.close}
         />
       </div>

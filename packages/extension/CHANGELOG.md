@@ -4,9 +4,35 @@ All notable changes to Isar Flow are listed here.
 
 ## 0.2.0 (unreleased)
 
-Trust and real-world use.
+Trust and real-world use, and faster building of workflows.
 
 ### Added
+
+- **Run from here**: continue a finished, failed or cancelled run at a block from the block's context menu,
+  its **Run output**, **Run from <block>** under failed and cancelled runs in the **Runs** menu, or **Run from
+  here** in the YAML context menu and the Command Palette (the block under the cursor). Blocks before it reuse
+  their results from that run (marked **Reused**, no time or tokens); a loop around the block continues at the
+  iteration where it last ran and an If takes the block's branch. The dialog fills in that run's inputs and
+  warns about blocks that changed since (each block's YAML is hashed with the run), missing, shortened or
+  masked results, loops past a lowered limit, forced branches, agents that start a new conversation,
+  worktrees and reverted files. Resumed runs are marked **Resumed** (with "Resumed from <block>") in the
+  history, the sidebar and on the Start marker.
+- **Live values**: runs save the names (never the values) of environment variables and secrets with their
+  inputs and outputs, so hovering a `${{ … }}` template on a block card, under a field in the inspector
+  (**Values from the last run**, with **Copy**) or in the YAML editor shows what it evaluated to in the last
+  run. If and Loop headers and the condition builder show **Last run: true/false**. Values are cut at 2 KB and
+  secrets show as `••••••`.
+- **Test mode**: **Simulate** in the new menu next to **Run** (also a CodeLens, the Explorer menu, Alt-click
+  on the editor title's Run button and **Isar Flow: Simulate workflow**) runs a workflow with mocks from
+  `.isarflow/simulations/<workflow file name>.sim.yaml`: no commands, no model calls, no file changes, no
+  command confirmation, approvals answered automatically. Each call takes the next result of its block; blocks
+  without mocks get defaults (exit 0, `(simulated answer)`, sample JSON from the block's JSON fields,
+  approved). The inspector's **Simulation** section edits a block's mocks and keeps the file's comments;
+  renaming a block moves its mocks. The editor warns about unknown blocks, wrong fields and JSON that doesn't
+  fit; the YAML extension validates the file with the new `simulation.schema.json`. Simulated runs are marked
+  **Simulated**, use no tokens, are left out of the averages and also work in Restricted Mode (without
+  secrets). Command **Isar Flow: Open simulation file**; new example
+  `examples/.isarflow/simulations/review-loop.sim.yaml`.
 
 - **Review changes**: after a run that changed files, a notification (`<workflow> changed 3 files.` with
   **Review changes**) and a review card above the canvas list every changed file with its status, +/- lines
@@ -60,7 +86,21 @@ Trust and real-world use.
   tokens add up to the run total. `toolCalls` adds up the same way, and failed agent blocks report the tool
   calls they made.
 - `isarFlow.historyLimit` also removes the snapshots, review data and worktrees of runs dropped from the
-  history.
+  history. Simulated runs are counted separately, so simulating never pushes a real run and its review out of
+  the history.
+- The **Run** button of the workflow editor is a split button with **Run**, **Simulate** and **Edit
+  simulation mocks**. In Restricted Mode the canvas banner says that workflows can still be simulated.
+- The history keeps where a run stopped, its start time and loop iterations even when it trims a large run, and
+  marks results it shortened, so Run from here can warn about them.
+- **Run from here** from the YAML context menu or the Command Palette shows the same warnings as the canvas
+  dialog (changed, missing, shortened or masked results, …) and asks before it starts.
+- A run continued with Run from here keeps the YAML hash of each block it reused from the earlier run, so
+  continuing it again still warns about blocks changed since then. Blocks after the start block inside a
+  continued loop show their previous round's result (marked **Reused**) until they run, and keep it for the
+  next Run from here.
+- **Simulate** on the canvas simulates the workflow as it is, unsaved edits included, without saving the file.
+- Simulation files explain unknown keys: a block id at the top level is told to go under `blocks:`, and a
+  mistyped result field names the field that was meant (for `exitcode` it suggests `exitCode`).
 - Integration tests start VS Code with `--disable-gpu`.
 
 ## 0.1.0

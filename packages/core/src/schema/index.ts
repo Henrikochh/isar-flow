@@ -8,7 +8,8 @@ export {
   WorkflowSchema,
   STEP_ID_PATTERN,
 } from './zod';
-export { workflowJsonSchema, agentJsonSchema } from './jsonSchema';
+export { SimulationFileSchema, SimulationResultSchema } from './simulation';
+export { workflowJsonSchema, agentJsonSchema, simulationJsonSchema } from './jsonSchema';
 export {
   agentCapabilities,
   type AgentCapability,

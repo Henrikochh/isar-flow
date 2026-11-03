@@ -4,6 +4,7 @@
  *
  *   node scripts/visual.mjs                       # all shots, all themes
  *   node scripts/visual.mjs --only=workflow       # views/scenarios containing "workflow"
+ *   node scripts/visual.mjs --only=resume,live    # containing any of the comma-separated parts
  *   node scripts/visual.mjs --themes=dark,light
  *
  * Output: packages/webview-ui/visual-output/<view>-<name or scenario>-<theme>.png
@@ -22,7 +23,7 @@ const root = resolve(here, '..');
 const outDir = resolve(root, 'visual-output');
 
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
-const only = arg('only');
+const only = arg('only')?.split(',').filter(Boolean);
 const themes = (arg('themes') ?? 'dark,light,hc').split(',');
 
 const SHOTS = [
@@ -42,6 +43,9 @@ const SHOTS = [
   // Very long agent and workflow names, ids and paths at the narrowest width.
   { view: 'sidebar', scenario: 'narrow-long', width: 240, height: 900 },
   { view: 'sidebar', scenario: 'narrow-long-workflows', width: 240, height: 900 },
+  // A simulated and a resumed run on top: their chips in the workflow rows and the recent runs.
+  { view: 'sidebar', scenario: 'workflows-markers', width: 340, height: 820 },
+  { view: 'sidebar', scenario: 'narrow-workflows-markers', width: 240, height: 820 },
   { view: 'workflow', scenario: 'default', width: 1440, height: 900 },
   { view: 'workflow', scenario: 'selected', width: 1440, height: 900 },
   { view: 'workflow', scenario: 'running', width: 1440, height: 900 },
@@ -104,7 +108,7 @@ async function loadShotFiles() {
 SHOTS.push(...(await loadShotFiles()));
 
 const shotName = (shot) => `${shot.view}-${shot.name ?? shot.scenario}`;
-const shots = SHOTS.filter((s) => !only || shotName(s).includes(only));
+const shots = SHOTS.filter((s) => !only || only.some((part) => shotName(s).includes(part)));
 
 await mkdir(outDir, { recursive: true });
 // No file watching: an edit elsewhere in the repo (core is served from source) must not reload a page mid-shot.

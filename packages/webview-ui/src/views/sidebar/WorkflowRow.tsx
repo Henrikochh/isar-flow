@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ActiveRunSummary, WorkflowSummary } from '@isar-flow/core';
-import { Chip, IconButton, Spinner, StatusGlyph, statusLabel } from '../../components';
+import { Chip, IconButton, RunOriginChip, Spinner, StatusGlyph, statusLabel } from '../../components';
 import { formatRelativeTime } from '../../hooks';
 import { formatElapsed, plural, send, workflowLabel } from './model';
 import { PathText } from './PathText';
@@ -138,6 +138,7 @@ function RunLine({
       <StatusGlyph status={last.status} />
       <span className="sb-meta-status">{statusLabel(last.status)}</span>
       <span>{formatRelativeTime(last.startedAt, now)}</span>
+      <RunOriginChip run={last} />
     </>
   );
 }

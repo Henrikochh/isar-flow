@@ -1,5 +1,7 @@
 import type { ComponentType } from 'react';
 import type { BlockNode, StepType } from '@isar-flow/core';
+import { LiveStepProvider } from '../../live/liveStep';
+import { SimulationSection } from '../../simulation/SimulationSection';
 import { useWorkflowActions, useWorkflowState } from '../../store';
 import { IssueBanner } from '../Issues';
 import { blockIssues, isRecord, isStepType } from '../model';
@@ -44,9 +46,12 @@ export function BlockSettings({ block, stepId }: { block: BlockNode; stepId: str
   const { byField, general } = blockIssues(diagnostics, block, fields);
   const Panel = type ? PANELS[type] : UnknownSettings;
   return (
-    <div className="wf-insp-form">
-      <IssueBanner issues={general} subject="this block" onShowYaml={() => actions.openYaml(stepId)} />
-      <Panel block={block} step={step} stepId={stepId} update={update} issues={byField} />
-    </div>
+    <LiveStepProvider stepId={stepId}>
+      <div className="wf-insp-form">
+        <IssueBanner issues={general} subject="this block" onShowYaml={() => actions.openYaml(stepId)} />
+        <Panel block={block} step={step} stepId={stepId} update={update} issues={byField} />
+        <SimulationSection stepId={stepId} step={step} />
+      </div>
+    </LiveStepProvider>
   );
 }

@@ -47,6 +47,11 @@
   margin-left: 2px;
 }
 
+.wf-dialog-dot--simulate {
+  background: var(--if-enzian);
+  color: var(--if-on-enzian);
+}
+
 .wf-inputs-form {
   display: flex;
   flex-direction: column;

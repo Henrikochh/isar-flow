@@ -26,8 +26,9 @@
   gap: 6px;
 }
 
+/* Run / Simulate or the elapsed time and Stop: one focus scope, laid out as part of the actions. */
 .wf-topbar__run {
-  display: inline-flex;
+  display: contents;
 }
 
 /* ---- Name ---- */
@@ -222,4 +223,35 @@ body.vscode-high-contrast-light .wf-validity {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ---- Inputs dialog: simulate and run from here ---- */
+.wf-dialog-note {
+  margin: 0;
+  color: var(--if-muted);
+  font-size: var(--if-text-s);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.wf-dialog-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wf-dialog-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+/* ---- Runs menu: Simulated and Resumed chips ---- */
+.wf-runs__when {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
 }

@@ -3,12 +3,14 @@
  * the host answers with the full state for that view.
  */
 import type { Diagnostic } from './diagnostics';
-import type { RunEvent, RunStatus, Usage } from './engine/types';
+import type { ResumedFrom, RunEvent, RunStatus, Usage } from './engine/types';
 import type { ChatModelInfo, ModelErrorKind, ModelProbeResult } from './models/types';
-import type { BlockRunMetrics, RunView } from './run/types';
+import type { BlockRunMetrics, LiveContext, RunView } from './run/types';
 import type {
   AgentDefinition,
   AgentPermissions,
+  SimulationFile,
+  SimulationResult,
   ToolName,
   Workflow,
   WorkflowIsolation,
@@ -112,6 +114,33 @@ export interface RunRecordSummary {
   blocks?: Record<string, BlockRunMetrics>;
   /** Review state when the run changed files, e.g. for "3 kept, 1 reverted". */
   review?: ReviewCounts;
+  /** Run from here: the run this one continued and the block it started at ("Resumed from tests"). */
+  resumedFrom?: ResumedFrom;
+  /** Test mode: nothing was executed; results came from the simulation file ("Simulated"). */
+  simulated?: boolean;
+  /**
+   * Failed and cancelled runs: the block where the run stopped (the failed or cancelled block that started last,
+   * reused blocks not counted), offered as "Run from <block>".
+   */
+  stoppedAt?: string;
+}
+
+/* ---------- simulation (test mode) ---------- */
+
+/** The simulation file of a workflow as the workflow editor shows it (Simulate, inspector "Simulation"). */
+export interface SimulationState {
+  /** Relative to the workspace folder, forward slashes, e.g. ".isarflow/simulations/review-loop.sim.yaml". */
+  path: string;
+  /** False until the file is created (the first saved mock, or "Open simulation file"). */
+  exists: boolean;
+  /** Mocks as read from the file, unsaved editor changes included; empty when missing or unreadable. */
+  file: SimulationFile;
+  /**
+   * YAML and schema errors (Simulate does not start while there are errors) and warnings found with the workflow
+   * (unknown block ids, results that don't fit the block type, JSON that doesn't match the JSON fields). `stepId`
+   * names the block a problem belongs to; ranges are in the simulation file.
+   */
+  diagnostics: Diagnostic[];
 }
 
 export interface WorkflowSummary {
@@ -291,7 +320,18 @@ export type WorkflowEditorToHost =
    */
   | { type: 'reviewFiles'; runId: string; decision: 'kept' | 'reverted'; paths?: string[] }
   /** Opens the VS Code diff editor for one reviewed file (before the run on the left). */
-  | { type: 'openReviewDiff'; runId: string; path: string };
+  | { type: 'openReviewDiff'; runId: string; path: string }
+  /**
+   * Run from here: starts a run that reuses the outputs of the finished run `runId` for the blocks before
+   * `stepId` (document order) and runs from `stepId` on. `inputs` are that run's inputs, possibly edited.
+   */
+  | { type: 'runFromHere'; runId: string; stepId: string; inputs: Record<string, unknown> }
+  /** Test mode: runs the workflow with the mocks of its simulation file; nothing is executed. */
+  | { type: 'simulate'; inputs: Record<string, unknown> }
+  /** Replaces the mocks of one block in the simulation file (null or [] removes them); creates the file. */
+  | { type: 'setSimulationMocks'; stepId: string; results: SimulationResult[] | null }
+  /** Opens the simulation file beside the canvas, created from a short template when it is missing. */
+  | { type: 'openSimulationFile' };
 
 export type HostToWorkflowEditor =
   | { type: 'document'; doc: WorkflowDocumentState }
@@ -311,7 +351,14 @@ export type HostToWorkflowEditor =
    * Review of the run shown on the canvas, sent after every `run` message and whenever the review changes;
    * null when that run changed no files or its review data was removed with the history.
    */
-  | { type: 'review'; review: RunReview | null };
+  | { type: 'review'; review: RunReview | null }
+  /** The workflow's simulation file; sent after `ready` and whenever the file or the workflow changes. */
+  | { type: 'simulation'; simulation: SimulationState }
+  /**
+   * Live values of the newest finished run of this workflow, used while the canvas shows no run. Sent after
+   * `ready` and whenever another run becomes the newest finished one; null when there is none.
+   */
+  | { type: 'lastRunContext'; context: LiveContext | null };
 
 /* ---------- agent editor ---------- */
 

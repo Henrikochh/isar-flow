@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import type { RunView, Workflow } from '@isar-flow/core';
-import { Banner, Button, Chip, StatusGlyph, statusLabel } from '../../../../components';
+import { Banner, Button, Chip, SimulatedChip, StatusGlyph, statusLabel } from '../../../../components';
 import { formatCost, formatDuration, formatRelativeTime, formatTokens } from '../../../../hooks';
 import { blockTrends, COST_TITLE, runCost } from '../../metrics';
 import { useWorkflowActions, useWorkflowState } from '../../store';
 import { useNow } from '../useNow';
 import { BlockTable } from './BlockTable';
+import { RunOriginNote } from './RunOriginNote';
 import { TrendTable } from './TrendTable';
 
 function formatInput(value: unknown): string {
@@ -49,6 +50,7 @@ export function RunSummary({ run, live, workflow }: { run: RunView; live: boolea
                   : 'Latest run'
                 : `Started ${formatRelativeTime(run.startedAt, now)}`}
             </span>
+            {run.simulated ? <SimulatedChip /> : null}
           </div>
         </div>
         {live ? null : (
@@ -57,6 +59,8 @@ export function RunSummary({ run, live, workflow }: { run: RunView; live: boolea
           </Button>
         )}
       </div>
+
+      <RunOriginNote run={run} />
 
       {totalTokens > 0 ? (
         <div className="wf-insp-chips wf-run-totals">

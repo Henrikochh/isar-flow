@@ -8,6 +8,10 @@ import { TemplateText } from './TemplateText';
 
 type Raw = Record<string, unknown>;
 
+/** Block id for live values; lenient blocks may have none. */
+const idOf = (step: Raw): string | undefined =>
+  typeof step.id === 'string' && step.id ? step.id : undefined;
+
 const SHELL_LABELS: Record<string, string> = {
   pwsh: 'pwsh',
   powershell: 'Windows PowerShell',
@@ -21,9 +25,9 @@ function Chips({ children }: { children: ReactNode[] }) {
   return items.length ? <div className="wf-card__chips">{items}</div> : null;
 }
 
-function Clamped({ text, placeholder }: { text: string; placeholder: string }) {
+function Clamped({ text, placeholder, stepId }: { text: string; placeholder: string; stepId?: string }) {
   return text.trim() ? (
-    <TemplateText className="wf-card__text" text={text.trim()} />
+    <TemplateText className="wf-card__text" text={text.trim()} stepId={stepId} />
   ) : (
     <span className="wf-card__placeholder">{placeholder}</span>
   );
@@ -61,7 +65,7 @@ function AgentBody({ step }: { step: Raw }) {
         {who}
         {model ? <code className="wf-card__model">{model}</code> : null}
       </div>
-      <Clamped text={textOf(step.prompt)} placeholder="No task yet" />
+      <Clamped text={textOf(step.prompt)} placeholder="No task yet" stepId={idOf(step)} />
       <Chips>
         {[
           capabilities ? <CapabilityChips key="can" source={capabilities} /> : null,
@@ -120,7 +124,7 @@ function StopBody({ step }: { step: Raw }) {
   return (
     <>
       <div className="wf-card__line">End run as {success ? 'succeeded' : 'failed'}</div>
-      {message ? <TemplateText className="wf-card__text" text={message} /> : null}
+      {message ? <TemplateText className="wf-card__text" text={message} stepId={idOf(step)} /> : null}
     </>
   );
 }
@@ -129,7 +133,7 @@ function ApprovalBody({ step }: { step: Raw }) {
   return (
     <>
       <div className="wf-card__line">Ask for approval</div>
-      <Clamped text={textOf(step.message)} placeholder="No message yet" />
+      <Clamped text={textOf(step.message)} placeholder="No message yet" stepId={idOf(step)} />
     </>
   );
 }

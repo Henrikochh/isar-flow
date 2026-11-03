@@ -40,10 +40,13 @@ function blocksOf(run: RunRecordSummary): [string, Record<string, unknown>][] {
   );
 }
 
-/** Trends of the newest `limit` finished runs that carry block numbers; undefined until there are two. */
+/**
+ * Trends of the newest `limit` finished runs that carry block numbers; undefined until there are two. Simulated runs
+ * executed nothing, so their numbers are left out.
+ */
 export function blockTrends(history: readonly RunRecordSummary[], limit = 20): WorkflowTrends | undefined {
   const runs = history
-    .filter((run) => isRecord(run) && run.status !== 'running' && blocksOf(run).length > 0)
+    .filter((run) => isRecord(run) && run.status !== 'running' && !run.simulated && blocksOf(run).length > 0)
     .sort((a, b) => (count(b.startedAt) ?? 0) - (count(a.startedAt) ?? 0))
     .slice(0, limit);
   if (runs.length < 2) return undefined;

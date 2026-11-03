@@ -1,0 +1,246 @@
+/* ---------- Live values: hover card, inspector list, condition results ---------- */
+
+.wf-livetip {
+  position: fixed;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: max-content;
+  min-width: 220px;
+  max-width: min(420px, calc(100vw - 16px));
+  padding: 10px 12px;
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, var(--if-border)));
+  border-radius: var(--if-radius-m);
+  background: var(--vscode-editorHoverWidget-background, var(--if-surface));
+  color: var(--vscode-editorHoverWidget-foreground, var(--if-fg));
+  box-shadow: 0 6px 20px var(--if-shadow);
+  font-size: var(--if-text-s);
+  line-height: 1.45;
+  animation: if-pop 120ms var(--if-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-livetip {
+    animation: none;
+  }
+}
+
+.wf-live-run {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wf-live-run__name {
+  font-weight: 600;
+}
+
+.wf-live-run__name--simulated {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: color-mix(in srgb, var(--if-enzian) var(--if-ink-strength), var(--if-fg));
+}
+
+.wf-live-run__time {
+  color: var(--if-muted);
+}
+
+.wf-livetip__expr {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wf-livetip__code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+}
+
+.wf-live-type {
+  flex: none;
+  margin-left: auto;
+  color: var(--if-muted);
+  font-size: var(--if-text-xs);
+}
+
+.wf-live-value {
+  max-height: 240px;
+  margin: 0;
+  overflow: auto;
+  padding: 6px 8px;
+  border-radius: var(--if-radius-s);
+  background: color-mix(in srgb, var(--if-fg) 7%, transparent);
+  color: var(--if-fg);
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+body.vscode-high-contrast .wf-live-value,
+body.vscode-high-contrast-light .wf-live-value {
+  border: 1px solid var(--if-border);
+  background: transparent;
+}
+
+.wf-live-note,
+.wf-live-msg {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  color: var(--if-muted);
+  font-size: var(--if-text-s);
+  overflow-wrap: anywhere;
+}
+
+.wf-live-msg__icon {
+  flex: none;
+  position: relative;
+  top: 2px;
+  font-size: 12px;
+}
+
+/* A template token on a card: underlined on hover only, when there is a value to show. */
+.wf-expr-live {
+  cursor: help;
+}
+
+.wf-expr-live:hover {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+/* ---------- Inspector: values of the templates in a field ---------- */
+
+.wf-livevals {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.wf-livevals__toggle {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 4px 0 0;
+  border: none;
+  border-radius: var(--if-radius-s);
+  background: transparent;
+  color: var(--if-muted);
+  font-size: var(--if-text-s);
+  text-align: left;
+}
+
+.wf-livevals__toggle:hover {
+  color: var(--if-fg);
+}
+
+.wf-livevals__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wf-liverow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  border-radius: var(--if-radius-s);
+}
+
+.wf-liverow__line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wf-liverow__main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 24px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--if-radius-s);
+  background: transparent;
+  color: var(--if-fg);
+  font-size: var(--if-text-s);
+  text-align: left;
+}
+
+.wf-liverow__main:hover {
+  background: var(--if-hover);
+}
+
+.wf-liverow__expr {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--if-fg) 9%, transparent);
+  font-family: var(--if-font-code);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-liverow__preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--if-fg);
+  font-family: var(--if-font-code);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-liverow__preview--muted {
+  color: var(--if-muted);
+  font-family: inherit;
+}
+
+.wf-liverow__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 6px 6px;
+}
+
+.wf-liverow__type {
+  color: var(--if-muted);
+  font-size: var(--if-text-xs);
+}
+
+/* ---------- Condition results ---------- */
+
+.wf-live-cond {
+  display: flex;
+  margin-top: 6px;
+}
+
+/* The condition builder's summary: the result on its own line, so it never reads as part of the condition. */
+.wf-cond-live {
+  display: block;
+  margin-top: 2px;
+  color: var(--if-muted);
+}

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useId } from 'react';
 import type { StepStatus, StepType } from '@isar-flow/core';
 import { BLOCK_ICONS, initialsOf } from '../blockMeta';
 
@@ -6,7 +6,8 @@ export function Spinner({ label }: { label?: string }) {
   return <span className="if-spinner" role={label ? 'status' : undefined} aria-label={label} />;
 }
 
-export type ChipTone = 'neutral' | 'isar' | 'success' | 'warning' | 'error' | 'outline';
+/** `simulated`: a simulated run, in the enzian tone. */
+export type ChipTone = 'neutral' | 'isar' | 'simulated' | 'success' | 'warning' | 'error' | 'outline';
 
 export function Chip({
   children,
@@ -72,15 +73,18 @@ export function AgentStone({ id, name, size = 'm' }: { id: string; name: string;
   );
 }
 
-export type BannerTone = 'info' | 'warning' | 'error' | 'success';
+/** `simulated`: a simulated run is shown. */
+export type BannerTone = 'info' | 'warning' | 'error' | 'success' | 'simulated';
 
 const BANNER_ICONS: Record<BannerTone, string> = {
   info: 'info',
   warning: 'warning',
   error: 'error',
   success: 'pass',
+  simulated: 'beaker',
 };
 
+/** A banner with a title is named by it, so assistive tech can tell several banners apart. */
 export function Banner({
   tone = 'info',
   title,
@@ -92,11 +96,20 @@ export function Banner({
   children?: ReactNode;
   actions?: ReactNode;
 }) {
+  const titleId = useId();
   return (
-    <div className={`if-banner if-banner--${tone}`} role={tone === 'error' ? 'alert' : 'status'}>
+    <div
+      className={`if-banner if-banner--${tone}`}
+      role={tone === 'error' ? 'alert' : 'status'}
+      aria-labelledby={title ? titleId : undefined}
+    >
       <i className={`codicon codicon-${BANNER_ICONS[tone]}`} aria-hidden="true" />
       <div className="if-banner__body">
-        {title ? <div className="if-banner__title">{title}</div> : null}
+        {title ? (
+          <div id={titleId} className="if-banner__title">
+            {title}
+          </div>
+        ) : null}
         {children ? <div>{children}</div> : null}
         {actions ? <div className="if-banner__actions">{actions}</div> : null}
       </div>

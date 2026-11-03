@@ -1,5 +1,5 @@
 import type { ActiveRunSummary, RunRecordSummary } from '@isar-flow/core';
-import { Chip, Section, StatusGlyph } from '../../components';
+import { Chip, RunOriginChip, Section, StatusGlyph } from '../../components';
 import { formatDuration, formatRelativeTime } from '../../hooks';
 import { formatElapsed, send, uniqueKeys } from './model';
 
@@ -75,15 +75,18 @@ export function RecentRuns({
                   {run.durationMs !== undefined ? <span>{formatDuration(run.durationMs)}</span> : null}
                   <span>{formatRelativeTime(run.startedAt, now)}</span>
                 </span>
-                {pendingReviews(run) > 0 ? (
+                {pendingReviews(run) > 0 || run.simulated || run.resumedFrom ? (
                   <span className="sb-run__review">
-                    <Chip
-                      tone="warning"
-                      icon="diff"
-                      title="Files this run changed that you have not kept or reverted"
-                    >
-                      {`${pendingReviews(run)} to review`}
-                    </Chip>
+                    <RunOriginChip run={run} />
+                    {pendingReviews(run) > 0 ? (
+                      <Chip
+                        tone="warning"
+                        icon="diff"
+                        title="Files this run changed that you have not kept or reverted"
+                      >
+                        {`${pendingReviews(run)} to review`}
+                      </Chip>
+                    ) : null}
                   </span>
                 ) : null}
                 {run.error ? (

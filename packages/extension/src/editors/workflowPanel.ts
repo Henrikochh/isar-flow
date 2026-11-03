@@ -2,8 +2,12 @@ import * as vscode from 'vscode';
 import {
   applyWorkflowOps,
   type HostToWorkflowEditor,
+  liveContext,
   parseWorkflowText,
   type RunEvent,
+  type RunRecordSummary,
+  STEP_ID_PATTERN,
+  type Workflow,
   type WorkflowDocumentState,
   type WorkflowEditorToHost,
   type WorkflowOp,
@@ -14,9 +18,17 @@ import { buildWorkflowDocumentState, validationContext } from './documentState';
 import { EditQueue } from './editQueue';
 import { fileNameOf } from './files';
 import { AGENT_EDITOR_VIEW_TYPE, DOCUMENT_DEBOUNCE_MS, type EditorDocument, type EditorUi } from './host';
+import { cleanSimulationResults, isPlainObject } from './simulationMocks';
 
 const UNTRUSTED_REVIEW = 'Trust this workspace to keep or revert changes.';
+const NOT_RUN = 'The workflow was not run because it could not be saved. Save the file, then run it again.';
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/** Identifies the newest run as the webview knows it: another id or status means new live values. */
+const runKey = (record: RunRecordSummary | undefined) => (record ? `${record.runId}\n${record.status}` : '');
+
+/** `x.sim.yaml` and `x.sim.yml` are the same simulation file for a workflow (the store picks one). */
+const simulationBase = (uri: string) => uri.replace(/\.sim\.ya?ml$/i, '');
 
 /**
  * Host side of one workflow canvas: answers webview messages and keeps the webview in sync with the document,
@@ -37,6 +49,12 @@ export class WorkflowPanel implements vscode.Disposable {
   /** Registration with the approval broker; held while the panel is visible. */
   private attachment: vscode.Disposable | undefined;
   private readonly edits: EditQueue;
+  /** Counts simulation reads; only the newest one is posted. */
+  private simulationReads = 0;
+  /** Counts reads of the newest run; only the newest one is posted. */
+  private lastRunReads = 0;
+  /** runKey of the newest run whose context was posted. */
+  private lastRunKey: string | undefined;
 
   constructor(
     private readonly document: EditorDocument,
@@ -56,7 +74,10 @@ export class WorkflowPanel implements vscode.Disposable {
       runs.onEvent(({ workflowUri, event }) => {
         if (forThisWorkflow(workflowUri)) this.onRunEvent(event);
       }),
-      runs.history.onDidChange(() => this.sendHistory()),
+      runs.history.onDidChange(() => {
+        this.sendHistory();
+        if (this.ready && runKey(this.newestRun()) !== this.lastRunKey) void this.sendLastRunContext();
+      }),
       runs.approvals.onDidRequest(({ workflowUri, ...prompt }) => {
         if (forThisWorkflow(workflowUri)) this.post({ type: 'approvalRequest', prompt });
       }),
@@ -68,6 +89,15 @@ export class WorkflowPanel implements vscode.Disposable {
       this.subscriptions.push(
         runs.reviews.onDidChange(({ workflowUri, runId }) => {
           if (forThisWorkflow(workflowUri) && runId === this.shownRunId) void this.sendReview();
+        }),
+      );
+    }
+    const { simulations } = runs;
+    if (simulations) {
+      this.subscriptions.push(
+        simulations.onDidChange(({ uri }) => {
+          const own = simulations.uriFor(document.uri).toString();
+          if (simulationBase(uri) === simulationBase(own)) void this.sendSimulation();
         }),
       );
     }
@@ -105,6 +135,14 @@ export class WorkflowPanel implements vscode.Disposable {
         return this.reviewFiles(message.runId, message.decision, message.paths);
       case 'openReviewDiff':
         return this.openReviewDiff(message.runId, message.path);
+      case 'runFromHere':
+        return this.runFromHere(message.runId, message.stepId, message.inputs);
+      case 'simulate':
+        return this.simulate(message.inputs);
+      case 'setSimulationMocks':
+        return this.setSimulationMocks(message.stepId, message.results);
+      case 'openSimulationFile':
+        return this.openSimulationFile();
       default: {
         const unknown: never = message;
         throw new Error(`Unknown workflow editor message ${JSON.stringify(unknown)}`);
@@ -164,10 +202,44 @@ export class WorkflowPanel implements vscode.Disposable {
     if (!this.disposed) this.send(message);
   }
 
+  /** Sends the document, then the simulation file checked against the workflow in it. */
   private sendDocument(): void {
     clearTimeout(this.timer);
     this.timer = undefined;
-    this.post({ type: 'document', doc: this.state() });
+    const doc = this.state();
+    this.post({ type: 'document', doc });
+    void this.sendSimulation(doc.workflow);
+  }
+
+  /** `workflow` defaults to the one in the current text. */
+  private async sendSimulation(workflow?: Workflow | null): Promise<void> {
+    const { simulations } = this.services.runs;
+    if (!simulations || !this.ready) return;
+    const read = ++this.simulationReads;
+    const checked = workflow === undefined ? parseWorkflowText(this.document.getText()).workflow : workflow;
+    try {
+      const simulation = await simulations.state(this.document.uri, checked);
+      // A newer read (the document or the file changed meanwhile) posts instead.
+      if (read === this.simulationReads) this.post({ type: 'simulation', simulation });
+    } catch (error) {
+      this.services.output.warn(`Could not read the simulation file: ${errorText(error)}`);
+    }
+  }
+
+  private newestRun(): RunRecordSummary | undefined {
+    return this.services.runs.history.list(this.uri)[0];
+  }
+
+  /** Posts the live values of the newest run of this workflow (null when there is none or it can't be read). */
+  private async sendLastRunContext(): Promise<void> {
+    const { history } = this.services.runs;
+    const newest = this.newestRun();
+    this.lastRunKey = runKey(newest);
+    const read = ++this.lastRunReads;
+    if (!newest) return this.post({ type: 'lastRunContext', context: null });
+    const view = history.get(newest.runId) ?? (await history.getAsync(newest.runId).catch(() => undefined));
+    if (read !== this.lastRunReads) return;
+    this.post({ type: 'lastRunContext', context: view ? liveContext(view) : null });
   }
 
   /** Diagnostics depend on the known agents and models, so the document is re-sent too. */
@@ -192,6 +264,7 @@ export class WorkflowPanel implements vscode.Disposable {
     this.post({ type: 'catalog', agents: agents.list(), catalog: models.catalog() });
     this.post({ type: 'trust', trusted: this.ui.isTrusted() });
     this.sendHistory();
+    void this.sendLastRunContext();
     const requested = this.requestedRunId;
     this.requestedRunId = undefined;
     this.historyRunId = undefined;
@@ -299,18 +372,72 @@ export class WorkflowPanel implements vscode.Disposable {
 
   private async applyOps(ops: WorkflowOp[]): Promise<void> {
     const outcome = await this.edits.apply((text) => applyWorkflowOps(text, ops));
-    if (outcome.status === 'applied') this.sendDocument();
-    else if (outcome.status === 'failed') this.post({ type: 'opsFailed', error: outcome.error });
+    if (outcome.status === 'applied') {
+      this.sendDocument();
+      await this.moveMocksOfRenamedBlocks(ops);
+    } else if (outcome.status === 'failed') {
+      this.post({ type: 'opsFailed', error: outcome.error });
+    }
+  }
+
+  /** Keeps the mocks with their block; a failed move only costs the mocks, so it is logged, not shown. */
+  private async moveMocksOfRenamedBlocks(ops: WorkflowOp[]): Promise<void> {
+    const { simulations } = this.services.runs;
+    if (!simulations) return;
+    for (const op of ops) {
+      if (op.op !== 'renameStep' || op.newId === op.stepId) continue;
+      try {
+        await simulations.renameBlock(this.document.uri, op.stepId, op.newId);
+      } catch (error) {
+        this.services.output.warn(
+          `Could not move the simulation mocks of ${op.stepId} to ${op.newId}: ${errorText(error)}`,
+        );
+      }
+    }
+  }
+
+  /** Runs use the saved file; false when saving failed (the error is shown). */
+  private async saveFirst(notStarted: string): Promise<boolean> {
+    if (!this.document.isDirty || (await this.document.save())) return true;
+    this.ui.showError(notStarted);
+    return false;
   }
 
   private async run(inputs: Record<string, unknown>): Promise<void> {
-    if (this.document.isDirty && !(await this.document.save())) {
-      this.ui.showError(
-        'The workflow was not run because it could not be saved. Save the file, then run it again.',
-      );
-      return;
+    if (await this.saveFirst(NOT_RUN)) await this.services.runs.start(this.document.uri, inputs);
+  }
+
+  private async runFromHere(runId: unknown, stepId: unknown, inputs: unknown): Promise<void> {
+    if (typeof runId !== 'string' || typeof stepId !== 'string' || !isPlainObject(inputs)) return;
+    if (!this.ownsRun(runId) || !(await this.saveFirst(NOT_RUN))) return;
+    await this.services.runs.start(this.document.uri, inputs, { resume: { runId, stepId } });
+  }
+
+  /** Simulates the text as it is, unsaved edits included: a simulation never writes files, not even this one. */
+  private async simulate(inputs: unknown): Promise<void> {
+    if (!isPlainObject(inputs)) return;
+    await this.services.runs.start(this.document.uri, inputs, { simulate: true });
+  }
+
+  private async setSimulationMocks(stepId: unknown, results: unknown): Promise<void> {
+    const { simulations } = this.services.runs;
+    if (!simulations || typeof stepId !== 'string' || !STEP_ID_PATTERN.test(stepId)) return;
+    if (results !== null && !Array.isArray(results)) return;
+    try {
+      await simulations.setBlock(this.document.uri, stepId, results && cleanSimulationResults(results));
+    } catch (error) {
+      this.ui.showError(`Could not save the simulation mocks: ${errorText(error)}`);
     }
-    await this.services.runs.start(this.document.uri, inputs);
+  }
+
+  private async openSimulationFile(): Promise<void> {
+    const { simulations } = this.services.runs;
+    if (!simulations) return;
+    try {
+      await simulations.open(this.document.uri);
+    } catch (error) {
+      this.ui.showError(`Could not open the simulation file: ${errorText(error)}`);
+    }
   }
 
   private async openYaml(stepId: string | undefined): Promise<void> {

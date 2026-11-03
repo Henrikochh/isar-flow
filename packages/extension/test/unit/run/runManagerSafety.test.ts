@@ -6,7 +6,7 @@ import type { AgentStore, ModelRegistry, RunConsoleCommand, RunManagerDeps } fro
 import { createRunHistory } from '../../../src/run/history';
 import { createRunManager, type RunManagerUi } from '../../../src/run/runManager';
 import { gitIn, hasGit, initRepo, removeTempDirs, tempDir } from '../safety/gitRepo';
-import { FakeMemento, FakeSecretStorage, FakeTerminal, flush, memoryStore } from './fakes';
+import { FakeMemento, FakeSecretStorage, FakeTerminal, fakeSimulations, flush, memoryStore } from './fakes';
 
 const describeGit = hasGit ? describe : describe.skip;
 
@@ -59,7 +59,7 @@ describeGit('run manager with the safety net', { timeout: 60_000 }, () => {
       createStatusItem: () => ({ text: '', show: () => undefined, dispose: () => undefined }),
     };
     const history = createRunHistory(memoryStore(), new FakeMemento(), () => 50);
-    const manager = createRunManager(deps, { ui, history, env: {} });
+    const manager = createRunManager(deps, { ui, history, env: {}, simulations: fakeSimulations() });
     const uri = vscode.Uri.file(path.join(repo, 'build.workflow.yaml'));
 
     const runId = (await manager.start(uri)) as string;

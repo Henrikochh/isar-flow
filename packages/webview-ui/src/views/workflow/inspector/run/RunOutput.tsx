@@ -10,12 +10,14 @@ import {
   TextInput,
 } from '../../../../components';
 import { formatDuration } from '../../../../hooks';
+import { sourceRunLabel } from '../../runFromHere/model';
 import { useWorkflowActions, useWorkflowState } from '../../store';
 import { asNumber, asString, isRecord } from '../model';
 import { useNow } from '../useNow';
 import { BlockMetrics } from './BlockMetrics';
 import { DetailBlock } from './DetailBlock';
 import { LogViewer } from './LogViewer';
+import { RunFromHereButton } from './RunFromHereButton';
 
 const DETAIL_LABELS: Record<string, string> = {
   agent: 'Sent to the agent',
@@ -26,13 +28,14 @@ const DETAIL_LABELS: Record<string, string> = {
 
 /** "Run output" tab of a selected block. */
 export function RunOutput({ block, stepId, run }: { block: BlockNode; stepId: string; run: RunView }) {
-  const { approvals } = useWorkflowState();
+  const { approvals, history } = useWorkflowState();
   const stepRun = run.steps[stepId];
   const type = asString((block.step as unknown as Record<string, unknown>).type);
   if (!stepRun) {
     return (
       <div className="wf-insp-form">
         <StatusLine status="pending" stepRun={undefined} />
+        <RunFromHereButton run={run} stepId={stepId} />
         <p className="wf-insp-note">
           {run.status === 'running'
             ? 'This block has not started yet.'
@@ -53,6 +56,12 @@ export function RunOutput({ block, stepId, run }: { block: BlockNode; stepId: st
             : undefined
         }
       />
+      <RunFromHereButton run={run} stepId={stepId} />
+      {stepRun.reused ? (
+        <p className="wf-insp-note">
+          {`This block didn't run: its result comes from ${sourceRunLabel(run, history) ?? 'the run this one continues'}.`}
+        </p>
+      ) : null}
       {stepRun.error ? (
         <Banner tone="error" title={stepRun.status === 'cancelled' ? 'Cancelled' : 'This block failed'}>
           <span className="wf-insp-pre">{stepRun.error}</span>
@@ -88,18 +97,29 @@ function StatusLine({
 }) {
   const running = status === 'running';
   const now = useNow(running);
-  // A host clock ahead of ours would show a negative time; leave it out instead.
+  // A host clock ahead of ours would show a negative time; leave it out instead. A reused block took no time.
   const duration = running
     ? stepRun?.startedAt && now >= stepRun.startedAt
       ? now - stepRun.startedAt
       : undefined
-    : stepRun?.durationMs;
+    : stepRun?.reused
+      ? undefined
+      : stepRun?.durationMs;
   return (
     <div className="wf-run-status" data-status={status}>
       <StatusGlyph status={status} />
       <span className="wf-run-status-label">{label ?? statusLabel(status)}</span>
       {duration !== undefined ? <span className="wf-run-status-time">{formatDuration(duration)}</span> : null}
       <span className="wf-run-status-chips">
+        {stepRun?.reused ? (
+          <Chip
+            tone="outline"
+            icon="history"
+            title="Not run: the result comes from the run this one continues."
+          >
+            Reused
+          </Chip>
+        ) : null}
         {stepRun?.iteration !== undefined ? (
           <Chip tone="outline">{`Iteration ${stepRun.iteration}`}</Chip>
         ) : null}

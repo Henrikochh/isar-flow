@@ -1,5 +1,12 @@
 import type { ChatMessage } from '../models/types';
-import type { AgentDefinition, AgentSettings, OutputShape, ShellName, StepType } from '../schema/types';
+import type {
+  AgentDefinition,
+  AgentSettings,
+  OutputShape,
+  ShellName,
+  SimulationFile,
+  StepType,
+} from '../schema/types';
 
 export type StepStatus = 'pending' | 'running' | 'success' | 'failure' | 'skipped' | 'cancelled';
 export type RunStatus = 'running' | 'success' | 'failure' | 'cancelled';
@@ -91,6 +98,71 @@ export interface EngineHost {
   requestApproval(req: ApprovalRequest, io: StepIO): Promise<ApprovalResult>;
 }
 
+/* ---------- test mode (simulation) ---------- */
+
+export interface SimulationHostOptions {
+  /** Mocks of the workflow's simulation file; blocks without mocks get the defaults. */
+  file: SimulationFile;
+  /** Pause per host call in ms, so the canvas can show the flow (default 0). */
+  delayMs?: number;
+}
+
+/**
+ * Engine host of a simulated run (createSimulationHost): no commands, no model calls, no file changes. Call n of
+ * a block uses its mock n; the last mock repeats. Approvals are answered from the mocks or the file's `approvals`
+ * default without asking anyone.
+ */
+export interface SimulationHost extends EngineHost {
+  /** Host calls per block id so far (retries and loop iterations count). */
+  calls(): Record<string, number>;
+}
+
+/* ---------- run from here (resume) ---------- */
+
+/** The run a resumed run continues and the block it started at. */
+export interface ResumedFrom {
+  runId: string;
+  stepId: string;
+}
+
+/** Run from here: where a new run continues a finished one. */
+export interface ResumeOptions {
+  /** The run this one continues (copied to run-start as `resumedFrom.runId`). */
+  fromRunId: string;
+  /**
+   * Block to start at. Blocks before it in document order are not executed; containers that contain it are
+   * entered without re-evaluating what led there; from the target on everything runs normally.
+   */
+  stepId: string;
+  /**
+   * Outputs of the source run by block id (its RunView step outputs; secrets are already masked there). Blocks
+   * before the target that have one are reported with a `reused` step-end and seed `steps.<id>`.
+   */
+  outputs: Record<string, StepOutput>;
+  /** Iteration to continue at for each loop that contains the target, by loop id (1-based; missing = 1). */
+  loopIterations: Record<string, number>;
+  /**
+   * Block hashes of the source run (its RunView.blockHashes; missing for runs saved before they existed). A reused
+   * output comes from the source run's YAML, so run-start records these hashes for the reused blocks.
+   */
+  blockHashes?: Record<string, string>;
+}
+
+/* ---------- live values ---------- */
+
+/**
+ * What expressions could read besides inputs and block outputs, captured at run start for live values. Holds
+ * names only: env and secret values are never stored.
+ */
+export interface RunContextSnapshot {
+  /** Names of `env.*`: the process environment plus the workflow's `env` keys, sorted, without duplicates. */
+  env: string[];
+  /** Names of `secrets.*`, sorted. */
+  secrets: string[];
+  workflow: { name: string; file: string };
+  workspace: { root: string };
+}
+
 export interface RunOptions {
   runId: string;
   inputs: Record<string, unknown>;
@@ -112,6 +184,13 @@ export interface RunOptions {
   defaultShell?: ShellName;
   /** Clock, injectable for tests. Defaults to Date.now. */
   now?: () => number;
+  /** Run from here: continue a finished run at a block (see ResumeOptions); `inputs` are this run's inputs. */
+  resume?: ResumeOptions;
+  /**
+   * Test mode: marks the run as simulated in its run-start event. The engine runs as usual; the caller passes a
+   * simulation host, so nothing is executed.
+   */
+  simulated?: boolean;
 }
 
 /**
@@ -131,6 +210,14 @@ export type RunEvent =
       workflowName: string;
       startedAt: number;
       inputs: Record<string, unknown>;
+      /** Run from here: the run this one continues and the block it starts at. */
+      resumedFrom?: ResumedFrom;
+      /** Test mode (RunOptions.simulated). */
+      simulated?: boolean;
+      /** Names expressions can read besides inputs and block outputs (live values). */
+      context?: RunContextSnapshot;
+      /** Hash of each block's own YAML at run start, by block id, for "changed since that run" (Run from here). */
+      blockHashes?: Record<string, string>;
     }
   | {
       type: 'step-start';
@@ -153,6 +240,11 @@ export type RunEvent =
       error?: string;
       durationMs: number;
       at: number;
+      /**
+       * Run from here: the block was not executed. `status` and `output` are copied from the run this one
+       * continues; no step-start precedes it, `durationMs` is 0, and its usage does not count for this run.
+       */
+      reused?: boolean;
     }
   | { type: 'loop-iteration'; runId: string; stepId: string; iteration: number; maxIterations: number }
   | {

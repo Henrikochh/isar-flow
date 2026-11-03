@@ -26,7 +26,8 @@ function details(numbers: BlockNumbers): string {
 
 export function CardMetrics({ entry, status }: { entry: BlockEntry; status: StepStatus | undefined }) {
   const { run, prices } = useCanvas();
-  if (!run || !entry.id || !FINISHED.has(status)) return null;
+  // A simulated run executed nothing, so its times and costs mean nothing.
+  if (!run || run.simulated || !entry.id || !FINISHED.has(status)) return null;
   const numbers = blockNumbers(run.steps[entry.id]);
   if (!numbers) return null;
   const tokens = totalTokens(numbers);

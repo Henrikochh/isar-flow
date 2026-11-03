@@ -8,6 +8,7 @@ import {
   type StepType,
 } from '@isar-flow/core';
 import { Banner, Button, SegmentedControl, Select, type SelectOption } from '../../../components';
+import { useConditionResultText } from '../live/conditionResult';
 import { useWorkflowActions } from '../store';
 import {
   type Combinator,
@@ -72,6 +73,7 @@ export function ConditionBuilder({
   issues,
 }: ConditionBuilderProps) {
   const actions = useWorkflowActions();
+  const lastResult = useConditionResultText(stepId);
   const [mode, setMode] = useState<Mode>(() => initialMode(condition));
   const [startOver, setStartOver] = useState(false);
   const nested = isNestedCondition(condition);
@@ -171,6 +173,7 @@ export function ConditionBuilder({
       {summary ? (
         <p className="wf-cond-summary" aria-live="polite">
           <span className="wf-cond-summary-lead">{summaryPrefix}</span> {summary}
+          {lastResult ? <span className="wf-cond-live">{lastResult}</span> : null}
         </p>
       ) : null}
       <FieldIssues issues={issues} />

@@ -1432,3 +1432,15 @@ body.vscode-high-contrast-light .wf-bank__shape {
   stroke: var(--if-kies);
   stroke-width: 1px;
 }
+
+/* ---- Run from here and Simulate: how the shown run started, reused blocks ---- */
+.wf-marker__origin {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.wf-card__reused {
+  display: inline-flex;
+  flex: none;
+}

@@ -301,6 +301,8 @@ body.vscode-high-contrast-light .sb-run::before {
 .sb-run__review {
   grid-area: review;
   display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   min-width: 0;
   margin: 2px 0 1px;
 }
