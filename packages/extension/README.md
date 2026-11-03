@@ -15,8 +15,9 @@ result, and a loop repeats the fix until the tests pass and the reviewer approve
   channel. Add blocks from the palette or with the **+** between blocks, drag them, or move them with **Move
   to…** and the keyboard. Every visual edit changes only the affected lines of the YAML and keeps your
   comments. Problems show up as you type, on the canvas and in the Problems view.
-- **Blocks**: Agent, Console, Loop (until, while or a fixed number of times), If / else, Break, Stop and
-  Approval (a person decides before the run goes on).
+- **Blocks**: Agent, Console, Loop (until, while or a fixed number of times), If / else, Break, Stop,
+  Approval (a person decides before the run goes on) and Ask (a question with choices, a default and a
+  timeout).
 - **Expressions and conditions**: `${{ steps.tests.exitCode == 0 }}`, `${{ tail(steps.tests.output, 80) }}`,
   17 functions, and a condition builder that writes rules for you.
 - **Agents**: create agents for the workspace (`.isarflow/agents/`) or for your user. Each has a model,
@@ -36,6 +37,20 @@ result, and a loop repeats the fix until the tests pass and the reviewer approve
 - **Local models**: tolerant edits and patches, tool calls written as text for models without native tool
   calling, and conversation summaries before the context runs out. **Test model** and **Check setup** show
   what works and how to fix the rest.
+- **Workflows on code**: `${{ editor.selection }}`, `editor.file`, `git.branch`, `git.diff` and more are
+  captured when a run starts. **Run workflow on selection** in the editor context menu runs a workflow on the
+  selected text.
+- **Triggers**: `on: { save: …, change: …, schedule: { every: 1h } }` starts a workflow by itself, only in
+  trusted workspaces and after you approved its commands once (or ran it once, when it has nothing to
+  confirm). A status bar item and the canvas show what the triggers did and why they are paused.
+- **Notifications**: approvals and questions reach you while the canvas is closed, and finished runs report
+  back with **Review changes** and **Open run**.
+- **Project memory**: agents read `.isarflow/memory.md` and, with memory set to write, add dated notes with
+  the `remember` tool.
+- **Copilot**: workflows with `expose: true` can be listed and run from Copilot chat through two tools and
+  `@isarflow` (`/list`, `/run`, `/status`). You confirm every run.
+- **Run reports**: **Export report** saves a Markdown report of a run; **Copy for PR description** copies a
+  short summary.
 
 ## Quick start
 
@@ -169,13 +184,15 @@ steps:
 | `break`    | ends the innermost loop                                                                                                                                     |                                                      |
 | `stop`     | `outcome: success \| failure`, `message`                                                                                                                    |                                                      |
 | `approval` | `message`, `onReject: stop \| continue`                                                                                                                     | `approved`, `comment`                                |
+| `ask`      | `question`, `choices`, `default`                                                                                                                            | `answer`, `timedOut`                                 |
 
 Every block also accepts `name`, `timeout` (seconds), `continueOnError` and `retry: { max, delay }`, and
 exposes `status`, `durationMs` and, when it failed, `error`. A console block fails on a non-zero exit code
 unless `continueOnError: true` is set.
 
 **Expressions**: `${{ … }}` inside any string. Roots: `inputs`, `steps`, `env`, `loop` (`iteration`,
-`index`), `workflow`, `workspace`, `run` and `secrets`. Operators: `! - * / % + < <= > >= == != && ||` and
+`index`), `workflow`, `workspace`, `run`, `secrets`, `editor` (`selection`, `file`, `language`, `line`) and
+`git` (`branch`, `changedFiles`, `diff`). Operators: `! - * / % + < <= > >= == != && ||` and
 `a ? b : c`. Functions: `contains`, `startsWith`, `endsWith`, `matches`, `length`, `lower`, `upper`, `trim`,
 `head`, `tail`, `lines`, `json`, `toJSON`, `join`, `default`, `number`, `string`.
 
@@ -247,6 +264,7 @@ before you run them.
 | `isarFlow.historyLimit`       | `50`    | Runs kept per workflow (1–500). Snapshots and worktrees of older runs are removed too.                              |
 | `isarFlow.agentContextTokens` | `24000` | Context size for models that don't report one. Agent conversations are summarized at 70 % of it.                    |
 | `isarFlow.modelPrices`        | `{}`    | Prices per 1 million input and output tokens by model reference, for cost estimates.                                |
+| `isarFlow.triggers.enabled`   | `true`  | Start workflows from their `on:` triggers while VS Code is open (trusted workspaces, approved commands only).       |
 
 ## Troubleshooting
 

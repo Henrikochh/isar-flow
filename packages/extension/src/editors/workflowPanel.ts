@@ -13,11 +13,15 @@ import {
   type WorkflowOp,
 } from '@isar-flow/core';
 import type { ActiveRun, Services } from '../contracts';
+import { REPORT_COMMANDS } from '../report/commandIds';
+import { ALREADY_ANSWERED } from '../run/asks';
 import type { PendingApprovals } from './approvals';
+import { askPromptOf } from './askPrompt';
 import { buildWorkflowDocumentState, validationContext } from './documentState';
 import { EditQueue } from './editQueue';
 import { fileNameOf } from './files';
 import { AGENT_EDITOR_VIEW_TYPE, DOCUMENT_DEBOUNCE_MS, type EditorDocument, type EditorUi } from './host';
+import { isarFlowSettingsQuery } from './settingsQuery';
 import { cleanSimulationResults, isPlainObject } from './simulationMocks';
 
 const UNTRUSTED_REVIEW = 'Trust this workspace to keep or revert changes.';
@@ -46,7 +50,7 @@ export class WorkflowPanel implements vscode.Disposable {
   private requestedRunId: string | undefined;
   /** Run on the canvas (live or past), whose review the canvas shows. */
   private shownRunId: string | undefined;
-  /** Registration with the approval broker; held while the panel is visible. */
+  /** Registration with the approval and ask brokers; held while the panel is visible. */
   private attachment: vscode.Disposable | undefined;
   private readonly edits: EditQueue;
   /** Counts simulation reads; only the newest one is posted. */
@@ -92,12 +96,31 @@ export class WorkflowPanel implements vscode.Disposable {
         }),
       );
     }
-    const { simulations } = runs;
+    const { simulations, asks } = runs;
     if (simulations) {
       this.subscriptions.push(
         simulations.onDidChange(({ uri }) => {
           const own = simulations.uriFor(document.uri).toString();
           if (simulationBase(uri) === simulationBase(own)) void this.sendSimulation();
+        }),
+      );
+    }
+    if (asks) {
+      this.subscriptions.push(
+        asks.onDidRequest((event) => {
+          if (forThisWorkflow(event.workflowUri))
+            this.post({ type: 'askRequest', prompt: askPromptOf(event) });
+        }),
+        asks.onDidResolve(({ workflowUri, requestId }) => {
+          if (forThisWorkflow(workflowUri)) this.post({ type: 'askResolved', requestId });
+        }),
+      );
+    }
+    const { triggers } = services;
+    if (triggers) {
+      this.subscriptions.push(
+        triggers.onDidChange(({ workflowUri }) => {
+          if (forThisWorkflow(workflowUri) && this.ready) this.sendTriggers();
         }),
       );
     }
@@ -143,6 +166,18 @@ export class WorkflowPanel implements vscode.Disposable {
         return this.setSimulationMocks(message.stepId, message.results);
       case 'openSimulationFile':
         return this.openSimulationFile();
+      case 'answer':
+        return this.answerAsk(message.requestId, message.answer);
+      case 'runReport':
+        return this.runReport(message.runId, message.action);
+      case 'openSettings': {
+        const query = isarFlowSettingsQuery(message.query);
+        if (query) await this.ui.executeCommand('workbench.action.openSettings', query);
+        return;
+      }
+      case 'resumeTriggers':
+        this.services.triggers?.resume(this.uri);
+        return;
       default: {
         const unknown: never = message;
         throw new Error(`Unknown workflow editor message ${JSON.stringify(unknown)}`);
@@ -162,12 +197,20 @@ export class WorkflowPanel implements vscode.Disposable {
   }
 
   /**
-   * Approvals are answered inline only while the canvas is visible; for a hidden canvas the broker asks with a
-   * dialog instead, so a run never waits on a prompt nobody sees.
+   * Approvals and asks are answered inline only while the canvas is visible; for a hidden canvas the brokers ask
+   * with a notification instead, so a run never waits on a prompt nobody sees.
    */
   setVisible(visible: boolean): void {
     if (visible && !this.attachment && !this.disposed) {
-      this.attachment = this.services.runs.approvals.attach(this.uri);
+      const { approvals, asks } = this.services.runs;
+      const approvalAttachment = approvals.attach(this.uri);
+      const askAttachment = asks?.attach(this.uri);
+      this.attachment = {
+        dispose: () => {
+          approvalAttachment.dispose();
+          askAttachment?.dispose();
+        },
+      };
     } else if (!visible && this.attachment) {
       this.attachment.dispose();
       this.attachment = undefined;
@@ -277,6 +320,35 @@ export class WorkflowPanel implements vscode.Disposable {
       void this.sendReview();
     }
     for (const prompt of this.approvals.for(this.uri)) this.post({ type: 'approvalRequest', prompt });
+    // A reloaded webview lost its ask cards, so the open asks are sent again.
+    for (const prompt of this.services.runs.asks?.pending(this.uri) ?? []) {
+      this.post({ type: 'askRequest', prompt: askPromptOf(prompt) });
+    }
+    if (this.services.triggers) this.sendTriggers();
+  }
+
+  private sendTriggers(): void {
+    const { triggers } = this.services;
+    if (triggers) this.post({ type: 'triggers', triggers: triggers.state(this.uri) });
+  }
+
+  /** Like approvals: the answer counts only for an ask of this workflow that waits for an inline answer. */
+  private answerAsk(requestId: unknown, answer: unknown): void {
+    const { asks } = this.services.runs;
+    if (!asks || typeof requestId !== 'string' || typeof answer !== 'string') return;
+    // The webview removed its card already; a question that closed meanwhile (timeout, notification) says so.
+    if (!asks.pending(this.uri).some((prompt) => prompt.requestId === requestId)) {
+      this.ui.showInfo(ALREADY_ANSWERED);
+      return;
+    }
+    asks.respond(requestId, answer);
+  }
+
+  /** Export report / Copy for PR description for a run of this workflow (the commands report errors). */
+  private async runReport(runId: unknown, action: unknown): Promise<void> {
+    if (typeof runId !== 'string' || (action !== 'export' && action !== 'copyForPr')) return;
+    if (!this.ownsRun(runId)) return;
+    await this.ui.executeCommand(REPORT_COMMANDS[action], { runId, workflowUri: this.uri });
   }
 
   private async selectRun(runId: string | null): Promise<void> {

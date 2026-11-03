@@ -179,4 +179,22 @@ describe('sidebar messages', () => {
       expect(await run({ type: 'openSettings', query } as unknown as SidebarToHost)).toEqual([]);
     }
   });
+
+  it('opens the project memory of a folder, the first folder by default', async () => {
+    const { handle, deps } = setup();
+    const openMemory = vi.fn(async (_folder?: vscode.Uri) => undefined);
+    await handle({ type: 'openMemory' });
+    Object.assign(deps, { memory: { open: openMemory } });
+    const withMemory = createSidebarHandler(deps);
+    await withMemory({ type: 'openMemory', folderUri: 'file:///ws2' });
+    await withMemory({ type: 'openMemory' });
+    await withMemory({ type: 'openMemory', folderUri: 42 } as unknown as SidebarToHost);
+    await withMemory({ type: 'openMemory', folderUri: '' });
+    expect(openMemory.mock.calls.map(([folder]) => folder?.toString())).toEqual([
+      'file:///ws2',
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
 });

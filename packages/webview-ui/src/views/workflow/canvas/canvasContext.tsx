@@ -14,7 +14,7 @@ export interface CanvasData {
   agents: Map<string, AgentSummary>;
   /** `isarFlow.modelPrices`, for cost estimates on the cards. */
   prices: ModelPrices | undefined;
-  /** Blocks waiting for an approval decision. */
+  /** Blocks waiting for the user: an approval decision or an answer to a question. */
   awaitingApproval: Set<string>;
   /** Opens the block menu, at the pointer when `at` is given, else below the block's card. */
   openMenu(stepId: string, at?: { x: number; y: number }): void;
@@ -43,7 +43,10 @@ export function CanvasDataProvider({
   }, [state.doc?.diagnostics]);
 
   const agents = useMemo(() => new Map(state.agents.map((a) => [a.id, a])), [state.agents]);
-  const awaitingApproval = useMemo(() => new Set(state.approvals.map((a) => a.stepId)), [state.approvals]);
+  const awaitingApproval = useMemo(
+    () => new Set([...state.approvals, ...state.asks].map((prompt) => prompt.stepId)),
+    [state.approvals, state.asks],
+  );
   const selection = state.selection;
   const tabStop = selection && model.byId.has(selection) ? selection : (model.order[0] ?? null);
 

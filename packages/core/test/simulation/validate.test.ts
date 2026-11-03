@@ -104,22 +104,22 @@ describe('validateSimulation', () => {
       [
         'sim-no-host-call',
         'review_loop',
-        '"review_loop" is a loop block; only console, agent and approval blocks use mocks.',
+        '"review_loop" is a loop block; only console, agent, approval and ask blocks use mocks.',
       ],
       [
         'sim-no-host-call',
         'gate',
-        '"gate" is an if block; only console, agent and approval blocks use mocks.',
+        '"gate" is an if block; only console, agent, approval and ask blocks use mocks.',
       ],
       [
         'sim-no-host-call',
         'leave',
-        '"leave" is a break block; only console, agent and approval blocks use mocks.',
+        '"leave" is a break block; only console, agent, approval and ask blocks use mocks.',
       ],
       [
         'sim-no-host-call',
         'end',
-        '"end" is a stop block; only console, agent and approval blocks use mocks.',
+        '"end" is a stop block; only console, agent, approval and ask blocks use mocks.',
       ],
     ]);
     expect(diagnostics[0]).not.toHaveProperty('range');

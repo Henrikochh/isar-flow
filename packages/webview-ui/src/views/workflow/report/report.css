@@ -1,0 +1,7 @@
+/* Export report and Copy for PR description under the run summary's status. */
+.wf-run-report {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}

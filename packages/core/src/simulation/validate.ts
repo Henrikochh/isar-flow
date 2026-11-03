@@ -1,15 +1,25 @@
 import { checkJsonShape, extractJson, validateOutputShape } from '../agent/json';
 import type { Diagnostic, Range } from '../diagnostics';
+import { choiceList, matchChoice } from '../engine/choices';
 import { findStep } from '../schema/steps';
-import type { AgentStep, SimulationFile, SimulationResult, Step, StepType, Workflow } from '../schema/types';
+import type {
+  AgentStep,
+  AskStep,
+  SimulationFile,
+  SimulationResult,
+  Step,
+  StepType,
+  Workflow,
+} from '../schema/types';
 import { parseSimulationText } from './parse';
 
-type HostStepType = 'console' | 'agent' | 'approval';
+type HostStepType = 'console' | 'agent' | 'approval' | 'ask';
 
 const FIELDS: Record<HostStepType, { fields: readonly (keyof SimulationResult)[]; hint: string }> = {
   console: { fields: ['exitCode', 'output'], hint: 'Use exitCode and output.' },
   agent: { fields: ['text', 'json'], hint: 'Use text, or json for JSON answers.' },
   approval: { fields: ['approved', 'comment'], hint: 'Use approved and comment.' },
+  ask: { fields: ['answer'], hint: 'Use answer.' },
 };
 
 const ALL_FIELDS = Object.values(FIELDS).flatMap((entry) => entry.fields);
@@ -27,7 +37,7 @@ function tryExtractJson(text: string): { ok: true; value: unknown } | { ok: fals
 }
 
 interface Warning {
-  code: 'sim-field-mismatch' | 'sim-json-shape';
+  code: 'sim-field-mismatch' | 'sim-json-shape' | 'sim-ask-choice';
   message: string;
 }
 
@@ -59,9 +69,29 @@ function agentWarning(step: AgentStep, result: SimulationResult, label: string):
   };
 }
 
+/** Choices as written when none of them has a template (otherwise they are only known in the run). */
+function literalChoices(step: AskStep): string[] | undefined {
+  const choices: unknown = step.choices;
+  if (!Array.isArray(choices) || choices.length === 0) return undefined;
+  const texts = choices.filter((choice): choice is string => typeof choice === 'string');
+  if (texts.length !== choices.length || texts.some((choice) => choice.includes('${{'))) return undefined;
+  return texts.map((choice) => choice.trim());
+}
+
+/** Warning for an answer the block would reject, because it isn't one of its choices. */
+function askWarning(step: AskStep, result: SimulationResult, label: string): Warning | undefined {
+  const choices = literalChoices(step);
+  if (!choices || typeof result.answer !== 'string') return undefined;
+  const answer = result.answer.trim();
+  if (answer === '' || matchChoice(answer, choices) !== undefined) return undefined;
+  const message = `${label}: '${answer}' isn't one of the choices (${choiceList(choices)}), so the block fails in the simulation.`;
+  return { code: 'sim-ask-choice', message };
+}
+
 /**
  * Warnings for mocks that don't fit the workflow: unknown block ids, blocks that make no host calls, fields of
- * other block types and JSON answers that don't match the block's JSON fields. Ranges are the block id keys.
+ * other block types, JSON answers that don't match the block's JSON fields and answers that aren't one of an ask
+ * block's choices. Ranges are the block id keys.
  */
 export function validateSimulation(
   file: SimulationFile,
@@ -80,7 +110,7 @@ export function validateSimulation(
       continue;
     }
     if (!isHostStep(step.type)) {
-      const message = `"${id}" is ${article(step.type)} ${step.type} block; only console, agent and approval blocks use mocks.`;
+      const message = `"${id}" is ${article(step.type)} ${step.type} block; only console, agent, approval and ask blocks use mocks.`;
       warn('sim-no-host-call', message, ['blocks', id]);
       continue;
     }
@@ -91,6 +121,10 @@ export function validateSimulation(
         if (result[field] === undefined || fields.includes(field)) continue;
         const message = `${label}: ${field} doesn't apply to ${step.type} blocks. ${hint}`;
         warn('sim-field-mismatch', message, ['blocks', id, index, field]);
+      }
+      if (step.type === 'ask') {
+        const warning = askWarning(step, result, label);
+        if (warning) warn(warning.code, warning.message, ['blocks', id, index, 'answer']);
       }
       const warning = step.type === 'agent' ? agentWarning(step, result, label) : undefined;
       if (warning) warn(warning.code, warning.message, ['blocks', id, index]);

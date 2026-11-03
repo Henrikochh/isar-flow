@@ -354,6 +354,11 @@
   color: var(--if-fg);
   font-weight: 600;
 }
+/* Editor and Git: values captured from VS Code when the run starts. */
+.wf-insp-var-group-icon.codicon {
+  font-size: 14px;
+  color: var(--if-muted);
+}
 
 /* ---------- template highlighting (TemplateTextArea) ---------- */
 

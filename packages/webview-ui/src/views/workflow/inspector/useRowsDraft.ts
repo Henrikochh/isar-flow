@@ -94,6 +94,21 @@ export function useRowsDraft<R>(source: R[], commit: (rows: R[]) => void, option
 
   const add = useCallback((row: R) => apply([...rowsRef.current, row]), []);
 
+  /** Swaps a row with its neighbour above (-1) or below (1); false when there is none. */
+  const move = useCallback(
+    (index: number, delta: -1 | 1) => {
+      const target = index + delta;
+      const current = rowsRef.current;
+      if (target < 0 || target >= current.length) return false;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      apply(next);
+      schedule('now');
+      return true;
+    },
+    [schedule],
+  );
+
   const remove = useCallback(
     (index: number) => {
       apply(rowsRef.current.filter((_, i) => i !== index));
@@ -104,5 +119,5 @@ export function useRowsDraft<R>(source: R[], commit: (rows: R[]) => void, option
 
   useEffect(() => () => flush(), [flush]);
 
-  return { rows, update, replace, add, remove, flush };
+  return { rows, update, replace, add, remove, move, flush };
 }

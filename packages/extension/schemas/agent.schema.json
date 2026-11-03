@@ -85,6 +85,15 @@
       },
       "additionalProperties": false
     },
+    "memory": {
+      "description": "Project memory (.isarflow/memory.md): read (default) adds it to the instructions, write also lets the agent save notes with the remember tool, none ignores it.",
+      "type": "string",
+      "enum": [
+        "none",
+        "read",
+        "write"
+      ]
+    },
     "name": {
       "type": "string",
       "minLength": 1,

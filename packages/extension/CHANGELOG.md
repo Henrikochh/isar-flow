@@ -2,11 +2,62 @@
 
 All notable changes to Isar Flow are listed here.
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-11-03)
 
-Trust and real-world use, and faster building of workflows.
+Trust and real-world use, faster building of workflows, and everyday use.
 
 ### Added
+
+- **Workflows on code**: the expression roots `editor` (`selection`, `file`, `language`, `line`) and `git`
+  (`branch`, `changedFiles`, `diff` up to 100 KB) are captured when a run starts, only for workflows that use
+  them; git is never run in Restricted Mode. Command **Run workflow on selection** in the editor context menu
+  and the Command Palette lists the workflows that use `editor.*` first. The `{x}` picker and the condition
+  builder list the new values under **Editor** and **Git**; runs keep them (cut and masked) for live values.
+- **Triggers**: `on: { save: { files }, change: { files }, schedule: { every } }` starts a workflow when a
+  matching file is saved or changes on disk, or every `15m`, `1h30m` … (at least `1m`). Triggers run only
+  while VS Code is open, in trusted workspaces, with the new setting `isarFlow.triggers.enabled` on, and after
+  the workflow's commands were approved with **Run and remember** (a workflow with nothing to confirm, such as
+  agents that only read, after you ran it once). Events are debounced (2 s); a workflow
+  never triggers itself through its own changes; more than 10 starts in 10 minutes pause its triggers until
+  **Resume triggers**; missed schedules run once after sleep. The Start marker shows the triggers, the next
+  run or the last start, and why they are paused with one fix; the workflow settings have a **Triggers**
+  section; the status bar item **N triggers** and the command **Show triggers** list them.
+- **Copilot**: `expose: true` (or **Let Copilot run this workflow** in the workflow settings) lets GitHub
+  Copilot run a workflow through the language model tools **List Isar Flow workflows**
+  (`#isarflowWorkflows`) and **Run an Isar Flow workflow** (`#isarflowRun`), and the chat participant
+  `@isarflow` with `/list`, `/run <workflow> [name=value …]` and `/status`. Every run is confirmed (with
+  Copilot's inputs, the commands, the agents that act without asking, and a warning when commands contain
+  input values), goes through Workspace Trust and the command confirmation, and returns a summary of its
+  outputs and changed files. Inputs are checked against the workflow (yes/no inputs take only yes/no words).
+  No MCP server.
+- **Notifications**: approvals and questions reach you as notifications when the workflow's canvas is not
+  visible (**Approve** / **Reject** / **Answer** / **Open workflow**); closing one keeps the request open and
+  the run's status bar item says **Waiting for approval** or **Waiting for your answer**. Finished runs report
+  back ("Build succeeded in 2m 3s and changed 3 files." with **Review changes** and **Open run**; failures name
+  the block), adjusted for runs started by triggers, Copilot and simulations.
+- **Ask block** (`type: ask`): asks a question with optional `choices`, a `default` and the block `timeout`;
+  outputs `answer` and `timedOut`. A **Question** card above the canvas and in the block's run output, or a
+  pick list / input box from the notification, answers it. A timeout uses the default; runs that can't ask
+  (triggers, `isar-flow run --yes`) use the default or the first choice. Simulation mocks use `answer`.
+- **Project memory**: `.isarflow/memory.md` per workspace folder. Agent setting `memory` (**Memory**: Off,
+  Read, Read and write; default read) adds the first 8 KB of the file to the agent's instructions; write also
+  offers the `remember` tool, which appends a dated note (at most 500 characters, no secret values, file up to
+  64 KB) that the review card lists. A memory file that isn't UTF-8 is neither used nor rewritten. Command **Open project memory**, a **Memory** section in the agent editor
+  and **Project memory** rows in the sidebar. Try it reads and writes it too.
+- **Run reports**: **Export report…** (Runs menu, run summary, command **Export run report**) saves a Markdown
+  report with a summary, a timeline, changed files with your decisions, agent answers, questions and
+  approvals, and errors with the last console lines. **Copy for PR description** (command **Copy run for PR
+  description**) copies a summary of at most 4,000 characters.
+- **How a run started**: runs record their origin; the history, the Runs menu, the sidebar and the Start
+  marker show **On save**, **On change**, **Scheduled**, **Copilot**, **Selection** or **Command line**.
+- **Command line runner** (`packages/cli`, `npm run build:cli`): `isar-flow run <file|name> [--input
+name=value]… [--simulate] [--json] [--yes]` runs a workflow outside VS Code with OpenAI-compatible providers
+  from `.isarflow/config.yaml` (validated by the new `config.schema.json`; keys only from environment
+  variables), secrets from `ISARFLOW_SECRET_<NAME>`, terminal prompts for approvals, questions and tool
+  permissions, project memory, and exit codes 0 / 1 / 130. `--simulate` runs nothing, not even git (`git.*`
+  is empty). No VS Code models, user agents or MCP mode.
+- New examples: `explain-selection.workflow.yaml` (`editor.selection`), `tests-on-save.workflow.yaml` (`on:
+save`), `deploy.workflow.yaml` (Ask block, `expose: true`), `.isarflow/memory.md` and `.isarflow/config.yaml`.
 
 - **Run from here**: continue a finished, failed or cancelled run at a block from the block's context menu,
   its **Run output**, **Run from <block>** under failed and cancelled runs in the **Runs** menu, or **Run from
@@ -102,6 +153,10 @@ Trust and real-world use, and faster building of workflows.
 - Simulation files explain unknown keys: a block id at the top level is told to go under `blocks:`, and a
   mistyped result field names the field that was meant (for `exitcode` it suggests `exitCode`).
 - Integration tests start VS Code with `--disable-gpu`.
+- When the workflow's canvas isn't visible, an approval is a notification instead of a modal dialog.
+- The console runner and the agent tool host moved to `@isar-flow/core/node`, so the extension and the
+  command line share them; behavior is unchanged.
+- The retry log no longer doubles the period of an error that already ends with one.
 
 ## 0.1.0
 

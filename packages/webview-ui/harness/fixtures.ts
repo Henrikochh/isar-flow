@@ -11,6 +11,7 @@ import type {
 
 export * from './reviews';
 export * from './simulationFixtures';
+export * from './everydayFixtures';
 
 const NOW = Date.UTC(2026, 9, 26, 9, 30);
 export const FIXTURE_NOW = NOW;

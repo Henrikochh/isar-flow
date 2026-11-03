@@ -6,6 +6,7 @@ import type {
   ShellName,
   SimulationFile,
   StepType,
+  TriggerKind,
 } from '../schema/types';
 
 export type StepStatus = 'pending' | 'running' | 'success' | 'failure' | 'skipped' | 'cancelled';
@@ -92,11 +93,84 @@ export interface ApprovalResult {
   comment?: string;
 }
 
+/** An ask block's question, with templates rendered. */
+export interface AskRequest {
+  stepId: string;
+  question: string;
+  /** Allowed answers (rendered); free text when omitted. */
+  choices?: string[];
+  /** Preselected answer (rendered). */
+  default?: string;
+  /**
+   * The block's timeout, so the host can show the time left. The engine enforces it through `io.signal` and then
+   * uses `default` (or fails the block when there is none); the host only has to stop asking when it aborts.
+   */
+  timeoutMs?: number;
+}
+
+export interface AskResult {
+  /** With choices: one of them (anything else fails the block). */
+  answer: string;
+}
+
 export interface EngineHost {
   runConsole(req: ConsoleRequest, io: StepIO): Promise<ConsoleResult>;
   runAgent(req: AgentRequest, io: StepIO): Promise<AgentResult>;
   requestApproval(req: ApprovalRequest, io: StepIO): Promise<ApprovalResult>;
+  /**
+   * Asks the user an ask block's question. Optional: without it the engine answers with the default, else the
+   * first choice, and fails blocks that have neither.
+   */
+  askUser?(req: AskRequest, io: StepIO): Promise<AskResult>;
 }
+
+/* ---------- workflows on code: expression roots `editor` and `git` ---------- */
+
+/**
+ * `editor.*`: the text editor the run was started from, captured at run start. Without an editor every field is
+ * empty (`''`, line 0).
+ */
+export interface EditorContext {
+  /** Selected text (all non-empty selections, joined with a newline; capped at 100 KB). `''` without a selection. */
+  selection: string;
+  /** Workspace-relative path with forward slashes (absolute outside the workspace folder; `''` for untitled). */
+  file: string;
+  /** VS Code language id, e.g. "typescript". */
+  language: string;
+  /** 1-based line of the cursor of the primary selection; 0 without an editor. */
+  line: number;
+}
+
+/**
+ * `git.*`: the git state of the run's workspace folder, captured at run start. Outside a repository (or without
+ * git) every field is empty.
+ */
+export interface GitContext {
+  /** Current branch; `''` for a detached HEAD or outside a repository. */
+  branch: string;
+  /**
+   * Changed, added, deleted, renamed (new path) and untracked files, relative to the workspace folder, forward
+   * slashes, sorted, without duplicates; at most 1,000 paths.
+   */
+  changedFiles: string[];
+  /**
+   * Uncommitted changes as `git diff HEAD` (staged and unstaged; untracked files are not included), cut at 100 KB
+   * at a line boundary with a final line that says how much was left out.
+   */
+  diff: string;
+}
+
+/** How a run was started; recorded at run start and shown in the history ("Started on save of src/app.ts"). */
+export type RunOrigin =
+  | { kind: 'manual' }
+  /** Command "Run workflow on selection". */
+  | { kind: 'selection' }
+  /** A trigger of the workflow's `on:`; `file` (save and change) is workspace-relative. */
+  | { kind: 'trigger'; trigger: TriggerKind; file?: string }
+  /** Copilot: a language model tool call or the @isarflow chat participant. */
+  | { kind: 'copilot' }
+  /** The command line runner (`isar-flow run`). */
+  | { kind: 'cli' };
 
 /* ---------- test mode (simulation) ---------- */
 
@@ -161,6 +235,16 @@ export interface RunContextSnapshot {
   secrets: string[];
   workflow: { name: string; file: string };
   workspace: { root: string };
+  /**
+   * `editor.*` of the run for live values: `selection` cut at 2,048 characters, secrets masked. Only when the run
+   * got RunOptions.editor; missing for runs saved before Package C.
+   */
+  editor?: EditorContext;
+  /**
+   * `git.*` of the run for live values: `diff` cut at 2,048 characters, `changedFiles` at 200 paths, secrets
+   * masked. Only when the run got RunOptions.git.
+   */
+  git?: GitContext;
 }
 
 export interface RunOptions {
@@ -191,6 +275,18 @@ export interface RunOptions {
    * simulation host, so nothing is executed.
    */
   simulated?: boolean;
+  /**
+   * `editor.*` captured by the host at run start; omitted = no editor (all fields empty). Hosts capture it only
+   * for workflows that read `editor.*` (workflowUsesRoot).
+   */
+  editor?: EditorContext;
+  /**
+   * `git.*` captured by the host at run start; omitted = not captured (all fields empty). Hosts capture it only
+   * for workflows that read `git.*`, and never in untrusted workspaces (git can run repository hooks).
+   */
+  git?: GitContext;
+  /** How the run was started (copied to run-start); omitted = manual. */
+  origin?: RunOrigin;
 }
 
 /**
@@ -218,6 +314,8 @@ export type RunEvent =
       context?: RunContextSnapshot;
       /** Hash of each block's own YAML at run start, by block id, for "changed since that run" (Run from here). */
       blockHashes?: Record<string, string>;
+      /** How the run was started (RunOptions.origin); omitted for manual runs. */
+      origin?: RunOrigin;
     }
   | {
       type: 'step-start';

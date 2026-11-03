@@ -1,18 +1,49 @@
+import { cutString } from '../live/context';
 import { blockHashes } from '../run/blockHash';
 import type { Workflow } from '../schema/types';
+import type { SecretMasker } from './mask';
 import { resumePath, splitAtTarget, storedOutput } from './resume';
+import { editorScope, gitScope } from './roots';
 import type { ResumeOptions, RunContextSnapshot, RunEvent, RunOptions } from './types';
+
+/** Changed files a run's snapshot keeps for live values. */
+export const SNAPSHOT_CHANGED_FILES_MAX = 200;
 
 const keysOf = (value: unknown): string[] =>
   typeof value === 'object' && value !== null && !Array.isArray(value) ? Object.keys(value) : [];
 
-/** What expressions can read besides inputs and block outputs; names only, never env or secret values. */
-export function runContextSnapshot(workflow: Workflow, options: RunOptions): RunContextSnapshot {
+/**
+ * What expressions can read besides inputs and block outputs; names only, never env or secret values. `editor`
+ * and `git` are recorded when the run got them: secrets masked first, then long text cut like live values.
+ */
+export function runContextSnapshot(
+  workflow: Workflow,
+  options: RunOptions,
+  masker: SecretMasker,
+): RunContextSnapshot {
+  const cut = (text: string) => cutString(masker.text(text));
+  const editor = options.editor && editorScope(options.editor);
+  const git = options.git && gitScope(options.git);
   return {
     env: [...new Set([...keysOf(options.env), ...keysOf(workflow.env)])].sort(),
     secrets: keysOf(options.secrets).sort(),
     workflow: { name: workflow.name, file: options.workflowFile ?? '' },
     workspace: { root: options.workspaceRoot },
+    ...(editor && {
+      editor: {
+        selection: cut(editor.selection),
+        file: masker.text(editor.file),
+        language: masker.text(editor.language),
+        line: editor.line,
+      },
+    }),
+    ...(git && {
+      git: {
+        branch: masker.text(git.branch),
+        changedFiles: git.changedFiles.slice(0, SNAPSHOT_CHANGED_FILES_MAX).map((file) => masker.text(file)),
+        diff: cut(git.diff),
+      },
+    }),
   };
 }
 
@@ -39,8 +70,9 @@ export function runStartEvent(
   options: RunOptions,
   startedAt: number,
   inputs: Record<string, unknown>,
+  masker: SecretMasker,
 ): Extract<RunEvent, { type: 'run-start' }> {
-  const { resume, simulated } = options;
+  const { resume, simulated, origin } = options;
   return {
     type: 'run-start',
     runId: options.runId,
@@ -49,7 +81,8 @@ export function runStartEvent(
     inputs,
     ...(resume && { resumedFrom: { runId: resume.fromRunId, stepId: resume.stepId } }),
     ...(simulated === true && { simulated: true }),
-    context: runContextSnapshot(workflow, options),
+    context: runContextSnapshot(workflow, options, masker),
     blockHashes: recordedHashes(workflow, resume),
+    ...(origin && origin.kind !== 'manual' && { origin: { ...origin } }),
   };
 }

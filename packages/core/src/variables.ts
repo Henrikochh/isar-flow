@@ -64,6 +64,15 @@ export const STEP_OUTPUTS: Record<StepType, OutputInfo[]> = {
     { key: 'comment', type: 'string', description: 'Comment entered with the decision' },
     ...COMMON_OUTPUTS,
   ],
+  ask: [
+    { key: 'answer', type: 'string', description: 'The answer to the question' },
+    {
+      key: 'timedOut',
+      type: 'boolean',
+      description: 'True when nobody answered in time and the default answer was used',
+    },
+    ...COMMON_OUTPUTS,
+  ],
 };
 
 export interface VariableInfo {
@@ -73,7 +82,7 @@ export interface VariableInfo {
   label: string;
   description: string;
   type: OutputInfo['type'];
-  group: 'inputs' | 'steps' | 'loop' | 'workflow' | 'env' | 'run';
+  group: 'inputs' | 'steps' | 'loop' | 'workflow' | 'env' | 'run' | 'editor' | 'git';
   /** Block that produces the value (group 'steps' only). */
   stepId?: string;
 }
@@ -276,11 +285,25 @@ const WORKFLOW_VARIABLES: VariableInfo[] = [
   fixed('workspace.root', 'Folder of the workspace the run belongs to', 'string', 'workflow'),
 ];
 
+/** Captured when the run starts; empty when it was started without an editor or outside a git repository. */
+const EDITOR_VARIABLES: VariableInfo[] = [
+  fixed('editor.selection', 'Text selected in the editor when the run started', 'string', 'editor'),
+  fixed('editor.file', 'File open in that editor, relative to the workspace folder', 'string', 'editor'),
+  fixed('editor.language', 'Language of that file, e.g. typescript', 'string', 'editor'),
+  fixed('editor.line', 'Line of the cursor, starting at 1', 'number', 'editor'),
+];
+
+const GIT_VARIABLES: VariableInfo[] = [
+  fixed('git.branch', 'Current git branch; empty for a detached HEAD', 'string', 'git'),
+  fixed('git.changedFiles', 'Files with uncommitted changes', 'list', 'git'),
+  fixed('git.diff', 'Uncommitted changes as a diff, at most 100 KB', 'string', 'git'),
+];
+
 const RUN_VARIABLES: VariableInfo[] = [fixed('run.id', 'Unique id of the current run', 'string', 'run')];
 
 /**
  * Variables usable inside block `stepId` (null = after the whole workflow), grouped as
- * inputs, steps, loop, workflow, env, run. Unknown block ids only get workflow-level variables.
+ * inputs, steps, loop, workflow, editor, git, env, run. Unknown block ids only get workflow-level variables.
  */
 export function availableVariables(workflow: Workflow, stepId: string | null): VariableInfo[] {
   const blocks = listBlocks(workflow);
@@ -290,7 +313,13 @@ export function availableVariables(workflow: Workflow, stepId: string | null): V
     for (const block of blocks) if (canReadBlock(from, block)) vars.push(...blockVariables(block));
     if (from && hasLoopScope(from)) vars.push(...LOOP_VARIABLES);
   }
-  vars.push(...WORKFLOW_VARIABLES, ...envVariables(workflow), ...RUN_VARIABLES);
+  vars.push(
+    ...WORKFLOW_VARIABLES,
+    ...EDITOR_VARIABLES,
+    ...GIT_VARIABLES,
+    ...envVariables(workflow),
+    ...RUN_VARIABLES,
+  );
   const seen = new Set<string>();
   return vars.filter((v) => !seen.has(v.expression) && seen.add(v.expression));
 }

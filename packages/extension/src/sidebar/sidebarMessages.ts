@@ -7,7 +7,7 @@ import type {
   WorkflowTemplateId,
 } from '@isar-flow/core';
 import { AGENT_FOLDER_PROMPT, type FolderChoice, WORKFLOW_FOLDER_PROMPT } from '../commands/folders';
-import type { AgentStore, RunManager, SetupCheck, WorkflowStore } from '../contracts';
+import type { AgentStore, MemoryService, RunManager, SetupCheck, WorkflowStore } from '../contracts';
 
 export const AGENT_EDITOR = 'isarFlow.agentEditor';
 export const WORKFLOW_EDITOR = 'isarFlow.workflowEditor';
@@ -24,6 +24,7 @@ export interface SidebarHandlerDeps {
   workflows: Pick<WorkflowStore, 'create'>;
   runs: Pick<RunManager, 'start' | 'cancel'>;
   setupCheck?: Pick<SetupCheck, 'dismiss'>;
+  memory?: Pick<MemoryService, 'open'>;
   executeCommand(command: string, ...args: unknown[]): Thenable<unknown>;
   setTab(tab: SidebarTab): Thenable<void>;
   /** Sends the full state now. */
@@ -129,6 +130,12 @@ export function createSidebarHandler(deps: SidebarHandlerDeps): (message: Sideba
         if (query && query.length <= MAX_QUERY_LENGTH) {
           await deps.executeCommand('workbench.action.openSettings', query);
         }
+        return;
+      }
+      case 'openMemory': {
+        // Created with a short header when missing; without a folder URI the first folder's file.
+        const folderUri = nonEmpty(message.folderUri);
+        await deps.memory?.open(folderUri ? vscode.Uri.parse(folderUri) : undefined);
         return;
       }
     }

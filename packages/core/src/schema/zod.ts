@@ -5,6 +5,9 @@ import type { AgentDefinition, Step, Workflow } from './types';
 
 export const STEP_ID_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 
+/** Schedule durations: one or more `<integer><unit>` parts with units s, m, h, d, e.g. "90s", "15m", "1h30m". */
+export const DURATION_PATTERN = /^(?:\d+[smhd])+$/;
+
 const ToolNameSchema = z.enum([
   'readFile',
   'listFiles',
@@ -53,6 +56,14 @@ const AgentSettingsShape = {
     .strictObject({ edits: PermissionSchema.optional(), commands: PermissionSchema.optional() })
     .optional()
     .meta({ description: 'none = never, ask = confirm each time, auto = allow.' }),
+  memory: z
+    .enum(['none', 'read', 'write'])
+    .optional()
+    .meta({
+      description:
+        'Project memory (.isarflow/memory.md): read (default) adds it to the instructions, write also lets the ' +
+        'agent save notes with the remember tool, none ignores it.',
+    }),
 };
 
 export const AgentSettingsSchema = z.strictObject(AgentSettingsShape);
@@ -165,6 +176,24 @@ const ApprovalStepSchema = z.strictObject({
   onReject: z.enum(['stop', 'continue']).optional(),
 });
 
+const AskStepSchema = z.strictObject({
+  ...base,
+  type: z.literal('ask'),
+  question: z
+    .string()
+    .min(1, 'Write the question to ask')
+    .meta({ description: 'Question shown to you. Supports ${{ }} templates.' }),
+  choices: z
+    .array(z.string().min(1, 'Choices cannot be empty'))
+    .min(1, 'Add at least one choice or remove choices')
+    .optional()
+    .meta({ description: 'Allowed answers; without choices the answer is free text.' }),
+  default: z
+    .string()
+    .optional()
+    .meta({ description: 'Preselected answer; used when the timeout elapses without an answer.' }),
+});
+
 export const StepSchema: z.ZodType<Step> = z.discriminatedUnion('type', [
   AgentStepSchema,
   ConsoleStepSchema,
@@ -173,7 +202,42 @@ export const StepSchema: z.ZodType<Step> = z.discriminatedUnion('type', [
   BreakStepSchema,
   StopStepSchema,
   ApprovalStepSchema,
+  AskStepSchema,
 ]) as z.ZodType<Step>;
+
+const TriggerFilesSchema = z
+  .union([
+    z.string().min(1, 'Enter a file pattern, e.g. "src/**"'),
+    z.array(z.string().min(1, 'File patterns cannot be empty')).min(1, 'Add at least one file pattern'),
+  ])
+  .meta({
+    description:
+      'Workspace-relative glob or list of globs, e.g. "src/**/*.ts"; in a list, "!pattern" excludes files.',
+  });
+
+const TriggersSchema = z
+  .strictObject({
+    save: z
+      .strictObject({ files: TriggerFilesSchema })
+      .optional()
+      .meta({ description: 'Run when a matching file is saved in VS Code.' }),
+    change: z
+      .strictObject({ files: TriggerFilesSchema })
+      .optional()
+      .meta({ description: 'Run when a matching file is created, changed or deleted on disk.' }),
+    schedule: z
+      .strictObject({
+        every: z
+          .string()
+          .regex(DURATION_PATTERN, 'Use a duration like "15m", "1h" or "1h30m"')
+          .meta({ description: 'Interval while VS Code is open, e.g. "15m", "1h", "1d" (at least 1m).' }),
+      })
+      .optional(),
+  })
+  .meta({
+    description:
+      'Start the workflow automatically (trusted workspaces only, after its commands were approved once).',
+  });
 
 const InputSchema = z.strictObject({
   type: z.enum(['string', 'number', 'boolean']).optional(),
@@ -204,5 +268,10 @@ export const WorkflowSchema: z.ZodType<Workflow> = z.strictObject({
     .array(z.string().min(1, 'Setup commands cannot be empty'))
     .optional()
     .meta({ description: 'Commands run in the worktree before the first block, e.g. "npm ci".' }),
+  on: TriggersSchema.optional(),
+  expose: z
+    .boolean()
+    .optional()
+    .meta({ description: 'Let Copilot run this workflow (language model tools and @isarflow).' }),
   steps: StepList,
 });

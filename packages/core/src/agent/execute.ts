@@ -2,7 +2,8 @@ import type { AgentRequest, AgentResult, StepIO } from '../engine/types';
 import { type ChatModel, ModelError, type ModelErrorKind, type ModelResolver } from '../models/types';
 import { abortError, throwIfAborted } from './abort';
 import { continueConversation, type Conversation, startConversation, withUsage } from './loop';
-import type { ToolHost } from './types';
+import { agentMemory } from './projectMemory';
+import type { AgentMemory, ProjectMemory, ToolHost } from './types';
 
 export interface ContextFile {
   /** Workspace-relative path, used as the label of the fenced block. */
@@ -18,6 +19,11 @@ export interface AgentRequestDeps {
   readContextFiles?: (globs: string[], signal: AbortSignal) => Promise<ContextFile[]>;
   /** Context size for compaction when a model reports no maxInputTokens (`isarFlow.agentContextTokens`). */
   contextTokens?: number;
+  /**
+   * `.isarflow/memory.md` of the run's workspace folder. Agents with `memory: read` (default) see its first 8 KB in
+   * their system prompt; `write` also offers the remember tool. Omitted where there is no project memory.
+   */
+  memory?: ProjectMemory;
 }
 
 /** Model problems that another model may not have. Auth, bad requests and cancels are never retried elsewhere. */
@@ -36,9 +42,10 @@ export async function executeAgentRequest(
 ): Promise<AgentResult> {
   throwIfAborted(deps.io.signal);
   const prompt = await withContextFiles(request, deps);
+  const memory = await agentMemory(request, deps.memory, deps.io);
   const conversation = startConversation({ history: request.history, prompt, output: request.output });
   try {
-    return await answerWithFallbacks(request, deps, prompt, conversation);
+    return await answerWithFallbacks(request, deps, prompt, conversation, memory);
   } catch (error) {
     throw withUsage(error, conversation.usage, conversation.toolCalls);
   }
@@ -49,6 +56,7 @@ async function answerWithFallbacks(
   deps: AgentRequestDeps,
   prompt: string,
   conversation: Conversation,
+  memory: AgentMemory | undefined,
 ): Promise<AgentResult> {
   const { io } = deps;
   const { agent } = request;
@@ -93,6 +101,7 @@ async function answerWithFallbacks(
           maxTokens: agent.maxTokens,
           output: request.output,
           io,
+          ...(memory && { memory }),
         },
         conversation,
       );

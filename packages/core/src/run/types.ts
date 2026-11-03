@@ -1,7 +1,10 @@
 import type {
+  EditorContext,
+  GitContext,
   LogStream,
   ResumedFrom,
   RunContextSnapshot,
+  RunOrigin,
   RunStatus,
   StepOutput,
   StepStatus,
@@ -101,6 +104,8 @@ export interface RunView {
   context?: RunContextSnapshot;
   /** Hash of each block's own YAML when the run started, by block id (from run-start); missing in older runs. */
   blockHashes?: Record<string, string>;
+  /** How the run was started (from run-start); missing = manual. */
+  origin?: RunOrigin;
 }
 
 /* ---------- run from here ---------- */
@@ -168,6 +173,10 @@ export interface LiveContext {
   secrets: string[];
   workflow: { name: string; file: string };
   workspace: { root: string };
+  /** `editor.*` of the run (from RunContextSnapshot.editor); missing for older runs. */
+  editor?: EditorContext;
+  /** `git.*` of the run (from RunContextSnapshot.git, diff cut at 2,048 characters); missing for older runs. */
+  git?: GitContext;
 }
 
 export type LiveValueType = 'text' | 'number' | 'boolean' | 'list' | 'object' | 'empty';

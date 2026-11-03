@@ -13,6 +13,16 @@ export const probe: {
   simulationText?: () => string;
   /** How often the workflow editor asked to open the simulation file. */
   openedSimulation?: () => number;
+  /** Answers the workflow editor sent to ask blocks, oldest first. */
+  answers?: () => { requestId: string; answer: string }[];
+  /** Export report / Copy for PR description requests, oldest first. */
+  reports?: () => { runId: string; action: string }[];
+  /** Settings the webviews asked to open (the search query), oldest first. */
+  settingsQueries?: () => string[];
+  /** How often the workflow editor asked to resume paused triggers. */
+  resumedTriggers?: () => number;
+  /** Memory files the agent editor or the sidebar asked to open: the folder URI, or null for "this agent's". */
+  openedMemory?: () => (string | null)[];
 } = {};
 
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

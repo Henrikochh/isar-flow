@@ -41,6 +41,12 @@ export const STEP_TYPE_INFO: Record<StepType, StepTypeInfo> = {
     description: 'Pause until you approve or reject.',
     container: false,
   },
+  ask: {
+    type: 'ask',
+    label: 'Ask',
+    description: 'Ask a question and use the answer.',
+    container: false,
+  },
 };
 
 export const STEP_TYPES = Object.keys(STEP_TYPE_INFO) as StepType[];

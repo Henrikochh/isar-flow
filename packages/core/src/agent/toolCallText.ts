@@ -1,17 +1,16 @@
-import type { ToolName } from '../schema/types';
 import { errorMessage } from './format';
 import { balancedEnd, MAX_SCAN_CHARS, nextOpener } from './json';
-import { isToolName } from './tools';
+import { type AgentToolName, isAgentToolName } from './tools';
 
 /** A tool call that a model wrote as text instead of a native tool call. */
 export interface TextToolCall {
-  name: ToolName;
+  name: AgentToolName;
   /** Parsed arguments object. */
   args: Record<string, unknown>;
 }
 
 export interface MalformedToolCall {
-  name: ToolName;
+  name: AgentToolName;
   /** Lower-case sentence fragment, e.g. `the arguments of readFile are not a JSON object`. */
   problem: string;
 }
@@ -65,10 +64,10 @@ const IGNORED_KEYS = ['id', 'type'];
  */
 export function parseTextToolCalls(
   text: string,
-  enabled: readonly ToolName[],
+  enabled: readonly string[],
   options: TextToolCallOptions = {},
 ): TextToolCalls {
-  const tools = new Set(enabled.filter(isToolName));
+  const tools = new Set(enabled.filter(isAgentToolName));
   if (tools.size === 0) return { calls: [], text };
 
   const scanner = new Scanner(
@@ -100,7 +99,7 @@ class Scanner {
 
   constructor(
     private scan: string,
-    private readonly tools: ReadonlySet<ToolName>,
+    private readonly tools: ReadonlySet<AgentToolName>,
   ) {}
 
   tags(): void {
@@ -178,7 +177,7 @@ class Scanner {
 }
 
 /** Content the model marked as a tool call: a missing arguments object is fine, and unreadable JSON is reported. */
-function readExplicit(body: string, tools: ReadonlySet<ToolName>): Found | undefined {
+function readExplicit(body: string, tools: ReadonlySet<AgentToolName>): Found | undefined {
   const content = body.trim();
   const json = unfence(content) ?? content;
   const parsed = parseJsonLenient(json);
@@ -194,12 +193,12 @@ function readExplicit(body: string, tools: ReadonlySet<ToolName>): Found | undef
 }
 
 /** JSON found in a reply without call markup: only exact call shapes with an arguments key count. */
-function readImplicit(content: string, tools: ReadonlySet<ToolName>): Found | undefined {
+function readImplicit(content: string, tools: ReadonlySet<AgentToolName>): Found | undefined {
   const parsed = parseJsonLenient(content.trim());
   return parsed.ok ? readValue(parsed.value, tools, false) : undefined;
 }
 
-function readValue(value: unknown, tools: ReadonlySet<ToolName>, explicit: boolean): Found | undefined {
+function readValue(value: unknown, tools: ReadonlySet<AgentToolName>, explicit: boolean): Found | undefined {
   const items = Array.isArray(value) ? value : [value];
   const reads = items.map((item) => readCall(item, tools, explicit));
   // Without markup a list counts only when every item is a call, so ordinary JSON lists stay text.
@@ -222,7 +221,7 @@ function merge(parts: (Found | undefined)[]): Found | undefined {
   return malformed ? { calls, malformed } : { calls };
 }
 
-function readCall(value: unknown, tools: ReadonlySet<ToolName>, explicit: boolean): CallRead {
+function readCall(value: unknown, tools: ReadonlySet<AgentToolName>, explicit: boolean): CallRead {
   const shape = callShape(value, explicit);
   if (!shape) return { kind: 'none' };
   const name = enabledTool(shape.name, tools);
@@ -271,12 +270,12 @@ function argumentsObject(args: unknown): Record<string, unknown> | undefined {
   return parsed.ok && isPlainObject(parsed.value) ? parsed.value : undefined;
 }
 
-function enabledTool(name: unknown, tools: ReadonlySet<ToolName>): ToolName | undefined {
-  return typeof name === 'string' && isToolName(name) && tools.has(name) ? name : undefined;
+function enabledTool(name: unknown, tools: ReadonlySet<AgentToolName>): AgentToolName | undefined {
+  return typeof name === 'string' && isAgentToolName(name) && tools.has(name) ? name : undefined;
 }
 
 /** The enabled tool that unreadable call text is about: its name key, else the first enabled tool it mentions. */
-function mentionedTool(content: string, tools: ReadonlySet<ToolName>): ToolName | undefined {
+function mentionedTool(content: string, tools: ReadonlySet<AgentToolName>): AgentToolName | undefined {
   const named = /["']?(?:name|tool)["']?\s*[:=]\s*["']([\w-]+)["']/.exec(content);
   if (named) return enabledTool(named[1], tools);
   for (const word of content.match(/[A-Za-z]+/g) ?? []) {

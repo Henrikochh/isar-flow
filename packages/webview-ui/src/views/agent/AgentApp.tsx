@@ -1,12 +1,13 @@
 import './agent.css';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { AgentEditorToHost, HostToAgentEditor, ModelCatalog } from '@isar-flow/core';
+import type { AgentEditorToHost, HostToAgentEditor, MemoryFileState, ModelCatalog } from '@isar-flow/core';
 import { Spinner } from '../../components';
 import { post, useHostMessages } from '../../vscode';
 import { AgentHeader } from './AgentHeader';
 import { fieldIssues, readAgentForm, type UpdateAgent } from './agentForm';
 import { DocumentBanners } from './DocumentBanners';
 import { InstructionsSection } from './InstructionsSection';
+import { MemorySection } from './MemorySection';
 import { ModelSection } from './ModelSection';
 import { PermissionsSection } from './PermissionsSection';
 import { ToolsSection } from './ToolsSection';
@@ -23,6 +24,8 @@ export function AgentApp() {
   const { doc, receive, applyLocally, revert } = useAgentDocument();
   const [catalog, setCatalog] = useState<ModelCatalog>(LOADING_CATALOG);
   const [updateError, setUpdateError] = useState<string>();
+  /** Undefined until the host sends it; null without a workspace folder. */
+  const [memory, setMemory] = useState<MemoryFileState | null>();
   const tryIt = useTryIt();
 
   useHostMessages<HostToAgentEditor>((message) => {
@@ -39,6 +42,9 @@ export function AgentApp() {
       case 'updateFailed':
         setUpdateError(message.error);
         revert();
+        break;
+      case 'memory':
+        setMemory(message.memory ?? null);
         break;
     }
   });
@@ -60,6 +66,7 @@ export function AgentApp() {
   const addProvider = useCallback(() => send({ type: 'addProvider' }), []);
   const openWorkflow = useCallback((path: string) => send({ type: 'openWorkflow', path }), []);
   const testModel = useCallback((ref: string) => send({ type: 'testModel', ref }), []);
+  const openMemory = useCallback(() => send({ type: 'openMemory' }), []);
 
   const form = useMemo(() => readAgentForm(doc?.agent ?? null), [doc]);
   const issues = useMemo(() => fieldIssues(doc?.diagnostics ?? []), [doc]);
@@ -121,6 +128,14 @@ export function AgentApp() {
               />
               <ToolsSection tools={form.tools} error={issues.message('tools').error} update={update} />
               <PermissionsSection form={form} issues={issues} update={update} />
+              <MemorySection
+                value={form.memory}
+                error={issues.message('memory').error}
+                memory={memory}
+                userScope={doc.scope === 'user'}
+                update={update}
+                onOpen={openMemory}
+              />
               <UsedBySection id={doc.id} usedBy={doc.usedBy} onOpen={openWorkflow} />
             </div>
           ) : null}

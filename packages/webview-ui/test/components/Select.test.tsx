@@ -72,3 +72,21 @@ describe('Select search', () => {
     expect(document.getElementById(second ?? '')).toHaveTextContent('tests › output');
   });
 });
+
+describe('Select list name', () => {
+  it('names the open list like its trigger', () => {
+    open();
+    expect(screen.getByRole('listbox', { name: 'Rule 1 value' })).toBeInTheDocument();
+  });
+
+  it('names the open list by the field label when there is no aria label', () => {
+    render(
+      <>
+        <label htmlFor="answer">Answer</label>
+        <Select id="answer" value="dev" options={[{ value: 'dev', label: 'dev' }]} onChange={vi.fn()} />
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
+    expect(screen.getByRole('listbox').getAttribute('aria-labelledby')).toBe('answer');
+  });
+});

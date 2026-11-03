@@ -1,5 +1,7 @@
 import { validateOutputShape } from './agent';
 import type { Diagnostic, DiagnosticSeverity } from './diagnostics';
+import { choiceList, matchChoice } from './engine/choices';
+import { EDITOR_FIELDS, GIT_FIELDS } from './engine/roots';
 import {
   analyzeExpression,
   compileRegex,
@@ -9,6 +11,7 @@ import {
   parseExpression,
 } from './expr';
 import type { Workflow } from './schema/types';
+import { triggerDiagnostics } from './triggers/validate';
 import {
   type BlockNode,
   canReadBlock,
@@ -35,12 +38,28 @@ interface Site {
   block: BlockNode | null;
 }
 
-const KNOWN_ROOTS = ['inputs', 'steps', 'env', 'loop', 'workflow', 'workspace', 'run', 'secrets'];
+const KNOWN_ROOTS = [
+  'inputs',
+  'steps',
+  'env',
+  'loop',
+  'workflow',
+  'workspace',
+  'run',
+  'secrets',
+  'editor',
+  'git',
+];
+const ROOT_FIELDS: Record<'editor' | 'git', readonly string[]> = { editor: EDITOR_FIELDS, git: GIT_FIELDS };
 const REGEX_OPS = new Set(['matches', 'notMatches']);
 /** Workflow env is merged into `env.*` once, before the first block (see RunOptions.env). */
 const RUN_START = 'workflow env is set once when the run starts, before any block runs';
 
 const nonEmpty = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
+const isLiteral = (value: unknown): value is string => typeof value === 'string' && !value.includes('${{');
+/** 'a, b and c' */
+const joinAnd = (items: readonly string[]) =>
+  items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 const blockName = (node: BlockNode) => (node.id ? `'${node.id}'` : 'a block without id');
 const at = (site: Site, ...keys: (string | number)[]): Site => ({
   path: [...site.path, ...keys],
@@ -256,6 +275,17 @@ export function validateWorkflow(workflow: Workflow, options: ValidateOptions = 
           );
         }
         return;
+      case 'editor':
+      case 'git':
+        if (key !== undefined && !ROOT_FIELDS[root].includes(key)) {
+          reportAt(
+            site,
+            'unknown-root-field',
+            'warning',
+            `${root}.${key} in ${where(site)} is not known. ${root} has ${joinAnd(ROOT_FIELDS[root])}.`,
+          );
+        }
+        return;
       case 'env':
       case 'workflow':
       case 'workspace':
@@ -443,6 +473,36 @@ export function validateWorkflow(workflow: Workflow, options: ValidateOptions = 
     }
   };
 
+  const checkAskBlock = (block: BlockNode, step: Record<string, unknown>) => {
+    const site = (...keys: (string | number)[]): Site => ({ path: [...block.path, ...keys], block });
+    const choices: unknown[] = Array.isArray(step.choices) ? step.choices : [];
+    checkTemplate(step.question, site('question'));
+    choices.forEach((choice, i) => checkTemplate(choice, site('choices', i)));
+    checkTemplate(step.default, site('default'));
+
+    // Like the engine: choices are trimmed and later duplicates dropped; templated ones are only known in the run.
+    const literal: string[] = [];
+    choices.forEach((choice, i) => {
+      if (!isLiteral(choice) || choice.trim() === '') return;
+      const text = choice.trim();
+      if (literal.includes(text)) {
+        const message = `Choice '${text}' of ${blockName(block)} is listed twice. Remove the duplicate.`;
+        report('ask-duplicate-choice', 'warning', message, site('choices', i).path, block);
+      } else literal.push(text);
+    });
+    const fallback = isLiteral(step.default) ? step.default.trim() : '';
+    if (fallback === '' || choices.length === 0 || !choices.every(isLiteral)) return;
+    if (matchChoice(fallback, literal) !== undefined) return;
+    report(
+      'ask-default-not-a-choice',
+      'error',
+      `The default '${fallback}' of ${blockName(block)} isn't one of its choices: ${choiceList(literal)}. ` +
+        'Add it to the choices or change the default.',
+      site('default').path,
+      block,
+    );
+  };
+
   const checkBlock = (block: BlockNode) => {
     const step = block.step as unknown as Record<string, unknown>;
     const site = (...keys: (string | number)[]): Site => ({ path: [...block.path, ...keys], block });
@@ -501,8 +561,17 @@ export function validateWorkflow(workflow: Workflow, options: ValidateOptions = 
       case 'approval':
         checkTemplate(step.message, site('message'));
         break;
+      case 'ask':
+        checkAskBlock(block, step);
+        break;
     }
   };
+
+  diagnostics.push(...triggerDiagnostics(workflow));
+  if (workflow.expose === true && !nonEmpty(workflow.description)) {
+    const message = 'Add a description so Copilot knows when to use this workflow.';
+    report('expose-without-description', 'info', message, ['expose'], null);
+  }
 
   if (isRecord(workflow.env)) {
     for (const [key, value] of Object.entries(workflow.env))

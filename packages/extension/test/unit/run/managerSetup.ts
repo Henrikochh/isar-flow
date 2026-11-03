@@ -3,13 +3,16 @@ import { expect, vi } from 'vitest';
 import type { AgentDefinition, ModelCatalog, RunEvent, Workflow } from '@isar-flow/core';
 import type {
   AgentStore,
+  CodeContextCapture,
   ConsoleRunOptions,
+  MemoryService,
   ModelRegistry,
   RunConsoleCommand,
   RunManagerDeps,
   SimulationStore,
 } from '../../../src/contracts';
 import { createApprovalBroker } from '../../../src/run/approvals';
+import { createAskBroker, type AskUi } from '../../../src/run/asks';
 import { createRunHistory } from '../../../src/run/history';
 import { createRunManager, type RunManagerUi, type RunStatusItem } from '../../../src/run/runManager';
 import { WorkflowSecrets } from '../../../src/run/secrets';
@@ -76,6 +79,12 @@ export interface Setup {
   simulationDelayMs?: number;
   /** Keep the run manager's own pause per simulated call instead. */
   defaultSimulationDelay?: boolean;
+  /** An editor of the workflow is attached (default true): finished runs only report changed files. */
+  editorVisible?: boolean;
+  /** Window access of the ask broker (notifications, QuickPick, InputBox). */
+  askUi?: Partial<AskUi>;
+  codeContext?: CodeContextCapture;
+  memory?: MemoryService;
 }
 
 /** A run manager with fakes for everything outside the engine. */
@@ -117,6 +126,8 @@ export function setup(options: Setup = {}) {
       contextReads.push({ root: undefined, globs });
       return [];
     },
+    ...(options.codeContext && { codeContext: options.codeContext }),
+    ...(options.memory && { memory: options.memory }),
   };
 
   const notifications: { kind: string; message: string; buttons: string[] }[] = [];
@@ -148,7 +159,19 @@ export function setup(options: Setup = {}) {
   };
   const history = createRunHistory(memoryStore(), new FakeMemento(), () => 50);
   const secrets = new WorkflowSecrets(context);
-  const approvals = createApprovalBroker({ modal: async () => options.modal ?? true });
+  const approvals = createApprovalBroker({
+    notify: async () => ((options.modal ?? true) ? 'Approve' : 'Reject'),
+    info: () => undefined,
+    openWorkflow: async () => undefined,
+  });
+  const asks = createAskBroker({
+    notify: async () => undefined,
+    info: () => undefined,
+    warn: (message) => logLines.push(`warn: ${message}`),
+    openWorkflow: async () => undefined,
+    ...options.askUi,
+  });
+  if (options.editorVisible ?? true) asks.attach(uri.toString());
   const safety = fakeSafety(options.safety);
   const simulations = options.simulations ?? fakeSimulations();
   const manager = createRunManager(deps, {
@@ -159,6 +182,7 @@ export function setup(options: Setup = {}) {
     history,
     secrets,
     approvals,
+    asks,
     env: options.env ?? { PATH: '/bin' },
     readContextFilesIn: (root) => async (globs) => {
       contextReads.push({ root, globs });
@@ -188,6 +212,7 @@ export function setup(options: Setup = {}) {
     runsChanged,
     secrets,
     approvals,
+    asks,
     safety,
     history,
     simulations,

@@ -340,6 +340,15 @@
   contain: inline-size;
 }
 
+/*
+ * The Start marker reaches past the river on both sides (the left column stays empty), so its run origin, trigger
+ * chips and status lines wrap less. Both sides grow alike (by the stage padding, so nothing overflows the stage):
+ * the dot stays on the river.
+ */
+.wf-marker--start {
+  margin-inline: -48px;
+}
+
 .wf-marker__axis {
   display: flex;
   flex-direction: column;
@@ -1443,4 +1452,46 @@ body.vscode-high-contrast-light .wf-bank__shape {
 .wf-card__reused {
   display: inline-flex;
   flex: none;
+}
+
+/* ---------- Triggers on the Start marker ---------- */
+/* A full row under "Start": the trigger chips, then one muted status line (or the paused chip and its action). */
+.wf-marker__triggers {
+  flex: 1 0 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.wf-marker__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Long pattern lists end in an ellipsis; the chip's tooltip names every pattern. */
+.wf-marker__chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wf-marker__status {
+  font-size: var(--if-text-s);
+  line-height: 1.4;
+  color: var(--if-muted);
+  overflow-wrap: anywhere;
+}
+
+.wf-marker__paused {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
 }

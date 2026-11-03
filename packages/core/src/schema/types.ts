@@ -1,6 +1,6 @@
 import type { Condition } from '../conditions';
 
-export type StepType = 'agent' | 'console' | 'loop' | 'if' | 'break' | 'stop' | 'approval';
+export type StepType = 'agent' | 'console' | 'loop' | 'if' | 'break' | 'stop' | 'approval' | 'ask';
 
 export type ToolName =
   | 'readFile'
@@ -28,6 +28,13 @@ export interface AgentPermissions {
  */
 export type ToolMode = 'auto' | 'native' | 'text';
 
+/**
+ * Project memory (`.isarflow/memory.md` of the run's workspace folder). `read` (default): the file (at most 8 KB)
+ * is added to the system prompt. `write`: also offers the tool `remember(note)`, which appends a dated bullet.
+ * `none`: the agent never sees the file.
+ */
+export type MemoryMode = 'none' | 'read' | 'write';
+
 /** Agent settings shared by agent files and inline agents in workflow steps. */
 export interface AgentSettings {
   model?: string;
@@ -39,6 +46,8 @@ export interface AgentSettings {
   tools?: ToolName[];
   toolMode?: ToolMode;
   permissions?: AgentPermissions;
+  /** Project memory access (default read). */
+  memory?: MemoryMode;
 }
 
 /** Contents of `.isarflow/agents/<id>.agent.yaml`. */
@@ -116,7 +125,23 @@ export interface ApprovalStep extends StepBase {
   onReject?: 'stop' | 'continue';
 }
 
-export type Step = AgentStep | ConsoleStep | LoopStep | IfStep | BreakStep | StopStep | ApprovalStep;
+/**
+ * Asks the user a question and waits for the answer (`steps.<id>.answer`). With `choices` the answer is one of
+ * them; without, it is free text. The common `timeout` limits the wait: then `default` is used when set (output
+ * `timedOut: true`), otherwise the block fails.
+ */
+export interface AskStep extends StepBase {
+  type: 'ask';
+  /** Supports ${{ }} templates. */
+  question: string;
+  /** Allowed answers (templates allowed); free text when omitted. */
+  choices?: string[];
+  /** Preselected answer; also used on timeout and by `--yes` on the command line. Templates allowed. */
+  default?: string;
+}
+
+export type Step =
+  AgentStep | ConsoleStep | LoopStep | IfStep | BreakStep | StopStep | ApprovalStep | AskStep;
 
 export type StepOfType<T extends StepType> = Extract<Step, { type: T }>;
 
@@ -134,6 +159,28 @@ export interface WorkflowInput {
  */
 export type WorkflowIsolation = 'workspace' | 'worktree';
 
+/**
+ * Workspace-relative glob(s) with forward slashes, e.g. `docs/**` or `src/*.ts`. In a list, patterns starting
+ * with `!` exclude files that the other patterns match.
+ */
+export type TriggerFiles = string | string[];
+
+/**
+ * Workflow key `on:`: when VS Code starts the workflow by itself. Triggers only fire while VS Code is open, in
+ * trusted workspaces, for workflows whose commands were approved once (confirmation hash), and while the setting
+ * `isarFlow.triggers.enabled` is on.
+ */
+export interface WorkflowTriggers {
+  /** A text document matching `files` was saved in VS Code. */
+  save?: { files: TriggerFiles };
+  /** A file matching `files` was created, changed or deleted on disk (by any program). */
+  change?: { files: TriggerFiles };
+  /** Every `every` while VS Code is open, e.g. "15m", "1h", "1h30m", "1d" (at least 1m). */
+  schedule?: { every: string };
+}
+
+export type TriggerKind = keyof WorkflowTriggers;
+
 export interface Workflow {
   version: 1;
   name: string;
@@ -143,6 +190,10 @@ export interface Workflow {
   isolation?: WorkflowIsolation;
   /** Commands run in the worktree before the first block (only with `isolation: worktree`), e.g. `npm ci`. */
   setup?: string[];
+  /** Triggers that start the workflow automatically (save, change, schedule). */
+  on?: WorkflowTriggers;
+  /** Copilot (language model tools and the @isarflow chat participant) may run this workflow. Default false. */
+  expose?: boolean;
   steps: Step[];
 }
 
@@ -152,7 +203,8 @@ export type StepSlot = 'steps' | 'then' | 'else';
 
 /**
  * One mocked host call of a block in a simulated run. Only the fields of the block's type apply (console:
- * exitCode, output; agent: text, json; approval: approved, comment); `error` fails the call for any of them.
+ * exitCode, output; agent: text, json; approval: approved, comment; ask: answer); `error` fails the call for any
+ * of them.
  */
 export interface SimulationResult {
   /** Console: exit code (default 0). */
@@ -167,6 +219,8 @@ export interface SimulationResult {
   approved?: boolean;
   /** Approval: the comment that comes with the decision. */
   comment?: string;
+  /** Ask: the answer (default: the block's default, else its first choice, else "(simulated answer)"). */
+  answer?: string;
   /** Fails this call with the message, e.g. to simulate an unreachable model. */
   error?: string;
 }
@@ -181,4 +235,31 @@ export interface SimulationFile {
   approvals?: SimulationApprovals;
   /** Results per block id, used in order; the last one repeats. */
   blocks?: Record<string, SimulationResult[]>;
+}
+
+/* ---------- project config (.isarflow/config.yaml, read by the command line runner) ---------- */
+
+/**
+ * An OpenAI-compatible endpoint for `isar-flow run`. The API key never lives in the file: it is read from the
+ * environment variable named by `apiKeyEnv` (default `ISARFLOW_<ID>_API_KEY`: the id upper-cased, `-` as `_`).
+ */
+export interface ProjectProviderConfig {
+  /** Provider id, the first part of model refs (`<id>/<model>`); `vscode` is reserved. */
+  id: string;
+  label?: string;
+  /** API root, e.g. `http://localhost:4000/v1`. */
+  baseUrl: string;
+  /** Name of the environment variable that holds the API key. */
+  apiKeyEnv?: string;
+  /** Ask the server for its models via `GET /models` (default true). */
+  discoverModels?: boolean;
+  /** Models offered in addition to (or, without discovery, instead of) the discovered ones. */
+  models?: string[];
+  headers?: Record<string, string>;
+}
+
+/** Contents of `.isarflow/config.yaml` (command line runner settings; VS Code uses its own settings). */
+export interface ProjectConfig {
+  version?: 1;
+  providers?: ProjectProviderConfig[];
 }

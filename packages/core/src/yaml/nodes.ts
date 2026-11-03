@@ -20,6 +20,8 @@ export const WORKFLOW_KEY_ORDER = [
   'version',
   'name',
   'description',
+  'on',
+  'expose',
   'inputs',
   'env',
   'isolation',
@@ -39,6 +41,9 @@ export const STEP_KEY_ORDER = [
   'cwd',
   'env',
   'message',
+  'question',
+  'choices',
+  'default',
   'outcome',
   'condition',
   'until',
@@ -69,13 +74,14 @@ export const AGENT_KEY_ORDER = [
   'tools',
   'toolMode',
   'permissions',
+  'memory',
 ];
 
 const COMPARISON_KEY_ORDER = ['value', 'op', 'to', 'ignoreCase'];
 const CONDITION_KEYS = new Set(['condition', 'until', 'while']);
 const BLOCK_LIST_KEYS = new Set(['steps', 'then', 'else']);
 /** Short scalar-only collections that read best on one line, as in `tools: [readFile, gitDiff]`. */
-const COMPACT_KEYS = new Set(['tools', 'fallbackModels', 'permissions', 'retry', 'files']);
+const COMPACT_KEYS = new Set(['tools', 'fallbackModels', 'permissions', 'retry', 'files', 'choices']);
 
 type Primitive = string | number | boolean | null;
 

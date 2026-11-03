@@ -3,6 +3,7 @@ import type { RunView, Workflow } from '@isar-flow/core';
 import { Banner, Button, Chip, SimulatedChip, StatusGlyph, statusLabel } from '../../../../components';
 import { formatCost, formatDuration, formatRelativeTime, formatTokens } from '../../../../hooks';
 import { blockTrends, COST_TITLE, runCost } from '../../metrics';
+import { ReportActions } from '../../report/ReportActions';
 import { useWorkflowActions, useWorkflowState } from '../../store';
 import { useNow } from '../useNow';
 import { BlockTable } from './BlockTable';
@@ -21,9 +22,10 @@ function formatInput(value: unknown): string {
 /** Shown when a run is on the canvas and no block is selected: how the run went, block by block. */
 export function RunSummary({ run, live, workflow }: { run: RunView; live: boolean; workflow: Workflow }) {
   const actions = useWorkflowActions();
-  const { approvals, catalog, history } = useWorkflowState();
+  const { approvals, asks, catalog, history } = useWorkflowState();
   const running = run.status === 'running';
   const waiting = running && approvals.some((a) => a.runId === run.runId);
+  const asking = running && asks.some((a) => a.runId === run.runId);
   const now = useNow(running);
   const duration = running ? (now >= run.startedAt ? now - run.startedAt : undefined) : run.durationMs;
   const inputs = Object.entries(run.inputs ?? {});
@@ -39,7 +41,7 @@ export function RunSummary({ run, live, workflow }: { run: RunView; live: boolea
         </span>
         <div className="wf-run-hero-text">
           <h2 className="wf-run-hero-title if-display">
-            {waiting ? 'Waiting for approval' : statusLabel(run.status)}
+            {waiting ? 'Waiting for approval' : asking ? 'Waiting for your answer' : statusLabel(run.status)}
           </h2>
           <div className="wf-run-hero-meta">
             {duration !== undefined ? <span>{formatDuration(duration)}</span> : null}
@@ -61,6 +63,7 @@ export function RunSummary({ run, live, workflow }: { run: RunView; live: boolea
       </div>
 
       <RunOriginNote run={run} />
+      <ReportActions run={run} />
 
       {totalTokens > 0 ? (
         <div className="wf-insp-chips wf-run-totals">

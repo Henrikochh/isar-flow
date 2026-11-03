@@ -61,6 +61,8 @@ describeGit('run manager with the safety net', { timeout: 60_000 }, () => {
     const history = createRunHistory(memoryStore(), new FakeMemento(), () => 50);
     const manager = createRunManager(deps, { ui, history, env: {}, simulations: fakeSimulations() });
     const uri = vscode.Uri.file(path.join(repo, 'build.workflow.yaml'));
+    const finished: string[][] = [];
+    manager.onDidFinish((run) => finished.push(run.changedFiles));
 
     const runId = (await manager.start(uri)) as string;
     expect((await manager.whenFinished(runId))?.status).toBe('success');
@@ -78,7 +80,9 @@ describeGit('run manager with the safety net', { timeout: 60_000 }, () => {
     ]);
     expect(history.list()[0].review).toEqual({ total: 1, kept: 0, reverted: 0, pending: 1 });
     await flush();
-    expect(notifications).toContain('Build changed 1 file.');
+    // No editor of the workflow is visible, so the notification tells the whole outcome.
+    expect(notifications.some((m) => /^Build succeeded in \S+ and changed 1 file\.$/.test(m))).toBe(true);
+    expect(finished).toEqual([[path.join(repo, 'a.txt')]]);
     expect(gitIn(repo, 'for-each-ref', '--format=%(refname)', 'refs/isarflow/')).toContain(`${runId}/before`);
     manager.dispose();
   });

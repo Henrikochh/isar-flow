@@ -7,40 +7,72 @@ import {
   DEFAULT_CONTEXT_TOKENS,
   parseWorkflowText,
   reduceRunEvent,
+  runOriginText,
   runWorkflow,
   validateWorkflow,
+  workflowUsesRoot,
   type AgentDefinition,
+  type EditorContext,
+  type GitContext,
   type ResumeOptions,
   type RunEvent,
   type RunOptions,
+  type RunOrigin,
   type RunView,
   type ShellName,
   type SimulationFile,
   type Workflow,
   type WorkflowIsolation,
 } from '@isar-flow/core';
-import type { ActiveRun, RunManager, RunManagerDeps, RunStartOptions, SimulationStore } from '../contracts';
+import type {
+  ActiveRun,
+  CommandConfirmationState,
+  RunFinished,
+  RunManager,
+  RunManagerDeps,
+  RunStartOptions,
+  SimulationStore,
+} from '../contracts';
 import { contextTokensSetting } from '../models/settings';
 import { worktreeNeedsGit } from '../safety/gitSnapshots';
 import { createRunSafety, type RunSafety, type SafetySession } from '../safety/runSafety';
 import { createSimulationStore } from '../simulation/simulationStore';
 import { createApprovalBroker, type RunApprovalBroker } from './approvals';
+import { createAskBroker, type RunAskBroker } from './asks';
 import {
   CommandApprovals,
   confirmCommands,
   consoleCommandsOf,
+  rememberStartedByHand,
   setupCommandsOf,
+  triggerConfirmationState,
   unattendedAgentsOf,
 } from './commandApproval';
-import { createEngineHost } from './engineHost';
-import { errorMessage, formatDuration, formatElapsed } from './format';
+import { createEngineHost, type EngineHostDeps } from './engineHost';
+import { finishNotice } from './finishNotice';
+import { errorMessage, formatDuration } from './format';
+import { captureRunGit } from './gitCapture';
 import { createFileHistoryStore, createRunHistory, type FileRunHistory } from './history';
-import { promptForInputs } from './inputs';
+import { runStatusText, vscodeRunManagerUi, type RunManagerUi, type RunStatusItem } from './managerUi';
+import { WORKFLOW_EDITOR_VIEW_TYPE } from './notices';
+import {
+  CANCELLED_MESSAGE,
+  missingInputMessage,
+  neverPrompts,
+  NOT_ALLOWED_MESSAGE,
+  NOT_CONFIRMED_MESSAGE,
+  STARTING_MESSAGE,
+  StartRefusal,
+  STOPPED_MESSAGE,
+  triggerConfirmationMessage,
+  triggerFirstRunMessage,
+} from './refusals';
 import { resumePlan } from './resumeSource';
 import { WorkflowSecrets } from './secrets';
 import { runSetupCommands } from './setupCommands';
 
-export const WORKFLOW_EDITOR_VIEW_TYPE = 'isarFlow.workflowEditor';
+export type { RunManagerUi, RunStatusItem } from './managerUi';
+export { WORKFLOW_EDITOR_VIEW_TYPE } from './notices';
 /** Pause per simulated host call, so the canvas shows a simulated run block by block. */
 export const SIMULATION_DELAY_MS = 250;
 const SHELLS: readonly ShellName[] = ['auto', 'pwsh', 'powershell', 'cmd', 'bash', 'sh'];
@@ -51,45 +83,16 @@ const SIMULATED_RESUME_MESSAGE = "Run from here can't be simulated. Simulate the
 const PROBLEMS_BUTTON = 'Show problems';
 const OPEN_SIMULATION_BUTTON = 'Open simulation file';
 const OUTCOME_WORDS = { success: 'succeeded', failure: 'failed', cancelled: 'was cancelled' } as const;
-const REVIEW_BUTTON = 'Review changes';
 /** Opens the canvas on a run (registered by the workflow editor). */
 const SHOW_RUN_COMMAND = 'isarFlow.internal.showRun';
-
-/** The part of vscode.StatusBarItem the manager uses. */
-export interface RunStatusItem {
-  text: string;
-  tooltip?: string | vscode.MarkdownString;
-  command?: string | vscode.Command;
-  name?: string;
-  show(): void;
-  dispose(): void;
-}
-
-/** Window and workspace access, injectable for tests. */
-export interface RunManagerUi {
-  isTrusted(): boolean;
-  showInfo(message: string, ...buttons: string[]): Thenable<string | undefined>;
-  showWarning(message: string, ...buttons: string[]): Thenable<string | undefined>;
-  showError(message: string, ...buttons: string[]): Thenable<string | undefined>;
-  executeCommand(command: string, ...args: unknown[]): Thenable<unknown>;
-  /** Current text of the document, unsaved edits included. */
-  readText(uri: vscode.Uri): Thenable<string>;
-  /** An `isarFlow.*` setting (key without the prefix). */
-  setting<T>(key: string, fallback: T, scope?: vscode.Uri): T;
-  /** Absolute path of the workspace folder that contains the workflow; undefined outside all folders. */
-  workspaceFolder(uri: vscode.Uri): string | undefined;
-  /** Folder console commands run in: the workflow's folder, else the first folder, else the file's folder. */
-  workspaceRoot(uri: vscode.Uri): string;
-  promptInputs(workflow: Workflow): Promise<Record<string, unknown> | undefined>;
-  /** Modal used to confirm console commands; resolves to the chosen button. */
-  confirmCommands(message: string, detail: string, buttons: string[]): Thenable<string | undefined>;
-  createStatusItem(): RunStatusItem;
-}
+const MANUAL: RunOrigin = { kind: 'manual' };
 
 export interface RunManagerOptions {
   ui?: Partial<RunManagerUi>;
   history?: FileRunHistory;
   approvals?: RunApprovalBroker;
+  /** Questions of ask blocks; created (and disposed with the manager) by default. */
+  asks?: RunAskBroker;
   secrets?: WorkflowSecrets;
   commandApprovals?: CommandApprovals;
   /** Process environment visible as `env.*`; defaults to process.env. */
@@ -111,9 +114,12 @@ export interface RunManagerOptions {
 export interface WorkflowRunManager extends RunManager {
   readonly history: FileRunHistory;
   readonly approvals: RunApprovalBroker;
+  readonly asks: RunAskBroker;
   readonly simulations: SimulationStore;
+  readonly onDidFinish: vscode.Event<RunFinished>;
   /** Resolves with the final view once the run has ended (from history for runs that already ended). */
   whenFinished(runId: string): Promise<RunView | undefined>;
+  confirmationState(workflowUri: vscode.Uri): Promise<CommandConfirmationState>;
   /** Stops all runs like dispose() and resolves once the stopped runs are saved to the history. */
   shutdown(): Promise<void>;
 }
@@ -122,9 +128,12 @@ interface LiveRun extends ActiveRun {
   name: string;
   /** Test mode: the run uses the simulation host and its mocks. */
   simulated: boolean;
+  origin: RunOrigin;
   controller: AbortController;
   statusItem: RunStatusItem;
   timer: ReturnType<typeof setInterval>;
+  /** Updates the status bar item (elapsed time, waiting for an answer). */
+  refreshStatus(): void;
 }
 
 /** Everything a run needs once it is registered: the workflow, inputs and the settings read at start. */
@@ -142,33 +151,14 @@ interface RunPlan {
   tokenBudget: number;
   contextTokens: number;
   secrets: Record<string, string>;
+  origin: RunOrigin;
+  /** `editor.*` captured when the run was started; only for workflows that read it. */
+  editor?: EditorContext;
   /** Run from here: the saved run and block this run continues. */
   resume?: ResumeOptions;
 }
 
-const vscodeUi: RunManagerUi = {
-  isTrusted: () => vscode.workspace.isTrusted,
-  showInfo: (message, ...buttons) => vscode.window.showInformationMessage(message, ...buttons),
-  showWarning: (message, ...buttons) => vscode.window.showWarningMessage(message, ...buttons),
-  showError: (message, ...buttons) => vscode.window.showErrorMessage(message, ...buttons),
-  executeCommand: (command, ...args) => vscode.commands.executeCommand(command, ...args),
-  readText: (uri) => vscode.workspace.openTextDocument(uri).then((doc) => doc.getText()),
-  setting: <T>(key: string, fallback: T, scope?: vscode.Uri) =>
-    vscode.workspace.getConfiguration('isarFlow', scope).get<T>(key, fallback),
-  workspaceFolder: (uri) => vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath,
-  workspaceRoot: (uri) =>
-    vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath ??
-    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
-    path.dirname(uri.fsPath),
-  promptInputs: (workflow) => promptForInputs(workflow),
-  confirmCommands: (message, detail, buttons) =>
-    vscode.window.showWarningMessage(message, { modal: true, detail }, ...buttons),
-  createStatusItem: () => {
-    const item = vscode.window.createStatusBarItem('isarFlow.run', vscode.StatusBarAlignment.Left, 10);
-    item.name = 'Isar Flow run';
-    return item;
-  },
-};
+const NOTICE_METHODS = { info: 'showInfo', warning: 'showWarning', error: 'showError' } as const;
 
 function fileName(uri: vscode.Uri): string {
   return uri.path.slice(uri.path.lastIndexOf('/') + 1);
@@ -182,14 +172,22 @@ function stringEnv(env: Record<string, string | undefined>): Record<string, stri
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 const runLabel = (run: LiveRun) => (run.simulated ? 'Simulated run' : 'Run');
+const originPart = (origin: RunOrigin) => (origin.kind === 'manual' ? {} : { origin });
+
+/** "started on save of src/app.ts" for the start log line; nothing for manual runs. */
+function originWords(origin: RunOrigin): string[] {
+  const sentence = runOriginText(origin)?.sentence;
+  return sentence ? [`${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`] : [];
+}
 
 /**
  * Runs workflows with the core engine: validation, inputs, command confirmation, live events, status bar,
- * approvals and history. One live run per workflow. Also continues saved runs at a block (Run from here) and
- * simulates runs with the mocks of the workflow's simulation file (test mode).
+ * approvals, questions and history. One live run per workflow. Also continues saved runs at a block (Run from
+ * here), simulates runs with the mocks of the workflow's simulation file (test mode) and tells about finished runs
+ * when no editor of the workflow is visible.
  */
 export function createRunManager(deps: RunManagerDeps, options: RunManagerOptions = {}): WorkflowRunManager {
-  const ui: RunManagerUi = { ...vscodeUi, ...options.ui };
+  const ui: RunManagerUi = { ...vscodeRunManagerUi, ...options.ui };
   const now = options.now ?? Date.now;
   const { context, log } = deps;
   const history =
@@ -200,6 +198,7 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
       () => ui.setting('historyLimit', 50),
     );
   const approvals = options.approvals ?? createApprovalBroker();
+  const asks = options.asks ?? createAskBroker({ warn: (message) => log.warn(message) });
   const secrets = options.secrets ?? new WorkflowSecrets(context);
   const commandApprovals = options.commandApprovals ?? new CommandApprovals(context.workspaceState);
   const simulations = options.simulations ?? createSimulationStore();
@@ -220,6 +219,7 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
 
   const onEvent = new vscode.EventEmitter<{ workflowUri: string; event: RunEvent }>();
   const onDidChangeRuns = new vscode.EventEmitter<void>();
+  const onDidFinish = new vscode.EventEmitter<RunFinished>();
   const runs = new Map<string, LiveRun>();
   /** Completion of each run, kept until its history entry is saved. */
   const completions = new Map<string, Promise<RunView>>();
@@ -227,6 +227,12 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
   const starting = new Set<string>();
   const usedRunIds = new Set<string>();
   let disposed = false;
+
+  const refreshWaiting = (runId: string) => runs.get(runId)?.refreshStatus();
+  const subscriptions = [
+    approvals.onDidChangeWaiting(refreshWaiting),
+    asks.onDidChangeWaiting(refreshWaiting),
+  ];
 
   const notify = (show: Thenable<string | undefined>, actions: Record<string, () => unknown>) => {
     show.then(
@@ -245,8 +251,8 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     return runId;
   };
 
-  /** Parses and validates; shows the refusal and returns undefined when the workflow has errors. */
-  const validWorkflow = (text: string, uri: vscode.Uri): Workflow | undefined => {
+  /** Parses and validates without telling anyone: the workflow, or how many problems it has. */
+  const checkWorkflow = (text: string): { workflow: Workflow } | { errors: number } => {
     const parsed = parseWorkflowText(text);
     let errors = parsed.diagnostics.filter((d) => d.severity === 'error').length;
     if (parsed.workflow) {
@@ -260,26 +266,55 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
       errors += semantic.filter((d) => d.severity === 'error').length;
     }
     if (!parsed.valid && errors === 0) errors = 1;
-    if (parsed.workflow && errors === 0) return parsed.workflow;
-    notify(
-      ui.showError(`Fix ${plural(errors, 'problem')} in ${fileName(uri)} before running.`, PROBLEMS_BUTTON),
-      {
-        [PROBLEMS_BUTTON]: () => ui.executeCommand('workbench.actions.view.problems'),
-      },
-    );
-    return undefined;
+    return parsed.workflow && errors === 0 ? { workflow: parsed.workflow } : { errors };
   };
 
-  /** Reads the current text (unsaved edits included) and validates it; shows why when that fails. */
-  const readWorkflow = async (uri: vscode.Uri): Promise<Workflow | undefined> => {
+  /** Reads the current text (unsaved edits included) and validates it. */
+  const readWorkflow = async (uri: vscode.Uri): Promise<Workflow | StartRefusal> => {
     let text: string;
     try {
       text = await ui.readText(uri);
     } catch (error) {
-      notify(ui.showError(`Could not read ${fileName(uri)}: ${errorMessage(error)}`), {});
-      return undefined;
+      return new StartRefusal('invalid', `Could not read ${fileName(uri)}: ${errorMessage(error)}`, {
+        kind: 'error',
+      });
     }
-    return validWorkflow(text, uri);
+    const checked = checkWorkflow(text);
+    if ('workflow' in checked) return checked.workflow;
+    return new StartRefusal(
+      'invalid',
+      `Fix ${plural(checked.errors, 'problem')} in ${fileName(uri)} before running.`,
+      {
+        kind: 'error',
+        buttons: { [PROBLEMS_BUTTON]: () => ui.executeCommand('workbench.actions.view.problems') },
+      },
+    );
+  };
+
+  /** What the command confirmation covers for this workflow (see confirmCommands). */
+  const confirmationOf = (uri: vscode.Uri, workflow: Workflow, agents: Record<string, AgentDefinition>) => ({
+    workflowUri: uri.toString(),
+    workflowName: workflow.name,
+    commands: consoleCommandsOf(workflow),
+    agents: unattendedAgentsOf(workflow, agents),
+    approvals: commandApprovals,
+    enabled: ui.setting('confirmCommands', true, uri),
+  });
+
+  /** Tells the caller (onRefused) or the person (a notification) why a start stopped. */
+  const report = (uri: vscode.Uri, refusal: StartRefusal, startOptions: RunStartOptions) => {
+    if (startOptions.onRefused) {
+      log.info(`${fileName(uri)} did not start: ${refusal.message}`);
+      try {
+        startOptions.onRefused({ reason: refusal.reason, message: refusal.message });
+      } catch (error) {
+        log.error(`Could not report why ${fileName(uri)} did not start: ${errorMessage(error)}`);
+      }
+      return;
+    }
+    if (!refusal.notice || disposed) return;
+    const { kind, buttons = {} } = refusal.notice;
+    notify(ui[NOTICE_METHODS[kind]](refusal.message, ...Object.keys(buttons)), buttons);
   };
 
   const handleEvent = (run: LiveRun, event: RunEvent) => {
@@ -302,12 +337,56 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     run.statusItem.dispose();
     runs.delete(run.runId);
     approvals.cancel(run.runId);
+    asks.cancel(run.runId);
     try {
       await history.save(run.view, run.workflowUri);
     } catch (error) {
       log.error(`Could not save run ${run.runId} to the history: ${errorMessage(error)}`);
     }
     if (!disposed) onDidChangeRuns.fire();
+  };
+
+  /**
+   * After the run is saved and its review published: fires onDidFinish and tells about the outcome (an editor of
+   * the workflow that is visible shows it itself, so then only changed files are reported).
+   */
+  const announce = async (run: LiveRun, workspaceRoot: string, changed: number) => {
+    let changedFiles: string[] = [];
+    if (changed > 0 && !run.simulated && !disposed) {
+      try {
+        const review = await safety.reviews.get(run.runId);
+        changedFiles = review?.files.map((file) => path.join(workspaceRoot, file.path)) ?? [];
+      } catch (error) {
+        log.warn(`Could not list the files run ${run.runId} changed: ${errorMessage(error)}`);
+      }
+    }
+    if (disposed) return;
+    const { view } = run;
+    onDidFinish.fire({
+      runId: run.runId,
+      workflowUri: run.workflowUri,
+      workflowName: run.name,
+      status: view.status === 'running' ? 'failure' : view.status,
+      view,
+      changedFiles,
+      origin: run.origin,
+      simulated: run.simulated,
+    });
+    const notice = finishNotice({
+      name: run.name,
+      view,
+      origin: run.origin,
+      simulated: run.simulated,
+      changed,
+      editorVisible: asks.isAttached(run.workflowUri) || approvals.isAttached(run.workflowUri),
+    });
+    if (!notice) return;
+    const openRun = () => ui.executeCommand(SHOW_RUN_COMMAND, run.workflowUri, run.runId);
+    const method = notice.kind === 'error' ? 'showError' : 'showInfo';
+    notify(
+      ui[method](notice.message, ...notice.buttons),
+      Object.fromEntries(notice.buttons.map((button) => [button, openRun])),
+    );
   };
 
   /** Feeds the engine's events into the run and ends it like the engine would when the engine stopped early. */
@@ -347,6 +426,7 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
       startedAt,
       inputs: plan.inputs,
       ...(plan.resume && { resumedFrom: { runId: plan.resume.fromRunId, stepId: plan.resume.stepId } }),
+      ...originPart(plan.origin),
     });
     handleEvent(run, {
       type: 'run-end',
@@ -360,7 +440,18 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
       ?.discard()
       .catch((cause: unknown) => log.warn(`Could not clean up run ${run.runId}: ${errorMessage(cause)}`));
     await finish(run);
+    await announce(run, plan.workspaceRoot, 0);
     return run.view;
+  };
+
+  /** `git.*` for workflows that read it, from the real workspace folder; never in Restricted Mode. */
+  const gitFor = async (
+    workflow: Workflow,
+    root: string,
+    signal: AbortSignal,
+  ): Promise<GitContext | undefined> => {
+    if (!deps.codeContext || !ui.isTrusted() || !workflowUsesRoot(workflow, 'git')) return undefined;
+    return captureRunGit(deps.codeContext, root, signal, (message) => log.warn(message));
   };
 
   /** Snapshot (and worktree) before the run. A workspace run goes ahead without them when that fails. */
@@ -389,6 +480,8 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     const startedAt = now();
     const { runId } = run;
     const isolated = plan.isolation === 'worktree';
+    const git = await gitFor(plan.workflow, plan.workspaceRoot, run.controller.signal);
+    if (run.controller.signal.aborted) return stopBeforeEngine(run, plan, startedAt, undefined);
     const { session, error } = await beginSafety(run, plan);
     if (error !== undefined) return stopBeforeEngine(run, plan, startedAt, error);
 
@@ -418,6 +511,16 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     // Agents only see workspace folders: a workflow outside all folders gets the default (first) folder.
     const toolRoot = isolated ? root : plan.folder;
     const contextRoot = isolated ? root : plan.folder;
+    const memory = deps.memory?.forRun(root, {
+      ...(session && { journal: session.journal }),
+      secrets: Object.values(plan.secrets),
+    });
+    // Nobody waits for a triggered run: its ask blocks take their default (else the first choice) in the engine.
+    const ask: EngineHostDeps['ask'] =
+      plan.origin.kind === 'trigger'
+        ? undefined
+        : (prompt, signal) =>
+            asks.request({ ...prompt, runId, workflowUri: run.workflowUri, workflowName: run.name }, signal);
     const host = createEngineHost({
       runId,
       workspaceRoot: root,
@@ -428,12 +531,20 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
       readContextFiles: (contextRoot && options.readContextFilesIn?.(contextRoot)) || deps.readContextFiles,
       approve: (req, signal) =>
         approvals.request(
-          { runId, stepId: req.stepId, message: req.message, workflowUri: run.workflowUri },
+          {
+            runId,
+            stepId: req.stepId,
+            message: req.message,
+            workflowUri: run.workflowUri,
+            workflowName: run.name,
+          },
           signal,
         ),
+      ...(ask && { ask }),
       now,
       secrets: plan.secrets,
       contextTokens: plan.contextTokens,
+      ...(memory && { memory }),
     });
     await drive(
       run,
@@ -452,6 +563,9 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
         defaultShell: plan.defaultShell,
         now,
         ...(plan.resume && { resume: plan.resume }),
+        ...(plan.editor && { editor: plan.editor }),
+        ...(git && { git }),
+        ...originPart(plan.origin),
       },
       startedAt,
     );
@@ -469,11 +583,7 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     await session?.publish().catch((error: unknown) => {
       log.warn(`Could not publish the review of run ${runId}: ${errorMessage(error)}`);
     });
-    if (changed > 0 && !disposed) {
-      notify(ui.showInfo(`${run.name} changed ${plural(changed, 'file')}.`, REVIEW_BUTTON), {
-        [REVIEW_BUTTON]: () => ui.executeCommand(SHOW_RUN_COMMAND, run.workflowUri, runId),
-      });
-    }
+    await announce(run, plan.workspaceRoot, changed);
     return run.view;
   };
 
@@ -488,20 +598,24 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     workflow: Workflow,
     inputs: Record<string, unknown>,
     simulated: boolean,
+    origin: RunOrigin,
   ) => {
     const runId = newRunId();
     const statusItem = ui.createStatusItem();
     const startedAt = now();
+    const { name } = workflow;
     const updateStatus = () => {
-      const elapsed = formatElapsed(now() - startedAt);
-      statusItem.text = simulated
-        ? `$(beaker) ${workflow.name} (simulated) ${elapsed}`
-        : `$(sync~spin) ${workflow.name} ${elapsed}`;
+      const waiting = asks.waiting(runId) ? 'answer' : approvals.waiting(runId) ? 'approval' : undefined;
+      const status = runStatusText({
+        name,
+        simulated,
+        elapsedMs: now() - startedAt,
+        ...(waiting && { waiting }),
+      });
+      statusItem.text = status.text;
+      statusItem.tooltip = status.tooltip;
     };
     updateStatus();
-    statusItem.tooltip = simulated
-      ? `Simulating ${workflow.name}. Click to show the workflow.`
-      : `${workflow.name} is running. Click to show the workflow.`;
     statusItem.command = {
       command: 'vscode.openWith',
       title: 'Show workflow',
@@ -512,12 +626,14 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     const run: LiveRun = {
       runId,
       workflowUri: uri.toString(),
-      name: workflow.name,
+      name,
       simulated,
-      view: createRunView(runId, workflow.name, startedAt, inputs),
+      origin,
+      view: createRunView(runId, name, startedAt, inputs),
       controller: new AbortController(),
       statusItem,
       timer: setInterval(updateStatus, 1000),
+      refreshStatus: updateStatus,
     };
     runs.set(runId, run);
     return run;
@@ -536,12 +652,13 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     inputs: Record<string, unknown>,
     agents: Record<string, AgentDefinition>,
     resume: ResumeOptions | undefined,
-  ) => {
+    origin: RunOrigin,
+    editor: EditorContext | undefined,
+  ): Promise<string | StartRefusal> => {
     const workspaceRoot = ui.workspaceRoot(uri);
     const isolation = workflow.isolation === 'worktree' ? 'worktree' : 'workspace';
     if (isolation === 'worktree' && !(await safety.canIsolate(workspaceRoot))) {
-      notify(ui.showError(worktreeNeedsGit(workspaceRoot)), {});
-      return undefined;
+      return new StartRefusal('error', worktreeNeedsGit(workspaceRoot), { kind: 'error' });
     }
     const plan: RunPlan = {
       workflow,
@@ -557,14 +674,17 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
         contextTokensSetting(ui.setting<unknown>('agentContextTokens', undefined, uri)) ??
         DEFAULT_CONTEXT_TOKENS,
       secrets: await secrets.getAll(),
+      origin,
+      ...(editor && { editor }),
       ...(resume && { resume }),
     };
 
-    const run = register(uri, workflow, inputs, false);
+    const run = register(uri, workflow, inputs, false, origin);
     const where = [
       uri.fsPath,
       ...(isolation === 'worktree' ? ['in a git worktree'] : []),
       ...(resume ? [`from block '${resume.stepId}' of run ${resume.fromRunId}`] : []),
+      ...originWords(origin),
     ];
     log.info(`Run ${run.runId} of '${workflow.name}' started (${where.join(', ')}).`);
     return track(run, () => execute(run, plan));
@@ -576,27 +696,36 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     workflow: Workflow,
     inputs: Record<string, unknown>,
     file: SimulationFile,
+    origin: RunOrigin,
+    editor: EditorContext | undefined,
   ) => {
     const runSecrets = ui.isTrusted() ? await secrets.getAll() : {};
-    const run = register(uri, workflow, inputs, true);
-    log.info(`Simulated run ${run.runId} of '${workflow.name}' started (${uri.fsPath}).`);
-    const runOptions: RunOptions = {
-      runId: run.runId,
-      inputs,
-      host: createSimulationHost({ file, delayMs: options.simulationDelayMs ?? SIMULATION_DELAY_MS }),
-      agents: deps.agents.definitions(),
-      signal: run.controller.signal,
-      env: stringEnv(options.env ?? process.env),
-      secrets: runSecrets,
-      workflowFile: uri.fsPath,
-      workspaceRoot: ui.workspaceRoot(uri),
-      defaultShell: shellOf(uri),
-      now,
-      simulated: true,
-    };
+    const workspaceRoot = ui.workspaceRoot(uri);
+    const run = register(uri, workflow, inputs, true, origin);
+    const where = [uri.fsPath, ...originWords(origin)];
+    log.info(`Simulated run ${run.runId} of '${workflow.name}' started (${where.join(', ')}).`);
     return track(run, async () => {
+      const git = await gitFor(workflow, workspaceRoot, run.controller.signal);
+      const runOptions: RunOptions = {
+        runId: run.runId,
+        inputs,
+        host: createSimulationHost({ file, delayMs: options.simulationDelayMs ?? SIMULATION_DELAY_MS }),
+        agents: deps.agents.definitions(),
+        signal: run.controller.signal,
+        env: stringEnv(options.env ?? process.env),
+        secrets: runSecrets,
+        workflowFile: uri.fsPath,
+        workspaceRoot,
+        defaultShell: shellOf(uri),
+        now,
+        simulated: true,
+        ...(editor && { editor }),
+        ...(git && { git }),
+        ...originPart(origin),
+      };
       await drive(run, workflow, runOptions, run.view.startedAt);
       await finish(run);
+      await announce(run, workspaceRoot, 0);
       return run.view;
     });
   };
@@ -606,14 +735,11 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
   /** One start per workflow at a time: refuses while it runs or while another start is still asking. */
   const startOnce = async (
     uri: vscode.Uri,
-    task: () => Promise<string | undefined>,
-  ): Promise<string | undefined> => {
+    task: () => Promise<string | StartRefusal>,
+  ): Promise<string | StartRefusal> => {
     const workflowUri = uri.toString();
-    if (liveRunOf(workflowUri)) {
-      notify(ui.showInfo(RUNNING_MESSAGE), {});
-      return undefined;
-    }
-    if (starting.has(workflowUri)) return undefined;
+    if (liveRunOf(workflowUri)) return new StartRefusal('running', RUNNING_MESSAGE, { kind: 'info' });
+    if (starting.has(workflowUri)) return new StartRefusal('running', STARTING_MESSAGE);
     starting.add(workflowUri);
     try {
       return await task();
@@ -621,96 +747,179 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
       log.error(
         `Could not start ${fileName(uri)}: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
       );
-      notify(ui.showError(`Could not start ${fileName(uri)}: ${errorMessage(error)}`), {});
-      return undefined;
+      return new StartRefusal('error', `Could not start ${fileName(uri)}: ${errorMessage(error)}`, {
+        kind: 'error',
+      });
     } finally {
       starting.delete(workflowUri);
     }
+  };
+
+  /** The editor captured at start, for workflows that read `editor.*`. */
+  const editorFor = (workflow: Workflow, captured: EditorContext | undefined) =>
+    captured && workflowUsesRoot(workflow, 'editor') ? captured : undefined;
+
+  /** Input values without prompts (triggers, Copilot) or from the input boxes; a refusal when that fails. */
+  const inputsFor = async (
+    workflow: Workflow,
+    given: Record<string, unknown> | undefined,
+    origin: RunOrigin,
+  ): Promise<Record<string, unknown> | StartRefusal> => {
+    if (neverPrompts(origin)) {
+      const values = given ?? {};
+      const missing = missingInputMessage(workflow, values, origin);
+      return missing === undefined ? values : new StartRefusal('inputs', missing, { kind: 'error' });
+    }
+    const values = given ?? (await ui.promptInputs(workflow));
+    return values ?? new StartRefusal('cancelled', CANCELLED_MESSAGE);
   };
 
   const startRun = (
     uri: vscode.Uri,
     inputs: Record<string, unknown> | undefined,
     startOptions: RunStartOptions,
+    origin: RunOrigin,
+    editor: EditorContext | undefined,
   ) =>
     startOnce(uri, async () => {
       const workflow = await readWorkflow(uri);
-      if (!workflow) return undefined;
+      if (workflow instanceof StartRefusal) return workflow;
 
-      let values = inputs;
+      let given = inputs;
       let resume: ResumeOptions | undefined;
       if (startOptions.resume) {
         const plan = await resumePlan(history, uri.toString(), workflow, startOptions.resume);
-        if ('error' in plan) {
-          notify(ui.showError(plan.error), {});
-          return undefined;
-        }
+        if ('error' in plan) return new StartRefusal('invalid', plan.error, { kind: 'error' });
         resume = plan.resume;
-        values ??= plan.inputs;
+        given ??= plan.inputs;
       }
-      values ??= await ui.promptInputs(workflow);
-      if (!values) return undefined;
+      const values = await inputsFor(workflow, given, origin);
+      if (values instanceof StartRefusal) return values;
 
       // One snapshot for the question and the run: an agent file changed while the question is open
       // must not run with permissions nobody confirmed.
       const agents = deps.agents.definitions();
-      const confirmed = await confirmCommands({
-        workflowUri: uri.toString(),
-        workflowName: workflow.name,
-        commands: consoleCommandsOf(workflow),
-        agents: unattendedAgentsOf(workflow, agents),
-        approvals: commandApprovals,
-        enabled: ui.setting('confirmCommands', true, uri),
-        ask: (message, detail, buttons) => Promise.resolve(ui.confirmCommands(message, detail, buttons)),
-      });
-      if (!confirmed || disposed) return undefined;
-      return await launch(uri, workflow, values, agents, resume);
+      const confirmation = confirmationOf(uri, workflow, agents);
+      if (origin.kind === 'trigger') {
+        const state = triggerConfirmationState(confirmation);
+        if (state !== 'approved') {
+          const message = (state === 'needed' ? triggerConfirmationMessage : triggerFirstRunMessage)(
+            workflow.name,
+          );
+          return new StartRefusal('confirmation', message, { kind: 'warning' });
+        }
+      } else {
+        const confirmed = await confirmCommands({
+          ...confirmation,
+          ask: (message, detail, buttons) => Promise.resolve(ui.confirmCommands(message, detail, buttons)),
+        });
+        if (!confirmed) return new StartRefusal('confirmation', NOT_CONFIRMED_MESSAGE);
+        await rememberStartedByHand(confirmation);
+      }
+      if (disposed) return new StartRefusal('error', STOPPED_MESSAGE);
+      return launch(uri, workflow, values, agents, resume, origin, editorFor(workflow, editor));
     });
 
-  const startSimulation = (uri: vscode.Uri, inputs: Record<string, unknown> | undefined) =>
+  const startSimulation = (
+    uri: vscode.Uri,
+    inputs: Record<string, unknown> | undefined,
+    origin: RunOrigin,
+    editor: EditorContext | undefined,
+  ) =>
     startOnce(uri, async () => {
       const workflow = await readWorkflow(uri);
-      if (!workflow) return undefined;
+      if (workflow instanceof StartRefusal) return workflow;
       let file: SimulationFile;
       try {
         file = await simulations.load(uri);
       } catch (error) {
-        notify(ui.showError(errorMessage(error), OPEN_SIMULATION_BUTTON), {
-          [OPEN_SIMULATION_BUTTON]: () =>
-            simulations.open(uri).catch((cause: unknown) => {
-              notify(ui.showError(`Could not open the simulation file: ${errorMessage(cause)}`), {});
-            }),
+        return new StartRefusal('invalid', errorMessage(error), {
+          kind: 'error',
+          buttons: {
+            [OPEN_SIMULATION_BUTTON]: () =>
+              simulations.open(uri).catch((cause: unknown) => {
+                notify(ui.showError(`Could not open the simulation file: ${errorMessage(cause)}`), {});
+              }),
+          },
         });
-        return undefined;
       }
-      const values = inputs ?? (await ui.promptInputs(workflow));
-      if (!values || disposed) return undefined;
-      return await simulate(uri, workflow, values, file);
+      const values = await inputsFor(workflow, inputs, origin);
+      if (values instanceof StartRefusal) return values;
+      if (disposed) return new StartRefusal('error', STOPPED_MESSAGE);
+      return await simulate(uri, workflow, values, file, origin, editorFor(workflow, editor));
     });
+
+  /** `editor.*` as it is when the start begins, before any prompt can move the focus. */
+  const captureEditor = (uri: vscode.Uri, startOptions: RunStartOptions): EditorContext | undefined => {
+    if (startOptions.editor) return startOptions.editor;
+    if (!deps.codeContext) return undefined;
+    // Nobody started a triggered run at the editor: a schedule or a file change must not read whatever happens
+    // to be selected (an .env file, say) and hand it to a model. A save trigger only sees the saved file.
+    const origin = startOptions.origin;
+    if (origin?.kind === 'trigger' && origin.trigger !== 'save') return undefined;
+    try {
+      const editor = deps.codeContext.editor(ui.workspaceRoot(uri));
+      if (origin?.kind === 'trigger' && editor?.file !== origin.file) return undefined;
+      return editor;
+    } catch (error) {
+      log.warn(`Could not read the active editor: ${errorMessage(error)}`);
+      return undefined;
+    }
+  };
+
+  const attemptStart = async (
+    uri: vscode.Uri,
+    inputs: Record<string, unknown> | undefined,
+    startOptions: RunStartOptions,
+    editor: EditorContext | undefined,
+  ): Promise<string | StartRefusal> => {
+    if (disposed) return new StartRefusal('error', STOPPED_MESSAGE);
+    const origin = startOptions.origin ?? MANUAL;
+    if (neverPrompts(origin) && (startOptions.simulate || startOptions.resume)) {
+      return new StartRefusal('not-allowed', NOT_ALLOWED_MESSAGE, { kind: 'error' });
+    }
+    if (startOptions.resume && startOptions.simulate) {
+      return new StartRefusal('not-allowed', SIMULATED_RESUME_MESSAGE, { kind: 'error' });
+    }
+    // Simulations run nothing, so they work in Restricted Mode too.
+    if (startOptions.simulate) return startSimulation(uri, inputs, origin, editor);
+    if (!ui.isTrusted()) {
+      return new StartRefusal('untrusted', UNTRUSTED_MESSAGE, {
+        kind: 'warning',
+        buttons: { [TRUST_BUTTON]: () => ui.executeCommand('workbench.trust.manage') },
+      });
+    }
+    return startRun(uri, inputs, startOptions, origin, editor);
+  };
 
   return {
     onEvent: onEvent.event,
     onDidChangeRuns: onDidChangeRuns.event,
+    onDidFinish: onDidFinish.event,
     history,
     approvals,
+    asks,
     reviews: safety.reviews,
     simulations,
 
     async start(uri, inputs, startOptions = {}) {
-      if (disposed) return undefined;
-      if (startOptions.resume && startOptions.simulate) {
-        notify(ui.showError(SIMULATED_RESUME_MESSAGE), {});
-        return undefined;
+      const editor = captureEditor(uri, startOptions);
+      const outcome = await attemptStart(uri, inputs, startOptions, editor);
+      if (typeof outcome === 'string') return outcome;
+      report(uri, outcome, startOptions);
+      return undefined;
+    },
+
+    async confirmationState(uri) {
+      let text: string;
+      try {
+        text = await ui.readText(uri);
+      } catch {
+        return 'invalid';
       }
-      // Simulations run nothing, so they work in Restricted Mode too.
-      if (startOptions.simulate) return startSimulation(uri, inputs);
-      if (!ui.isTrusted()) {
-        notify(ui.showWarning(UNTRUSTED_MESSAGE, TRUST_BUTTON), {
-          [TRUST_BUTTON]: () => ui.executeCommand('workbench.trust.manage'),
-        });
-        return undefined;
-      }
-      return startRun(uri, inputs, startOptions);
+      const checked = checkWorkflow(text);
+      if (!('workflow' in checked)) return 'invalid';
+      return triggerConfirmationState(confirmationOf(uri, checked.workflow, deps.agents.definitions()));
     },
 
     cancel(runId) {
@@ -718,6 +927,7 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
       if (!run) return;
       run.controller.abort();
       approvals.cancel(runId);
+      asks.cancel(runId);
     },
 
     active(workflowUri) {
@@ -744,11 +954,14 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
         clearInterval(run.timer);
         run.statusItem.dispose();
       }
+      for (const subscription of subscriptions) subscription.dispose();
       approvals.dispose();
+      asks.dispose();
       safety.dispose();
       simulations.dispose();
       onEvent.dispose();
       onDidChangeRuns.dispose();
+      onDidFinish.dispose();
       history.dispose();
     },
   };

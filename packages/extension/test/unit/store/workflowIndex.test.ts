@@ -71,6 +71,45 @@ describe('summarizeWorkflow', () => {
     }
   });
 
+  it('marks workflows Copilot may run and those that read the editor, and lists their triggers', () => {
+    const text = [
+      'version: 1',
+      'name: Release',
+      'description: Ships it',
+      'on:',
+      '  save: { files: "src/*.ts" }',
+      '  schedule: { every: 1h }',
+      'expose: true',
+      'steps:',
+      '  - id: explain',
+      '    type: console',
+      '    run: echo "${{ editor.selection }}"',
+      '',
+    ].join('\n');
+    const record = summarizeWorkflow(text, 'u', 'release.workflow.yaml');
+    expect(record.summary).toMatchObject({ name: 'Release', valid: true, exposed: true, usesEditor: true });
+    expect(record.summary.triggers).toEqual([
+      { kind: 'save', label: 'On save: src/*.ts', files: ['src/*.ts'] },
+      expect.objectContaining({ kind: 'schedule', every: '1h', everyMs: 3_600_000 }),
+    ]);
+  });
+
+  it('leaves the Package C fields out when they do not apply', () => {
+    const text =
+      'version: 1\nname: Plain\nexpose: false\nsteps:\n  - id: a\n    type: console\n    run: echo hi\n';
+    const { summary } = summarizeWorkflow(text, 'u', 'plain.workflow.yaml');
+    expect(summary).not.toHaveProperty('exposed');
+    expect(summary).not.toHaveProperty('triggers');
+    expect(summary).not.toHaveProperty('usesEditor');
+  });
+
+  it('lists the triggers of workflows with problems, which do not fire then', () => {
+    const text = 'version: 1\nname: Broken\non:\n  change: { files: ["docs/**"] }\nsteps: 3\n';
+    const { summary } = summarizeWorkflow(text, 'u', 'broken.workflow.yaml');
+    expect(summary.valid).toBe(false);
+    expect(summary.triggers).toEqual([{ kind: 'change', label: 'On change: docs/**', files: ['docs/**'] }]);
+  });
+
   it('counts blocks of schema-invalid workflows leniently', () => {
     const text =
       'version: 1\nname: Half\nsteps:\n  - id: a\n    type: agent\n    agent: coder\n  - not a block\n';

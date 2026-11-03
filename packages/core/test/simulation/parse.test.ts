@@ -124,7 +124,7 @@ describe('parseSimulationText', () => {
   it('lists the fields of a result for a property it does not know', () => {
     const text = lines('blocks:', '  tests:', '    - stdout: ok', '      exit_code: 1');
     expect(parseSimulationText(text).diagnostics.map((d) => d.message)).toEqual([
-      "Unknown property 'stdout'. A result has exitCode, output, text, json, approved, comment or error.",
+      "Unknown property 'stdout'. A result has exitCode, output, text, json, approved, comment, answer or error.",
       "Unknown property 'exit_code'. Did you mean 'exitCode'?",
     ]);
   });

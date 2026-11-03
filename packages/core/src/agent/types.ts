@@ -40,6 +40,48 @@ export interface AgentLoopOptions {
   maxTokens?: number;
   output?: { format: 'text' | 'json'; schema?: OutputShape };
   io: StepIO;
+  /** Project memory of this conversation (agent setting `memory`); omitted = no memory. */
+  memory?: AgentMemory;
+}
+
+/**
+ * Project memory as one agent conversation sees it (built by executeAgentRequest from ProjectMemory).
+ * `remember` is not a ToolName: it is never listed in an agent's `tools` and never reaches the ToolHost.
+ */
+export interface AgentMemory {
+  /**
+   * Text of `.isarflow/memory.md`, already cut to the first 8 KB (UTF-8, at a character boundary); added to the
+   * system prompt under a "Project memory" heading. Missing or blank = no memory section.
+   */
+  text?: string;
+  /** True when `text` was cut; the prompt then says that only the beginning of the file is shown. */
+  truncated?: boolean;
+  /**
+   * memory: write. Offers the tool `remember(note)` (natively, or in the text tool section in text tool mode);
+   * the agent loop answers its calls with this function instead of the ToolHost. Resolves with the line written;
+   * a rejection becomes a tool error result for the model (the block does not fail).
+   */
+  remember?: (note: string, io: StepIO) => Promise<string>;
+}
+
+/**
+ * The project memory file (`.isarflow/memory.md`) of a run's workspace folder; implemented by the hosts (VS Code
+ * extension and command line runner) and passed to executeAgentRequest (`AgentRequestDeps.memory`), which turns it
+ * into AgentMemory for agents with `memory: read | write` (default read).
+ */
+export interface ProjectMemory {
+  /**
+   * Text of the file (the whole file; the caller cuts it to 8 KB); undefined when it does not exist. A rejection is
+   * logged and the agent runs without memory.
+   */
+  read(signal: AbortSignal): Promise<string | undefined>;
+  /**
+   * Appends `note` as a dated bullet (`- 2026-11-03: <note>`, see memoryNoteLine), creating the file with a short
+   * header when missing. Resolves with the line written; rejects with a user-facing message (see
+   * checkMemoryNote: empty or too long note, a secret in the note; file over the size limit; write failed), which
+   * the agent receives as a tool error.
+   */
+  append(note: string, io: StepIO): Promise<string>;
 }
 
 export interface AgentLoopResult {

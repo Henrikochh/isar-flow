@@ -47,5 +47,7 @@ export function createDefaultStep(type: StepType, id: string): Step {
       return { id, type, outcome: 'failure' };
     case 'approval':
       return { id, type, message: 'Continue?' };
+    case 'ask':
+      return { id, type, question: 'What should happen next?' };
   }
 }

@@ -63,7 +63,7 @@ export function Group({
       </div>
       {description ? <div className="wf-insp-desc">{description}</div> : null}
       {children}
-      {hint ? <div className="if-field__hint wf-insp-switch-hint">{hint}</div> : null}
+      {hint ? <div className="if-field__hint">{hint}</div> : null}
       <FieldIssues issues={issues} />
     </div>
   );

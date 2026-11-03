@@ -12,6 +12,10 @@ export const SimulationResultSchema: z.ZodType<SimulationResult> = z.strictObjec
     .optional()
     .meta({ description: 'Approval blocks: approve (true) or reject (false).' }),
   comment: z.string().optional().meta({ description: 'Approval blocks: the comment of the decision.' }),
+  answer: z
+    .string()
+    .optional()
+    .meta({ description: 'Ask blocks: the answer (default: the default answer, else the first choice).' }),
   error: z
     .string()
     .min(1)

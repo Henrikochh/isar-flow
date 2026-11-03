@@ -2,7 +2,7 @@
   "name": "isar-flow",
   "displayName": "Isar Flow",
   "description": "Configure AI agents and build YAML workflows visually: agents, console commands, loops and conditions.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "isarflow",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -198,6 +198,32 @@
         "title": "Show log",
         "category": "Isar Flow",
         "icon": "$(output)"
+      },
+      {
+        "command": "isarFlow.runWorkflowOnSelection",
+        "title": "Run workflow on selection",
+        "category": "Isar Flow",
+        "icon": "$(play)"
+      },
+      {
+        "command": "isarFlow.exportRunReport",
+        "title": "Export run report",
+        "category": "Isar Flow"
+      },
+      {
+        "command": "isarFlow.copyRunForPr",
+        "title": "Copy run for PR description",
+        "category": "Isar Flow"
+      },
+      {
+        "command": "isarFlow.showTriggers",
+        "title": "Show triggers",
+        "category": "Isar Flow"
+      },
+      {
+        "command": "isarFlow.openMemory",
+        "title": "Open project memory",
+        "category": "Isar Flow"
       }
     ],
     "menus": {
@@ -258,9 +284,18 @@
           "command": "isarFlow.runFromHere",
           "when": "resourceFilename =~ /\\.workflow\\.ya?ml$/",
           "group": "isarFlow@1"
+        },
+        {
+          "command": "isarFlow.runWorkflowOnSelection",
+          "when": "editorHasSelection && !isInDiffEditor",
+          "group": "isarFlow@2"
         }
       ],
       "commandPalette": [
+        {
+          "command": "isarFlow.openMemory",
+          "when": "workspaceFolderCount > 0"
+        },
         {
           "command": "isarFlow.openYaml",
           "when": "activeCustomEditorId == isarFlow.workflowEditor || activeCustomEditorId == isarFlow.agentEditor"
@@ -395,9 +430,82 @@
             }
           },
           "markdownDescription": "Prices per 1 million tokens by model reference, used to estimate the cost of runs. Costs are shown only for the models listed here. Example: `{ \"litellm/gpt-4.1\": { \"input\": 2, \"output\": 8 } }`"
+        },
+        "isarFlow.triggers.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "markdownDescription": "Start workflows from their `on:` triggers (save, file change, schedule) while VS Code is open. Triggers only run in trusted workspaces and after you approved the workflow's commands once."
         }
       }
     },
+    "languageModelTools": [
+      {
+        "name": "isarflow_listWorkflows",
+        "displayName": "List Isar Flow workflows",
+        "toolReferenceName": "isarflowWorkflows",
+        "canBeReferencedInPrompt": true,
+        "userDescription": "Lists the workflows Copilot may run.",
+        "modelDescription": "Lists the Isar Flow workflows of this workspace that the user allows Copilot to run, with their names, paths, descriptions and inputs. Call it before isarflow_runWorkflow.",
+        "tags": [
+          "isarflow"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "isarflow_runWorkflow",
+        "displayName": "Run an Isar Flow workflow",
+        "toolReferenceName": "isarflowRun",
+        "canBeReferencedInPrompt": true,
+        "userDescription": "Runs a workflow and returns its summary.",
+        "modelDescription": "Runs one Isar Flow workflow locally in VS Code and waits until it has finished. Returns the status, the outputs of its blocks and the files it changed. Only workflows listed by isarflow_listWorkflows can be run; the user confirms each run.",
+        "tags": [
+          "isarflow"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "workflow": {
+              "type": "string",
+              "description": "Workflow name or workspace-relative path, as listed by isarflow_listWorkflows."
+            },
+            "inputs": {
+              "type": "object",
+              "description": "Input values by input name.",
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "workflow"
+          ]
+        }
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "isarFlow.chat",
+        "name": "isarflow",
+        "fullName": "Isar Flow",
+        "description": "Run your local workflows",
+        "commands": [
+          {
+            "name": "list",
+            "description": "List the workflows Copilot may run"
+          },
+          {
+            "name": "run",
+            "description": "Run a workflow: /run <workflow> [name=value …]"
+          },
+          {
+            "name": "status",
+            "description": "Show running and recent runs"
+          }
+        ]
+      }
+    ],
     "yamlValidation": [
       {
         "fileMatch": "*.workflow.yaml",
@@ -422,6 +530,10 @@
       {
         "fileMatch": "**/.isarflow/simulations/*.sim.yml",
         "url": "./schemas/simulation.schema.json"
+      },
+      {
+        "fileMatch": ".isarflow/config.yaml",
+        "url": "./schemas/config.schema.json"
       }
     ]
   },

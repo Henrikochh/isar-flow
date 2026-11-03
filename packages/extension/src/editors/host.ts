@@ -28,6 +28,7 @@ export interface EditorUi {
   /** Shows an information message with one action; resolves true when the user picked it. */
   confirm(message: string, action: string): Promise<boolean>;
   showError(message: string): void;
+  showInfo(message: string): void;
 }
 
 export const WORKFLOW_EDITOR_VIEW_TYPE = 'isarFlow.workflowEditor';

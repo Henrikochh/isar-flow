@@ -8,6 +8,7 @@ import { KeyValueEditor } from '../RowEditors';
 import { InputsEditor } from './InputsEditor';
 import { IsolationSettings } from './IsolationSettings';
 import { RunHistory } from './RunHistory';
+import { CopilotSettings, TriggerSettings } from './TriggerSettings';
 
 /** Inspector content when no block is selected: workflow settings and run history. */
 export function WorkflowPanel({ withHeader = true }: { withHeader?: boolean }) {
@@ -83,6 +84,10 @@ export function WorkflowPanel({ withHeader = true }: { withHeader?: boolean }) {
           />
           <FieldIssues issues={issues.get('env')} />
         </Section>
+        <hr className="if-divider" />
+        <TriggerSettings workflow={workflow} issues={issues} />
+        <hr className="if-divider" />
+        <CopilotSettings workflow={workflow} issues={issues} />
         <hr className="if-divider" />
         <Section title="Runs">
           <RunHistory />

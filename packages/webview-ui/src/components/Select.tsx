@@ -58,6 +58,8 @@ export function Select<T extends string>({
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const listId = useId();
+  // The open list is named like its trigger: by `ariaLabel`, else by the trigger (and the label it has).
+  const triggerId = id ?? `${listId}-trigger`;
 
   const selected = options.find((o) => o.value === value);
 
@@ -137,7 +139,7 @@ export function Select<T extends string>({
     <div className={['if-select', open && 'if-select--open'].filter(Boolean).join(' ')} ref={rootRef}>
       <button
         ref={triggerRef}
-        id={id}
+        id={triggerId}
         type="button"
         className="if-select__trigger"
         aria-haspopup="listbox"
@@ -190,6 +192,8 @@ export function Select<T extends string>({
             id={listId}
             className="if-select__list"
             role="listbox"
+            aria-label={ariaLabel}
+            aria-labelledby={ariaLabel ? undefined : triggerId}
             tabIndex={-1}
             aria-activedescendant={filtered[active] ? `${listId}-${active}` : undefined}
             onKeyDown={onListKeyDown}

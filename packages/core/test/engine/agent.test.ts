@@ -80,6 +80,20 @@ describe('agent resolution', () => {
     expect(host.agentCalls[2].agent).not.toHaveProperty('toolMode');
   });
 
+  it('passes the memory mode of agent files and inline agents', async () => {
+    const host = new FakeHost();
+    await run(
+      workflow([
+        { id: 'a', type: 'agent', agent: 'scribe', prompt: 'p' },
+        { id: 'b', type: 'agent', agent: { model: 'litellm/x', memory: 'none' }, prompt: 'q' },
+        { id: 'c', type: 'agent', model: 'litellm/y', prompt: 'r' },
+      ]),
+      { host, agents: { scribe: { name: 'Scribe', model: 'ollama/llama3', memory: 'write' } } },
+    );
+    expect(host.agentCalls.map((call) => call.agent.memory)).toEqual(['write', 'none', undefined]);
+    expect(host.agentCalls[2].agent).not.toHaveProperty('memory');
+  });
+
   it('accepts inline agents and names them after the block', async () => {
     const host = new FakeHost();
     await run(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type {
   AgentSummary,
+  MemoryFileState,
   ModelCatalog,
   RunRecordSummary,
   SetupReport,
@@ -102,6 +103,23 @@ describe('buildSidebarState', () => {
     const state = buildSidebarState({ ...base, history, activeRuns: [live(1)] });
     expect(state.recentRuns.map((r) => r.runId)).toEqual(['r4', 'r3']);
     expect(state.activeRuns.map((r) => r.runId)).toEqual(['live1']);
+  });
+
+  it('passes the project memory files through when they are known', () => {
+    const memory: MemoryFileState[] = [
+      {
+        uri: 'file:///ws/.isarflow/memory.md',
+        folderUri: 'file:///ws',
+        folderName: 'ws',
+        path: '.isarflow/memory.md',
+        exists: false,
+        bytes: 0,
+        overLimit: false,
+        preview: '',
+      },
+    ];
+    expect(buildSidebarState({ ...base, memory }).memory).toBe(memory);
+    expect(buildSidebarState(base)).not.toHaveProperty('memory');
   });
 
   it('passes the setup report through, null when there is none', () => {

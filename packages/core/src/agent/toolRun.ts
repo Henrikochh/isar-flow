@@ -1,9 +1,13 @@
+import type { StepIO } from '../engine/types';
 import type { ToolCall } from '../models/types';
 import { abortError } from './abort';
 import { errorMessage } from './format';
 import { checkJsonShape } from './json';
-import { BUILTIN_TOOLS, describeToolCall, isToolName, summarizeToolResult } from './tools';
-import type { AgentLoopOptions, ToolResult } from './types';
+import { REMEMBER_TOOL } from './memory';
+import { agentToolSpec, describeToolCall, isAgentToolName, isToolName, summarizeToolResult } from './tools';
+import type { AgentLoopOptions, AgentMemory, ToolResult } from './types';
+
+type RememberFn = NonNullable<AgentMemory['remember']>;
 
 /** Runs one tool call (or refuses it) and logs it; problems become error results for the model. */
 export async function runToolCall(call: ToolCall, options: AgentLoopOptions): Promise<ToolResult> {
@@ -11,11 +15,14 @@ export async function runToolCall(call: ToolCall, options: AgentLoopOptions): Pr
   const parsed = parseArguments(call.arguments);
   const args = parsed.ok ? parsed.args : {};
   const problem =
-    refusal(call.name, options.tools) ?? (parsed.ok ? invalidArguments(call.name, args) : parsed.error);
+    refusal(call.name, options) ?? (parsed.ok ? invalidArguments(call.name, args) : parsed.error);
 
+  const save = options.memory?.remember;
   let result: ToolResult;
   if (problem) {
     result = { content: problem, isError: true };
+  } else if (call.name === REMEMBER_TOOL.name && save) {
+    result = await remember(save, String(args.note), io);
   } else if (!options.toolHost) {
     const content = `The tool "${call.name}" cannot run here because no tool host is available. Answer without tools.`;
     result = { content, isError: true };
@@ -27,16 +34,37 @@ export async function runToolCall(call: ToolCall, options: AgentLoopOptions): Pr
       result = { content: `The tool failed: ${errorMessage(error)}`, isError: true };
     }
   }
-  io.log('tool', `${describeToolCall(call.name, args)} → ${summarizeToolResult(result)}\n`);
+  const outcome = call.name === REMEMBER_TOOL.name && !result.isError ? 'saved' : summarizeToolResult(result);
+  io.log('tool', `${describeToolCall(call.name, args)} → ${outcome}\n`);
   return result;
 }
 
+/** remember is answered here, never by the ToolHost; a rejection is an error result, not a failed block. */
+async function remember(save: RememberFn, note: string, io: StepIO): Promise<ToolResult> {
+  try {
+    const line = await save(note, io);
+    return { content: `Saved to the project memory: ${line}` };
+  } catch (error) {
+    if (io.signal.aborted) throw abortError(io.signal);
+    return { content: errorMessage(error), isError: true };
+  }
+}
+
+/** Tools this agent may call: its enabled built-in tools, then remember when it has memory write access. */
+export function callableTools(options: Pick<AgentLoopOptions, 'tools' | 'memory'>): string[] {
+  const enabled: string[] = [...new Set(options.tools.filter(isToolName))];
+  if (options.memory?.remember) enabled.push(REMEMBER_TOOL.name);
+  return enabled;
+}
+
 /** Why the agent may not call this tool (unknown or not enabled), or undefined. */
-function refusal(name: string, tools: AgentLoopOptions['tools']): string | undefined {
-  const enabled = tools.filter(isToolName);
+function refusal(name: string, options: AgentLoopOptions): string | undefined {
+  const enabled = callableTools(options);
   const available =
     enabled.length > 0 ? `Available tools: ${enabled.join(', ')}.` : 'This agent has no tools.';
-  if (!isToolName(name)) return `Unknown tool "${name}". ${available}`;
+  if (!isAgentToolName(name) || (name === REMEMBER_TOOL.name && !enabled.includes(name))) {
+    return `Unknown tool "${name}". ${available}`;
+  }
   if (!enabled.includes(name)) return `The tool "${name}" is not enabled for this agent. ${available}`;
   return undefined;
 }
@@ -64,7 +92,7 @@ function parseArguments(
 }
 
 function invalidArguments(name: string, args: Record<string, unknown>): string | undefined {
-  if (!isToolName(name)) return undefined;
-  const problems = checkJsonShape(args, BUILTIN_TOOLS[name].parameters);
+  if (!isAgentToolName(name)) return undefined;
+  const problems = checkJsonShape(args, agentToolSpec(name).parameters);
   return problems.length > 0 ? `Invalid arguments for ${name}: ${problems.join('; ')}.` : undefined;
 }

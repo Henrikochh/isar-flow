@@ -9,52 +9,54 @@ import type {
   AgentSummary,
   ApprovalPrompt,
   ApprovalResult,
+  AskPrompt,
+  AskResult,
   ChatModel,
-  ConsoleResult,
+  EditorContext,
+  GitContext,
+  MemoryFileState,
   ModelCatalog,
   ModelProbeResult,
   ModelResolver,
+  ProjectMemory,
   ReviewCounts,
   ReviewFileStatus,
   RunEvent,
+  RunOrigin,
   RunRecordSummary,
   RunReview,
+  RunStatus,
   RunView,
   SetupReport,
-  ShellName,
   SimulationFile,
   SimulationResult,
   SimulationState,
-  ToolHost,
-  ToolName,
   Workflow,
   WorkflowSummary,
   WorkflowTemplateId,
+  WorkflowTriggerState,
 } from '@isar-flow/core';
+import type { EditJournalWriter, RunConsoleCommand, ToolHostFactory } from '@isar-flow/core/node';
+
+/*
+ * Console runner and agent tool types live in the Node-only part of core (`@isar-flow/core/node`), shared with the
+ * command line runner. They are re-exported here so extension modules keep importing them from '../contracts'.
+ */
+export type {
+  ConsoleRunOptions,
+  EditJournalWriter,
+  PermissionAnswer,
+  PermissionPrompt,
+  PermissionRequest,
+  ResolvedShell,
+  RunConsoleCommand,
+  ToolHostFactory,
+  ToolHostOptions,
+  ToolHostRunOptions,
+  WorkspaceAdapter,
+} from '@isar-flow/core/node';
 
 /* ---------- console runner (src/runner) ---------- */
-
-export interface ConsoleRunOptions {
-  command: string;
-  shell: ShellName;
-  /** Absolute working directory. */
-  cwd: string;
-  /** Added on top of process.env. */
-  env: Record<string, string>;
-  timeoutMs?: number;
-  signal: AbortSignal;
-  onData(stream: 'stdout' | 'stderr', text: string): void;
-}
-
-/** Spawns the command in the resolved shell, captures output (UTF-8), kills the process tree on abort/timeout. */
-export type RunConsoleCommand = (options: ConsoleRunOptions) => Promise<ConsoleResult>;
-
-export interface ResolvedShell {
-  /** Executable, e.g. 'pwsh.exe', 'powershell.exe', 'cmd.exe', '/bin/bash'. */
-  file: string;
-  args(command: string): string[];
-  label: string;
-}
 
 /** A terminal tab that mirrors run output live ("Isar Flow: <workflow>"). */
 export interface RunTerminal {
@@ -62,76 +64,6 @@ export interface RunTerminal {
   show(preserveFocus?: boolean): void;
   dispose(): void;
 }
-
-/* ---------- agent tools (src/tools) ---------- */
-
-/** File access used by the tool host; the VS Code implementation applies edits via WorkspaceEdit (undoable). */
-export interface WorkspaceAdapter {
-  readFile(absPath: string): Promise<string>;
-  /** Creates or overwrites a file. */
-  writeFile(absPath: string, content: string): Promise<void>;
-  /** Workspace-relative paths (forward slashes) matching the glob, excluding node_modules/.git, at most `max`. */
-  findFiles(glob: string, max: number): Promise<string[]>;
-  /** Resolves symlinks; rejects when the path does not exist. */
-  realPath(absPath: string): Promise<string>;
-  exists(absPath: string): Promise<boolean>;
-  /** Deletes a file as an undoable workspace edit; used by applyPatch for "+++ /dev/null". */
-  deleteFile?(absPath: string): Promise<void>;
-}
-
-/**
- * Receives agent writes from the tool host for the run's edit journal (review card: which block changed which
- * file; the original content when the folder has no git).
- */
-export interface EditJournalWriter {
-  /**
-   * Called before an agent tool creates, changes or deletes `absPath`. The journal reads the file as it is on disk
-   * now, but only the first time per file and run. `unsaved` is the text of an editor with unsaved changes to the
-   * file: the write saves it, so it is kept instead. Never rejects: storage problems are logged.
-   */
-  beforeWrite(absPath: string, stepId: string, unsaved?: string): Promise<void>;
-}
-
-/** Per-run extras of a tool host. */
-export interface ToolHostRunOptions {
-  /** Records agent writes; omitted for Try it. */
-  journal?: EditJournalWriter;
-}
-
-export interface PermissionRequest {
-  runId: string;
-  stepId: string;
-  tool: ToolName;
-  /** One line, e.g. "Edit src/app.ts" or "Run: npm test". */
-  summary: string;
-  detail?: string;
-}
-
-/** 'allowRun' allows this tool for the rest of the run. */
-export type PermissionAnswer = 'allow' | 'allowRun' | 'deny';
-
-export type PermissionPrompt = (request: PermissionRequest) => Promise<PermissionAnswer>;
-
-export interface ToolHostOptions {
-  workspaceRoot: string;
-  workspace: WorkspaceAdapter;
-  runCommand: RunConsoleCommand;
-  prompt: PermissionPrompt;
-  defaultShell: ShellName;
-  /** Told about every agent write before it happens (runs only). */
-  journal?: EditJournalWriter;
-}
-
-/**
- * Creates a tool host whose "allow for this run" answers are scoped to `runId`. `workspaceRoot` is the
- * folder of the workflow being run (multi-root workspaces) or the run's git worktree; defaults to the first
- * workspace folder. Roots outside the workspace folders (worktrees in extension storage) must work too.
- */
-export type ToolHostFactory = (
-  runId: string,
-  workspaceRoot?: string,
-  options?: ToolHostRunOptions,
-) => ToolHost;
 
 /* ---------- models (src/models) ---------- */
 
@@ -369,6 +301,112 @@ export interface SimulationStore {
   dispose(): void;
 }
 
+/* ---------- ask blocks (src/run) ---------- */
+
+/**
+ * Questions of ask blocks. Like approvals: inline cards in attached (visible) workflow editors, otherwise a
+ * notification whose Answer button opens a QuickPick (choices) or an InputBox (free text).
+ */
+export interface AskBroker {
+  /** Fired when a workflow editor should show an ask card. */
+  readonly onDidRequest: vscode.Event<AskPrompt & { workflowUri: string }>;
+  readonly onDidResolve: vscode.Event<{ requestId: string; workflowUri: string }>;
+  /**
+   * Asks and resolves with the answer. Aborting `signal` (the block's timeout, cancel) withdraws the question
+   * everywhere and rejects; the engine then uses the default or fails the block. `workflowName` names the
+   * workflow in notifications.
+   */
+  request(
+    prompt: Omit<AskPrompt, 'requestId'> & { workflowUri: string; workflowName: string },
+    signal?: AbortSignal,
+  ): Promise<AskResult>;
+  /** An answer from an inline card; ignored for unknown requests and for answers that are not one of the choices. */
+  respond(requestId: string, answer: string): void;
+  /** Workflow editors register while visible so asks can be answered inline. */
+  attach(workflowUri: string): vscode.Disposable;
+  /** Asks of this workflow still waiting for an inline answer (for editors that become visible again). */
+  pending(workflowUri: string): AskPrompt[];
+  /** Withdraws the open asks of a run (the run was cancelled or has ended). */
+  cancel(runId: string): void;
+}
+
+/* ---------- workflows on code (src/context) ---------- */
+
+/** Captures the expression roots `editor` and `git` when a run starts. */
+export interface CodeContextCapture {
+  /**
+   * The text editor a run started now should see: the active text editor, else the most recently active one that
+   * is still visible; undefined when there is none. `root` makes `file` workspace-relative. Synchronous, so
+   * commands can capture before they show a QuickPick.
+   */
+  editor(root: string): EditorContext | undefined;
+  /**
+   * `git.*` of the folder; never rejects (outside a repository, without git, in untrusted workspaces or when git
+   * fails every field is empty).
+   */
+  git(root: string, signal?: AbortSignal): Promise<GitContext>;
+  /** Stops tracking the most recently active editor. */
+  dispose(): void;
+}
+
+/* ---------- runs: origin, refusals, finished runs ---------- */
+
+/** Why `RunManager.start` did not start a run (passed to RunStartOptions.onRefused). */
+export type RunRefusalReason =
+  /** Restricted Mode. */
+  | 'untrusted'
+  /** The workflow is already running (or another start of it is still asking). */
+  | 'running'
+  /** The file can't be read or has errors. */
+  | 'invalid'
+  /** Required inputs are missing and this origin never prompts (triggers, Copilot). */
+  | 'inputs'
+  /** Its commands were never approved and this origin can't ask (triggers), or the user declined. */
+  | 'confirmation'
+  /** The user cancelled a prompt (inputs). */
+  | 'cancelled'
+  /** Triggers and Copilot never simulate or resume; resume and simulate together are not possible. */
+  | 'not-allowed'
+  /** The run manager was disposed, or an unexpected error. */
+  | 'error';
+
+export interface RunRefusal {
+  reason: RunRefusalReason;
+  /** One sentence for people: the text the manager would otherwise show in a notification. */
+  message: string;
+}
+
+/** Whether a start would need the command confirmation dialog (computed without showing it). */
+export type CommandConfirmationState =
+  /**
+   * Approved before, nothing to confirm and started by a person before, or confirmation turned off
+   * (`isarFlow.confirmCommands`).
+   */
+  | 'approved'
+  /** The commands or unattended agents of the current file were never approved. */
+  | 'needed'
+  /**
+   * Nothing to confirm, but no person has started the workflow yet: triggers wait for that one start, so a
+   * workflow nobody ever ran (e.g. agents that read the workspace) never starts by itself.
+   */
+  | 'never-run'
+  /** The file can't be read or has errors. */
+  | 'invalid';
+
+/** A run that ended and was saved to the history. */
+export interface RunFinished {
+  runId: string;
+  workflowUri: string;
+  workflowName: string;
+  status: Exclude<RunStatus, 'running'>;
+  /** Final view (before history trimming). */
+  view: RunView;
+  /** Absolute paths of the files the run changed (snapshot diff or edit journal); empty for simulated runs. */
+  changedFiles: string[];
+  origin: RunOrigin;
+  simulated: boolean;
+}
+
 /** How a run starts besides the plain "Run". */
 export interface RunStartOptions {
   /**
@@ -381,6 +419,20 @@ export interface RunStartOptions {
    * so no command confirmation and no snapshots; allowed in Restricted Mode (without secrets).
    */
   simulate?: boolean;
+  /**
+   * Who starts the run (default manual); recorded in the history. `trigger`: never prompts (inputs = the given
+   * values plus defaults; missing required inputs or unapproved commands are refused). `copilot`: never shows
+   * input boxes (missing required inputs are refused) but shows the command confirmation as usual. Neither may
+   * simulate or resume ('not-allowed').
+   */
+  origin?: RunOrigin;
+  /** `editor.*` captured earlier (Run workflow on selection captures it before its QuickPick); default: at start. */
+  editor?: EditorContext;
+  /**
+   * Called instead of a notification when the run does not start (refusals and cancelled prompts). Without it the
+   * manager shows its usual notifications.
+   */
+  onRefused?(refusal: RunRefusal): void;
 }
 
 export interface RunManager {
@@ -392,10 +444,14 @@ export interface RunManager {
   readonly reviews?: ReviewService;
   /** Simulation files of the workflows; always set by createRunManager. */
   readonly simulations?: SimulationStore;
+  /** Questions of ask blocks; always set by createRunManager. */
+  readonly asks?: AskBroker;
+  /** Fired after a run ended and was saved to the history (simulated runs too); always set by createRunManager. */
+  readonly onDidFinish?: vscode.Event<RunFinished>;
   /**
    * Validates, asks for missing inputs (input boxes) when `inputs` is undefined, confirms console commands
    * when needed, then runs. Returns the run id, or undefined when the user cancelled or validation failed.
-   * `options` starts a run from a block of a saved run, or a simulated run.
+   * `options` starts a run from a block of a saved run or a simulated run, and says who starts it.
    */
   start(
     workflowUri: vscode.Uri,
@@ -404,6 +460,60 @@ export interface RunManager {
   ): Promise<string | undefined>;
   cancel(runId: string): void;
   active(workflowUri?: string): ActiveRun[];
+  /** Resolves with the final view once the run has ended (from history for runs that already ended). */
+  whenFinished?(runId: string): Promise<RunView | undefined>;
+  /** Whether starting the workflow now would show the command confirmation; never shows a dialog. */
+  confirmationState?(workflowUri: vscode.Uri): Promise<CommandConfirmationState>;
+  dispose(): void;
+}
+
+/* ---------- triggers (src/triggers) ---------- */
+
+/** Watches the `on:` triggers of all workflows and starts runs (origin trigger). */
+export interface TriggerService {
+  /** Fired when a workflow's trigger state changes (`workflowUri` in string form). */
+  readonly onDidChange: vscode.Event<{ workflowUri: string }>;
+  /** Current state of a workflow's triggers (no triggers: empty list, status active). */
+  state(workflowUri: string): WorkflowTriggerState;
+  /** Workflows with at least one trigger, for the status bar. */
+  list(): { workflowUri: string; name: string; state: WorkflowTriggerState }[];
+  /** Turns a workflow's triggers on again after they were paused for starting too often ('limited'). */
+  resume(workflowUri: string): void;
+  dispose(): void;
+}
+
+/** What createTriggerService (src/triggers/triggerService.ts) needs; extension.ts passes the real services. */
+export interface TriggerServiceDeps {
+  runs: Pick<RunManager, 'start' | 'active' | 'onDidChangeRuns' | 'onDidFinish' | 'confirmationState'> & {
+    reviews?: Pick<ReviewService, 'onDidChange' | 'get'>;
+  };
+  workflows: Pick<WorkflowStore, 'list' | 'onDidChange'>;
+  log: vscode.LogOutputChannel;
+}
+
+/** What createMemoryService (src/memory/memoryService.ts) needs. */
+export interface MemoryServiceDeps {
+  log: vscode.LogOutputChannel;
+}
+
+/* ---------- project memory (src/memory) ---------- */
+
+/** `.isarflow/memory.md` of each workspace folder. */
+export interface MemoryService {
+  /** Fired when a memory file is created, changed (unsaved edits included) or deleted. */
+  readonly onDidChange: vscode.Event<void>;
+  /** The memory file of every workspace folder, in folder order. */
+  files(): MemoryFileState[];
+  /** The memory file of the folder that contains `uri` (agent or workflow file), else of the first folder. */
+  stateFor(uri: vscode.Uri): MemoryFileState | undefined;
+  /** Opens the file of the folder (default: the first), created with a short header when missing. */
+  open(folderUri?: vscode.Uri): Promise<void>;
+  /**
+   * The memory of workspace folder `root` for one run. `read`: an open editor's text first. `append`: queued per
+   * file; an open document gets a WorkspaceEdit and is saved when it was not dirty; refuses notes that contain
+   * one of `secrets`; tells `journal` before writing so the review card lists the change.
+   */
+  forRun(root: string, options: { journal?: EditJournalWriter; secrets?: string[] }): ProjectMemory;
   dispose(): void;
 }
 
@@ -420,6 +530,12 @@ export interface Services {
   output: vscode.LogOutputChannel;
   /** "Check setup"; set by extension.ts. */
   setupCheck?: SetupCheck;
+  /** `on:` triggers; set by extension.ts. */
+  triggers?: TriggerService;
+  /** Project memory files; set by extension.ts. */
+  memory?: MemoryService;
+  /** `editor.*` / `git.*` capture; set by extension.ts. */
+  codeContext?: CodeContextCapture;
 }
 
 /**
@@ -437,4 +553,8 @@ export interface RunManagerDeps {
   terminalFor(workflowName: string): RunTerminal;
   /** Reads files matching workspace-relative globs for `context.files` (capped). */
   readContextFiles(globs: string[], signal: AbortSignal): Promise<{ path: string; content: string }[]>;
+  /** Captures `editor.*` and `git.*` at run start; without it both roots are empty. */
+  codeContext?: CodeContextCapture;
+  /** Project memory for agents (memory read/write); without it agents run without memory. */
+  memory?: MemoryService;
 }

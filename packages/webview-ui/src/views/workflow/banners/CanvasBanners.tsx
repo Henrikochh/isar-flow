@@ -1,9 +1,9 @@
 /**
- * Messages pinned above the canvas: pending approvals, unreadable YAML, failed edits, blocks without ids,
- * restricted mode and a simulated run.
+ * Messages pinned above the canvas: pending approvals and questions, unreadable YAML, failed edits, blocks without
+ * ids, restricted mode and a simulated run.
  */
 import './banners.css';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ApprovalPrompt, Diagnostic } from '@isar-flow/core';
 import { Banner, Button, TextInput } from '../../../components';
 import { useEditor } from '../editorContext';
@@ -11,6 +11,8 @@ import { blocksNeedingIds, blockTitle } from '../canvas/model';
 import { simulatedNote } from '../simulation/copy';
 import { useStartBlockers } from '../topbar/useStartBlockers';
 import { useWorkflowActions, useWorkflowState } from '../store';
+import { AskBanner } from './AskBanner';
+import { useAskFocus } from './useAskFocus';
 
 function ApprovalBanner({ prompt }: { prompt: ApprovalPrompt }) {
   const [comment, setComment] = useState('');
@@ -127,22 +129,28 @@ function syntaxProblem(diagnostics: Diagnostic[]): Diagnostic | undefined {
 }
 
 export function CanvasBanners() {
-  const { doc, approvals, opsError, trusted, run } = useWorkflowState();
+  const { doc, approvals, asks, opsError, trusted, run } = useWorkflowState();
   const { openYaml, dismissOpsError } = useWorkflowActions();
   const { model, editable } = useEditor();
+  const ref = useRef<HTMLDivElement>(null);
+  useAskFocus(ref, asks[0]?.requestId);
   const ids = editable ? blocksNeedingIds(model) : { missing: 0, invalid: 0 };
   const needIds = ids.missing + ids.invalid > 0;
   const unreadable = doc !== null && doc.workflow === null ? syntaxProblem(doc.diagnostics) : undefined;
   const unreadableDoc = doc !== null && doc.workflow === null;
   const simulated = run?.simulated === true;
 
-  if (!approvals.length && !unreadableDoc && !opsError && !needIds && trusted && !simulated) return null;
+  const waiting = approvals.length + asks.length > 0;
+  if (!waiting && !unreadableDoc && !opsError && !needIds && trusted && !simulated) return null;
   const line = unreadable?.range ? ` (line ${unreadable.range.start.line + 1})` : '';
 
   return (
-    <div className="wf-banners">
+    <div className="wf-banners" ref={ref}>
       {approvals.map((prompt) => (
         <ApprovalBanner key={prompt.requestId} prompt={prompt} />
+      ))}
+      {asks.map((prompt) => (
+        <AskBanner key={prompt.requestId} prompt={prompt} />
       ))}
       {unreadableDoc ? (
         <Banner

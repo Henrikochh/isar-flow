@@ -2,11 +2,12 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    projects: ['packages/core', 'packages/extension', 'packages/webview-ui'],
+    projects: ['packages/core', 'packages/extension', 'packages/webview-ui', 'packages/cli'],
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**'],
-      exclude: ['**/*.d.ts', 'packages/webview-ui/src/main.tsx'],
+      // Process entries (webview bootstrap, CLI binary) are covered by the visual and CLI end-to-end tests.
+      exclude: ['**/*.d.ts', 'packages/webview-ui/src/main.tsx', 'packages/cli/src/index.ts'],
       // Coverage gate of the test concept (spec §11), checked by `npm run test:coverage` without --project.
       thresholds: {
         'packages/core/src/**': { lines: 90 },

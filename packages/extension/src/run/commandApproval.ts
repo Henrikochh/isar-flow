@@ -184,15 +184,53 @@ function question(name: string, commands: string[], agents: string[]): { message
 }
 
 /**
+ * Whether confirmCommands would ask: false when confirmation is turned off, nothing needs confirming or this
+ * list was approved with "Run and remember".
+ */
+export function needsConfirmation(options: Omit<CommandConfirmation, 'workflowName' | 'ask'>): boolean {
+  const { workflowUri, commands, approvals, enabled } = options;
+  const agents = options.agents ?? [];
+  if (!enabled || (commands.length === 0 && agents.length === 0)) return false;
+  return !approvals.isApproved(workflowUri, hashCommands(commands, agents));
+}
+
+/** Remembered for a workflow with nothing to confirm once a person started it (no real list hashes to this). */
+const STARTED_BY_HAND = 'started by hand';
+
+const nothingToConfirm = (options: Pick<CommandConfirmation, 'commands' | 'agents'>) =>
+  options.commands.length === 0 && (options.agents ?? []).length === 0;
+
+/**
+ * Whether triggers may start the workflow without anyone at the keyboard: 'needed' while its commands or unattended
+ * agents were not approved with "Run and remember"; 'never-run' while it has nothing to confirm but no person has
+ * started it yet (see rememberStartedByHand). Confirmation turned off means approved.
+ */
+export function triggerConfirmationState(
+  options: Omit<CommandConfirmation, 'workflowName' | 'ask'>,
+): 'approved' | 'needed' | 'never-run' {
+  if (!options.enabled) return 'approved';
+  if (!nothingToConfirm(options)) return needsConfirmation(options) ? 'needed' : 'approved';
+  return options.approvals.isApproved(options.workflowUri, STARTED_BY_HAND) ? 'approved' : 'never-run';
+}
+
+/** After a person started a workflow with nothing to confirm (not a simulation): its triggers may start it now. */
+export async function rememberStartedByHand(
+  options: Omit<CommandConfirmation, 'workflowName' | 'ask'>,
+): Promise<void> {
+  if (!options.enabled || !nothingToConfirm(options)) return;
+  if (options.approvals.isApproved(options.workflowUri, STARTED_BY_HAND)) return;
+  await options.approvals.approve(options.workflowUri, STARTED_BY_HAND);
+}
+
+/**
  * Asks before running console commands, or agents that act without asking, whose hash has not been approved
  * for this workflow. Resolves true when the run may go ahead.
  */
 export async function confirmCommands(options: CommandConfirmation): Promise<boolean> {
   const { workflowUri, commands, approvals } = options;
   const agents = options.agents ?? [];
-  if (!options.enabled || (commands.length === 0 && agents.length === 0)) return true;
+  if (!needsConfirmation(options)) return true;
   const hash = hashCommands(commands, agents);
-  if (approvals.isApproved(workflowUri, hash)) return true;
 
   const { message, detail } = question(options.workflowName, commands, agents);
   const choice = await (options.ask ?? askModal)(message, detail, [RUN_BUTTON, RUN_AND_REMEMBER_BUTTON]);

@@ -1,7 +1,8 @@
 import { useRef } from 'react';
-import type { AgentSummary, ModelCatalog } from '@isar-flow/core';
+import type { AgentSummary, MemoryFileState, ModelCatalog } from '@isar-flow/core';
 import { Button, EmptyState, Section } from '../../components';
 import { AgentRow } from './AgentRow';
+import { MemoryRows } from './MemoryRows';
 import { ModelsSection } from './ModelsSection';
 import { NewAgentCard } from './NewAgentCard';
 import { RiverArt } from './RiverArt';
@@ -11,11 +12,14 @@ import { NEW_AGENT_DRAFT, type AgentDraft } from './viewState';
 export function AgentsPanel({
   agents,
   catalog,
+  memory = [],
   draft,
   onDraftChange,
 }: {
   agents: readonly AgentSummary[];
   catalog: ModelCatalog;
+  /** `.isarflow/memory.md` of each workspace folder, which the agents read. */
+  memory?: MemoryFileState[];
   draft: AgentDraft | undefined;
   onDraftChange: (draft: AgentDraft | undefined) => void;
 }) {
@@ -80,6 +84,7 @@ export function AgentsPanel({
             Agents are reusable AI helpers with a model, instructions and tools.
           </EmptyState>
         )}
+        <MemoryRows memory={memory} />
       </Section>
       <ModelsSection catalog={catalog} />
     </>

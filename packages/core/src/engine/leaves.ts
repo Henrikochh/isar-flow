@@ -18,6 +18,8 @@ export interface PreparedLeaf {
   detail?: string;
   /** Must not throw synchronously; failures arrive as rejections. */
   invoke(io: StepIO): Promise<LeafOutcome>;
+  /** Result when the block's own timeout cuts the call short (ask blocks with a default); default: failure. */
+  onTimeout?(io: StepIO): BlockResult;
 }
 
 export interface LeafDeps {

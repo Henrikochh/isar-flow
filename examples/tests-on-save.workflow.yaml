@@ -1,0 +1,37 @@
+# Runs the tests whenever you save a TypeScript file and, when they fail, explains why.
+# Triggers run after you ran the workflow once and chose "Run and remember" (command confirmation).
+# A failing run ends with the explanation, so the "failed" notification shows it right away.
+# Replace "npm test" with your test command and the patterns with your source folders.
+version: 1
+name: Tests on save
+description: Run the tests after every save of a TypeScript file and explain failures.
+on:
+  save:
+    files: ['src/**/*.ts', 'test/**/*.ts', '!src/generated/**']
+steps:
+  - id: tests
+    type: console
+    run: npm test
+    continueOnError: true
+    timeout: 600
+
+  - id: failing
+    type: if
+    condition: { value: '${{ steps.tests.exitCode }}', op: neq, to: 0 }
+    then:
+      - id: explain
+        type: agent
+        agent:
+          model: vscode/copilot/gpt-4.1 # or a model of your own endpoint, e.g. ollama/qwen2.5-coder
+          systemPrompt: Explain test failures in at most three short sentences. Name the file and the test.
+          tools: [readFile, searchText]
+          permissions: { edits: none, commands: none }
+        prompt: |
+          The tests failed with exit code ${{ steps.tests.exitCode }}. Why?
+          Last lines of the test output:
+          ${{ tail(steps.tests.output, 80) }}
+
+      - id: report
+        type: stop
+        outcome: failure
+        message: ${{ steps.explain.text }}

@@ -1,6 +1,7 @@
 import type {
   ActiveRunSummary,
   AgentSummary,
+  MemoryFileState,
   ModelCatalog,
   RunRecordSummary,
   RunView,
@@ -32,6 +33,8 @@ export interface SidebarStateInput {
   tab: unknown;
   /** The current "Check setup" report, if any. */
   setupCheck?: SetupReport;
+  /** The project memory file of each workspace folder; omitted without a memory service. */
+  memory?: MemoryFileState[];
 }
 
 export function parseTab(value: unknown): SidebarTab {
@@ -54,7 +57,7 @@ export function buildSidebarState(input: SidebarStateInput): SidebarState {
       startedAt: view.startedAt,
     }))
     .sort(newestFirst);
-  return {
+  const state: SidebarState = {
     hasWorkspace: input.hasWorkspace,
     trusted: input.trusted,
     agents: input.agents,
@@ -65,4 +68,6 @@ export function buildSidebarState(input: SidebarStateInput): SidebarState {
     tab: parseTab(input.tab),
     setupCheck: input.setupCheck ?? null,
   };
+  if (input.memory) state.memory = input.memory;
+  return state;
 }

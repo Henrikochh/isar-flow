@@ -64,10 +64,11 @@ function EmptyRiver() {
 function River() {
   const { model, workflow } = useEditor();
   const { run } = useCanvas();
+  const { triggers } = useWorkflowState();
   const empty = model.root.entries.length === 0;
   return (
     <>
-      <StartMarker workflow={workflow} run={run} />
+      <StartMarker workflow={workflow} run={run} triggers={triggers} />
       {empty ? <EmptyRiver /> : <RiverList list={model.root} owner={null} />}
       <EndMarker run={run} />
     </>
@@ -112,7 +113,7 @@ function useBlockMenu(scrollRef: RefObject<HTMLElement | null>) {
 
 export function Canvas() {
   const { workflow, stale, model } = useEditor();
-  const { selection, approvals, run, trusted, doc } = useWorkflowState();
+  const { selection, approvals, asks, run, trusted, doc } = useWorkflowState();
   const drag = useDragItem();
   const scrollRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -142,15 +143,15 @@ export function Canvas() {
       cardElement(scrollRef.current, selection)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [selection]);
 
-  // A block waiting for approval needs the user: bring it into view when the request arrives.
-  const seenApprovals = useRef(new Set<string>());
+  // A block waiting for an approval or an answer needs the user: bring it into view when the request arrives.
+  const seenRequests = useRef(new Set<string>());
   useEffect(() => {
-    for (const prompt of approvals) {
-      if (seenApprovals.current.has(prompt.requestId)) continue;
-      seenApprovals.current.add(prompt.requestId);
+    for (const prompt of [...approvals, ...asks]) {
+      if (seenRequests.current.has(prompt.requestId)) continue;
+      seenRequests.current.add(prompt.requestId);
       cardElement(scrollRef.current, prompt.stepId)?.scrollIntoView({ block: 'center', inline: 'nearest' });
     }
-  }, [approvals]);
+  }, [approvals, asks]);
 
   return (
     <CanvasDataProvider openMenu={menu.open}>

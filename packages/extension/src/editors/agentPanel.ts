@@ -17,6 +17,7 @@ import { buildTryItRequest, TryItSession } from './tryIt';
 
 const UNTRUSTED = 'Trust this workspace to try agents. Nothing runs in Restricted Mode.';
 const UNTRUSTED_TEST = 'Trust this workspace to test models.';
+const NO_FOLDER_MEMORY = 'Open a workspace folder to use the project memory.';
 
 const uriKey = (uri: vscode.Uri) => (IGNORE_PATH_CASE ? uri.toString().toLowerCase() : uri.toString());
 
@@ -30,6 +31,7 @@ export class AgentPanel implements vscode.Disposable {
   private readonly edits: EditQueue;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private disposed = false;
+  private ready = false;
 
   constructor(
     private readonly document: EditorDocument,
@@ -47,6 +49,10 @@ export class AgentPanel implements vscode.Disposable {
           contextTokensSetting(
             vscode.workspace.getConfiguration('isarFlow').get<unknown>('agentContextTokens'),
           ),
+        memory: () => {
+          const root = this.toolRoot();
+          return root === undefined ? undefined : services.memory?.forRun(root, {});
+        },
       },
       (event) => this.post({ type: 'tryItEvent', event }),
     );
@@ -58,13 +64,22 @@ export class AgentPanel implements vscode.Disposable {
         this.sendDocument();
       }),
     ];
+    if (services.memory) {
+      this.subscriptions.push(
+        services.memory.onDidChange(() => {
+          if (this.ready) this.sendMemory();
+        }),
+      );
+    }
   }
 
   async handle(message: AgentEditorToHost): Promise<void> {
     switch (message.type) {
       case 'ready':
+        this.ready = true;
         this.sendDocument();
         this.post({ type: 'catalog', catalog: this.services.models.catalog() });
+        this.sendMemory();
         return;
       case 'update':
         return this.update(message.set, message.unset ?? []);
@@ -85,6 +100,8 @@ export class AgentPanel implements vscode.Disposable {
         return this.openWorkflow(message.path);
       case 'testModel':
         return this.testModel(message.ref);
+      case 'openMemory':
+        return this.openMemory();
       default: {
         const unknown: never = message;
         throw new Error(`Unknown agent editor message ${JSON.stringify(unknown)}`);
@@ -115,6 +132,7 @@ export class AgentPanel implements vscode.Disposable {
 
   dispose(): void {
     this.disposed = true;
+    this.ready = false;
     clearTimeout(this.timer);
     this.tryIt.dispose();
     for (const subscription of this.subscriptions.splice(0)) subscription.dispose();
@@ -152,6 +170,26 @@ export class AgentPanel implements vscode.Disposable {
 
   private post(message: HostToAgentEditor): void {
     if (!this.disposed) this.send(message);
+  }
+
+  /** The memory file of the agent's workspace folder (user agents: the first folder); null without folders. */
+  private sendMemory(): void {
+    const { memory } = this.services;
+    if (memory) this.post({ type: 'memory', memory: memory.stateFor(this.document.uri) ?? null });
+  }
+
+  private async openMemory(): Promise<void> {
+    const { memory } = this.services;
+    if (!memory) return;
+    const state = memory.stateFor(this.document.uri);
+    if (!state) return this.ui.showError(NO_FOLDER_MEMORY);
+    try {
+      await memory.open(vscode.Uri.parse(state.folderUri));
+    } catch (error) {
+      this.ui.showError(
+        `Could not open the project memory: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private sendDocument(): void {

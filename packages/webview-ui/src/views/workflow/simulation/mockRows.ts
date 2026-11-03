@@ -3,6 +3,8 @@
  * will be written plus the text typed into fields that must parse (exit code, JSON), so typing is never lost.
  */
 import {
+  type AskStep,
+  defaultSimulationResult,
   type OutputShape,
   SIMULATED_ANSWER,
   type SimulationApprovals,
@@ -10,8 +12,8 @@ import {
   sampleJson,
 } from '@isar-flow/core';
 
-/** Which fields a block's results have: console, text agent, JSON agent or approval. */
-export type MockKind = 'console' | 'text' | 'json' | 'approval';
+/** Which fields a block's results have: console, text agent, JSON agent, approval or ask. */
+export type MockKind = 'console' | 'text' | 'json' | 'approval' | 'ask';
 
 export const DEFAULT_ERROR = 'Simulated failure';
 
@@ -43,9 +45,35 @@ export function mockKind(step: Raw): MockKind | null {
       return isRecord(step.output) && step.output.format === 'json' ? 'json' : 'text';
     case 'approval':
       return 'approval';
+    case 'ask':
+      return 'ask';
     default:
       return null;
   }
+}
+
+/** Choices of an ask block that read the same in every run (no templates), trimmed and without repeats. */
+export function answerChoices(step: Raw): string[] {
+  const choices = Array.isArray(step.choices) ? step.choices : [];
+  const literal = choices
+    .filter((choice): choice is string => typeof choice === 'string')
+    .map((choice) => choice.trim())
+    .filter((choice) => choice !== '' && !choice.includes('${{'));
+  return [...new Set(literal)];
+}
+
+/** The answer Simulate gives an ask block without results: its default, else its first choice. */
+export function defaultAnswer(step: Raw): string {
+  const text = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
+  const choices = Array.isArray(step.choices) ? step.choices.filter(text) : [];
+  const ask: AskStep = {
+    id: typeof step.id === 'string' ? step.id : 'ask',
+    type: 'ask',
+    question: '',
+    ...(text(step.default) && { default: step.default }),
+    ...(choices.length > 0 && { choices }),
+  };
+  return defaultSimulationResult(ask).answer ?? SIMULATED_ANSWER;
 }
 
 /** Sample answer of a JSON agent built from its JSON fields; `{}` when they can't be read. */
@@ -82,6 +110,8 @@ export function newRow(
       return rowFromResult({ json: sampleFor(step) }, key);
     case 'approval':
       return rowFromResult({ approved: approvals !== 'reject' }, key);
+    case 'ask':
+      return rowFromResult({ answer: defaultAnswer(step) }, key);
     default:
       return rowFromResult({}, key);
   }
@@ -130,6 +160,11 @@ export function setJson(row: MockRow, text: string): MockRow {
   return { ...row, json: text, result };
 }
 
+/** An empty answer is left out, so the block's default answers. */
+export function setAnswer(row: MockRow, answer: string): MockRow {
+  return { ...row, result: withValue(row.result, 'answer', answer === '' ? undefined : answer) };
+}
+
 export function setApproved(row: MockRow, approved: boolean): MockRow {
   return { ...row, result: { ...row.result, approved } };
 }
@@ -167,7 +202,7 @@ export function toResults(rows: MockRow[]): SimulationResult[] {
 }
 
 /** The muted line shown while a block has no results. */
-export function defaultsText(kind: MockKind, approvals?: SimulationApprovals): string {
+export function defaultsText(kind: MockKind, approvals?: SimulationApprovals, step: Raw = {}): string {
   switch (kind) {
     case 'console':
       return 'Without results, Simulate uses exit code 0 and no output.';
@@ -177,5 +212,7 @@ export function defaultsText(kind: MockKind, approvals?: SimulationApprovals): s
       return 'Without results, the agent answers with sample JSON built from its JSON fields.';
     case 'approval':
       return `Without results, the approval is ${approvals === 'reject' ? 'rejected' : 'approved'}.`;
+    case 'ask':
+      return `Without results, Simulate answers '${defaultAnswer(step)}'.`;
   }
 }

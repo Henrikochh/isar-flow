@@ -1,4 +1,4 @@
-export const ISAR_FLOW_VERSION = '0.1.0';
+export const ISAR_FLOW_VERSION = '0.2.0';
 
 export * from './expr';
 export * from './conditions';
@@ -15,3 +15,6 @@ export * from './variables';
 export * from './protocol';
 export * from './live';
 export * from './simulation';
+export * from './triggers';
+export * from './report';
+// Node-only code lives in './node' and is published as '@isar-flow/core/node'; never export it from here.

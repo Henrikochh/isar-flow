@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { RECENT_RUNS, WORKFLOWS } from '../../harness/fixtures';
+import { ORIGIN_RUNS, RECENT_RUNS, RELEASE_WORKFLOW, WORKFLOWS } from '../../harness/fixtures';
 import { renderSidebar, resetPosted } from './helpers';
 
 beforeEach(resetPosted);
@@ -31,5 +31,19 @@ describe('simulated and resumed runs in the sidebar', () => {
     expect(within(review).getByText('Simulated')).toHaveClass('if-chip');
     const fix = screen.getByRole('button', { name: /^Fix failing tests/ });
     expect(within(fix).getByText('Resumed')).toHaveAttribute('title', 'Resumed from tests');
+  });
+});
+
+describe('runs started by a trigger, Copilot or a selection in the sidebar', () => {
+  it('marks recent runs and the last run of a workflow with their origin', () => {
+    renderSidebar({ tab: 'workflows', recentRuns: ORIGIN_RUNS, workflows: [RELEASE_WORKFLOW] });
+    const [save, copilot, selection] = within(screen.getByRole('list', { name: 'Recent runs' })).getAllByRole(
+      'button',
+    );
+    expect(within(save).getByText('On save')).toHaveAttribute('title', 'Started on save of src/app.ts');
+    expect(within(copilot).getByText('Copilot')).toHaveAttribute('title', 'Started by Copilot');
+    expect(within(selection).getByText('Selection')).toHaveAttribute('title', 'Started on a selection');
+    const row = screen.getByRole('button', { name: /^Release to an environment/ });
+    expect(within(row).getByText('On save')).toHaveClass('if-chip');
   });
 });

@@ -13,7 +13,8 @@ export function cutText(text: string, max: number = LIVE_VALUE_MAX_CHARS): strin
   return text.slice(0, code >= 0xd800 && code <= 0xdbff ? max - 1 : max);
 }
 
-function cutString(text: string): string {
+/** Text cut to what a live value shows, with an ellipsis when it was longer (isCutString detects it). */
+export function cutString(text: string): string {
   return text.length > LIVE_VALUE_MAX_CHARS ? cutText(text) + ELLIPSIS : text;
 }
 
@@ -27,7 +28,10 @@ export function isCutString(value: unknown): boolean {
   );
 }
 
-/** The expression context of a run for live values: inputs, block outputs and loop iterations, long text cut. */
+/**
+ * The expression context of a run for live values: inputs, block outputs, loop iterations and the recorded editor
+ * and git values, long text cut.
+ */
 export function liveContext(run: RunView): LiveContext {
   const entries = Object.entries(run.steps);
   const steps = Object.fromEntries(
@@ -51,5 +55,7 @@ export function liveContext(run: RunView): LiveContext {
     secrets: [...(context?.secrets ?? [])],
     workflow: context ? { ...context.workflow } : { name: run.workflowName, file: '' },
     workspace: context ? { ...context.workspace } : { root: '' },
+    ...(context?.editor && { editor: copyData(context.editor, cutString) }),
+    ...(context?.git && { git: copyData(context.git, cutString) }),
   };
 }

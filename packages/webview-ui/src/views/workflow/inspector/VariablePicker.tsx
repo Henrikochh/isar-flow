@@ -2,7 +2,14 @@ import { type KeyboardEvent, type ReactNode, useEffect, useId, useMemo, useRef, 
 import type { VariableInfo } from '@isar-flow/core';
 import { Button, Stone } from '../../../components';
 import { Popover } from '../../../components/Popover';
-import { GROUP_LABELS, TYPE_LABELS, useVariables, variableKey, variableLabel } from './variables';
+import {
+  GROUP_ICONS,
+  GROUP_LABELS,
+  TYPE_LABELS,
+  useVariables,
+  variableKey,
+  variableLabel,
+} from './variables';
 
 export interface VariablePickerProps {
   /** Block the variable is used in (null = workflow level); decides which outputs are readable. */
@@ -100,7 +107,15 @@ export function VariableList({ stepId, onPick }: VariablePickerProps) {
               <span className="wf-insp-var-block">{variable.stepId}</span>
             </>
           ) : (
-            GROUP_LABELS[variable.group]
+            <>
+              {GROUP_ICONS[variable.group] ? (
+                <i
+                  className={`codicon codicon-${GROUP_ICONS[variable.group]} wf-insp-var-group-icon`}
+                  aria-hidden="true"
+                />
+              ) : null}
+              {GROUP_LABELS[variable.group]}
+            </>
           )}
         </div>,
       );

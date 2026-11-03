@@ -1,5 +1,5 @@
-/** Quiet note in the run summary: the run continued an earlier one, or was simulated. */
-import type { RunView } from '@isar-flow/core';
+/** Quiet note in the run summary: the run continued an earlier one, was simulated, or how it was started. */
+import { runOriginText, type RunView } from '@isar-flow/core';
 import { Button } from '../../../../components';
 import { blockName, sourceRunLabel } from '../../runFromHere/model';
 import { simulatedNote } from '../../simulation/copy';
@@ -22,7 +22,16 @@ export function RunOriginNote({ run }: { run: RunView }) {
     );
   }
   const from = run.resumedFrom;
-  if (!from) return null;
+  if (!from) {
+    const origin = runOriginText(run.origin);
+    if (!origin) return null;
+    return (
+      <p className="wf-run-origin">
+        <i className={`codicon codicon-${origin.icon} wf-run-origin__icon`} aria-hidden="true" />
+        <span>{`${origin.sentence}.`}</span>
+      </p>
+    );
+  }
   const source = sourceRunLabel(run, history);
   const block = blockName(doc?.workflow, from.stepId);
   return (

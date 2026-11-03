@@ -9,9 +9,10 @@ import { focusRange, fullRange } from './nodePath';
 import { createPositionMapper, offsetsToRange, type PositionMapper } from './position';
 import type { AgentParseResult, WorkflowParseResult } from './types';
 
-type FileKind = 'workflow' | 'agent';
+/** Workflow, agent or project config file; decides the messages for empty files and files that aren't mappings. */
+export type FileKind = 'workflow' | 'agent' | 'config';
 
-interface LoadedYaml {
+export interface LoadedYaml {
   doc: Document;
   map: PositionMapper;
   diagnostics: Diagnostic[];
@@ -22,12 +23,20 @@ interface LoadedYaml {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const EMPTY_MESSAGE: Record<FileKind, string> = {
+/** Without a message an empty file is valid and reads as an empty mapping. */
+const EMPTY_MESSAGE: Record<FileKind, string | undefined> = {
   workflow: 'The file is empty. Add version, name and steps.',
   agent: 'The file is empty. Add name and model.',
+  config: undefined,
 };
 
-function loadYaml(text: string, kind: FileKind): LoadedYaml {
+const MAPPING_MESSAGE: Record<FileKind, string> = {
+  workflow: 'A workflow file must be a YAML mapping with version, name and steps',
+  agent: 'An agent file must be a YAML mapping with name and model',
+  config: 'A config file must be a YAML mapping with version and providers',
+};
+
+export function loadYaml(text: string, kind: FileKind): LoadedYaml {
   const doc: Document = parseDocument(text, PARSE_OPTIONS);
   const map = createPositionMapper(text);
   const toDiagnostic =
@@ -49,24 +58,22 @@ function loadYaml(text: string, kind: FileKind): LoadedYaml {
 
   const root = doc.contents;
   if (root === null) {
+    const message = EMPTY_MESSAGE[kind];
+    if (message === undefined) return { doc, map, diagnostics, data: {} };
     const start = { line: 0, character: 0 };
     diagnostics.push({
       severity: 'error',
       code: 'empty-document',
-      message: EMPTY_MESSAGE[kind],
+      message,
       range: { start, end: start },
     });
     return { doc, map, diagnostics };
   }
   if (!isMap(root)) {
-    const what =
-      kind === 'workflow'
-        ? 'A workflow file must be a YAML mapping with version, name and steps'
-        : 'An agent file must be a YAML mapping with name and model';
     const diagnostic: Diagnostic = {
       severity: 'error',
       code: 'not-a-mapping',
-      message: `${what}, but this file contains ${isSeq(root) ? 'a list' : 'a single value'}.`,
+      message: `${MAPPING_MESSAGE[kind]}, but this file contains ${isSeq(root) ? 'a list' : 'a single value'}.`,
     };
     const range = focusRange(root, text, map);
     if (range) diagnostic.range = range;

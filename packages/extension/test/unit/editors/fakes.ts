@@ -5,8 +5,11 @@ import type {
   AgentScope,
   AgentSummary,
   ApprovalPrompt,
+  AskPrompt,
   ChatModel,
+  MemoryFileState,
   ModelCatalog,
+  ProjectMemory,
   Range,
   RunEvent,
   RunRecordSummary,
@@ -17,14 +20,19 @@ import type {
   ToolHost,
   Workflow,
   WorkflowSummary,
+  WorkflowTriggerState,
 } from '@isar-flow/core';
 import type {
   ActiveRun,
   AgentRecord,
+  AskBroker,
+  EditJournalWriter,
+  MemoryService,
   ReviewService,
   RunStartOptions,
   Services,
   SimulationStore,
+  TriggerService,
 } from '../../../src/contracts';
 import type { EditorDocument, EditorUi } from '../../../src/editors/host';
 import { computeReplaceRange } from '../../../src/editors/textEdit';
@@ -133,7 +141,11 @@ export function fakeServices() {
         attach: vi.fn(() => ({ dispose: detach })),
       },
       start: vi.fn(
-        async (_uri: vscode.Uri, _inputs?: Record<string, unknown>, _options?: RunStartOptions) => 'run-1',
+        async (
+          _uri: vscode.Uri,
+          _inputs?: Record<string, unknown>,
+          _options?: RunStartOptions,
+        ): Promise<string | undefined> => 'run-1',
       ),
       cancel: vi.fn(),
       active: vi.fn(() => state.active),
@@ -223,6 +235,7 @@ export function fakeUi(overrides: Partial<EditorUi> = {}) {
     commands: [] as unknown[][],
     clipboard: [] as string[],
     errors: [] as string[],
+    infos: [] as string[],
     confirmations: [] as string[],
     folders: [vscode.Uri.file('/w')],
   };
@@ -240,6 +253,7 @@ export function fakeUi(overrides: Partial<EditorUi> = {}) {
       return ui.confirmAnswer;
     },
     showError: (message) => void ui.errors.push(message),
+    showInfo: (message) => void ui.infos.push(message),
     ...overrides,
   };
   return { ui, api };
@@ -295,4 +309,72 @@ export function fakeSimulations() {
     dispose: vi.fn(),
   } satisfies SimulationStore;
   return { service, emitter, data };
+}
+
+/** An ask broker with open asks by workflow URI; attach it with Object.assign(services.runs, { asks: service }). */
+export function fakeAsks() {
+  const requested = new vscode.EventEmitter<AskPrompt & { workflowUri: string }>();
+  const resolved = new vscode.EventEmitter<{ requestId: string; workflowUri: string }>();
+  const pending: Record<string, AskPrompt[]> = {};
+  const detach = vi.fn();
+  const service = {
+    onDidRequest: requested.event,
+    onDidResolve: resolved.event,
+    request: vi.fn(async () => ({ answer: '' })),
+    respond: vi.fn((_requestId: string, _answer: string) => undefined),
+    attach: vi.fn((_workflowUri: string) => ({ dispose: detach })),
+    pending: vi.fn((workflowUri: string) => pending[workflowUri] ?? []),
+    cancel: vi.fn(),
+  } satisfies AskBroker;
+  return { service, requested, resolved, pending, detach };
+}
+
+/** A trigger service with states by workflow URI; attach it with Object.assign(services, { triggers: service }). */
+export function fakeTriggers() {
+  const emitter = new vscode.EventEmitter<{ workflowUri: string }>();
+  const states: Record<string, WorkflowTriggerState> = {};
+  const service = {
+    onDidChange: emitter.event,
+    state: vi.fn(
+      (workflowUri: string): WorkflowTriggerState =>
+        states[workflowUri] ?? { triggers: [], status: 'active' },
+    ),
+    list: vi.fn(() => []),
+    resume: vi.fn((_workflowUri: string) => undefined),
+    dispose: vi.fn(),
+  } satisfies TriggerService;
+  return { service, emitter, states };
+}
+
+export const memoryFile = (folder = '/w', overrides: Partial<MemoryFileState> = {}): MemoryFileState => ({
+  uri: `file://${folder}/.isarflow/memory.md`,
+  folderUri: `file://${folder}`,
+  folderName: folder.replace(/^.*\//, ''),
+  path: '.isarflow/memory.md',
+  exists: true,
+  bytes: 120,
+  overLimit: false,
+  preview: '# Project memory',
+  ...overrides,
+});
+
+/** A memory service; attach it with Object.assign(services, { memory: service }). */
+export function fakeMemory() {
+  const emitter = new vscode.EventEmitter<void>();
+  const data = { files: [] as MemoryFileState[], state: undefined as MemoryFileState | undefined };
+  const projectMemory: ProjectMemory = {
+    read: vi.fn(async () => undefined),
+    append: vi.fn(async (note: string) => `- 2026-11-03: ${note}`),
+  };
+  const service = {
+    onDidChange: emitter.event,
+    files: vi.fn(() => data.files),
+    stateFor: vi.fn((_uri: vscode.Uri) => data.state),
+    open: vi.fn(async (_folderUri?: vscode.Uri) => undefined),
+    forRun: vi.fn(
+      (_root: string, _options: { journal?: EditJournalWriter; secrets?: string[] }) => projectMemory,
+    ),
+    dispose: vi.fn(),
+  } satisfies MemoryService;
+  return { service, emitter, data, projectMemory };
 }

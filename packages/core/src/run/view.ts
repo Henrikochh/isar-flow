@@ -29,6 +29,7 @@ function startView(event: RunStartEvent): RunView {
     ...(event.simulated === true && { simulated: true }),
     ...(event.context && { context: event.context }),
     ...(event.blockHashes && { blockHashes: event.blockHashes }),
+    ...(event.origin && { origin: { ...event.origin } }),
   };
 }
 
@@ -189,5 +190,6 @@ export function runRecordSummary(view: RunView, workflowUri: string): RunRecordS
     ...(view.resumedFrom && { resumedFrom: { ...view.resumedFrom } }),
     ...(view.simulated === true && { simulated: true }),
     ...(stopped !== undefined && { stoppedAt: stopped }),
+    ...(view.origin && { origin: { ...view.origin } }),
   };
 }

@@ -92,3 +92,20 @@ export function stepEnd(events: RunEvent[], stepId: string): Extract<RunEvent, {
 export async function closeAllEditors(): Promise<void> {
   await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 }
+
+/** Writes a file of the temporary test workspace (relative path, forward slashes), creating its folders. */
+export async function writeWorkspaceFile(relativePath: string, text: string): Promise<vscode.Uri> {
+  const uri = vscode.Uri.joinPath(workspaceFolder(), ...relativePath.split('/'));
+  await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(text));
+  return uri;
+}
+
+/** Deletes a file a suite created; other suites count the fixture files, so every suite cleans up. */
+export async function removeWorkspaceFile(relativePath: string): Promise<void> {
+  const uri = vscode.Uri.joinPath(workspaceFolder(), ...relativePath.split('/'));
+  try {
+    await vscode.workspace.fs.delete(uri);
+  } catch {
+    // Already gone.
+  }
+}

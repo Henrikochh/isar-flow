@@ -1,0 +1,12 @@
+# Model providers for the command line runner (isar-flow run). VS Code uses its own settings instead.
+# Agents name models as <provider id>/<model>, e.g. litellm/gpt-4.1.
+# Never put an API key here: store it in an environment variable and name that variable in apiKeyEnv.
+version: 1
+providers:
+  - id: litellm
+    label: LiteLLM
+    baseUrl: http://localhost:4000/v1
+    apiKeyEnv: LITELLM_API_KEY
+  # Ollama needs no key.
+  - id: ollama
+    baseUrl: http://localhost:11434/v1

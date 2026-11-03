@@ -112,7 +112,16 @@ function withStepId(diagnostic: Diagnostic): Diagnostic {
   return { ...diagnostic, stepId: id };
 }
 
-const RESULT_FIELDS = ['exitCode', 'output', 'text', 'json', 'approved', 'comment', 'error'] as const;
+const RESULT_FIELDS = [
+  'exitCode',
+  'output',
+  'text',
+  'json',
+  'approved',
+  'comment',
+  'answer',
+  'error',
+] as const;
 const RESULT_FIELDS_TEXT = `${RESULT_FIELDS.slice(0, -1).join(', ')} or ${RESULT_FIELDS[RESULT_FIELDS.length - 1]}`;
 
 const looseKey = (key: string) => key.toLowerCase().replace(/[_-]/g, '');

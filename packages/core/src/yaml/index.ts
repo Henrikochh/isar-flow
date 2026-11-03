@@ -1,5 +1,6 @@
 export * from './types';
 export { parseWorkflowText, parseAgentText } from './parse';
+export { parseProjectConfigText } from './config';
 export { offsetToPosition } from './position';
 export { applyWorkflowOps } from './ops';
 export { applyAgentUpdate } from './agentOps';

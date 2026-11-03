@@ -7,9 +7,16 @@ export {
   StepSchema,
   WorkflowSchema,
   STEP_ID_PATTERN,
+  DURATION_PATTERN,
 } from './zod';
 export { SimulationFileSchema, SimulationResultSchema } from './simulation';
-export { workflowJsonSchema, agentJsonSchema, simulationJsonSchema } from './jsonSchema';
+export { ProjectConfigSchema } from './config';
+export {
+  workflowJsonSchema,
+  agentJsonSchema,
+  simulationJsonSchema,
+  projectConfigJsonSchema,
+} from './jsonSchema';
 export {
   agentCapabilities,
   type AgentCapability,

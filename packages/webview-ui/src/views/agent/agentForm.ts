@@ -2,7 +2,7 @@
  * Lenient view of an agent file for the form. When the YAML breaks the schema the host still sends the
  * raw mapping, so every field is read defensively and wrong types fall back to empty values.
  */
-import type { AgentDefinition, Diagnostic, PermissionLevel } from '@isar-flow/core';
+import type { AgentDefinition, Diagnostic, MemoryMode, PermissionLevel } from '@isar-flow/core';
 
 /** Posts `{ type: 'update', set, unset }` for top-level keys of the agent file. */
 export type UpdateAgent = (set: Partial<AgentDefinition>, unset?: (keyof AgentDefinition)[]) => void;
@@ -22,6 +22,8 @@ export interface AgentForm {
   toolMode: string | undefined;
   edits: PermissionLevel | undefined;
   commands: PermissionLevel | undefined;
+  /** Project memory access as written; undefined reads the memory (the default). */
+  memory: MemoryMode | undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -58,6 +60,7 @@ export function readAgentForm(agent: AgentDefinition | null): AgentForm {
     toolMode: typeof raw.toolMode === 'string' ? raw.toolMode : undefined,
     edits: level(permissions.edits),
     commands: level(permissions.commands),
+    memory: raw.memory === 'none' || raw.memory === 'read' || raw.memory === 'write' ? raw.memory : undefined,
   };
 }
 

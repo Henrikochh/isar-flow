@@ -1,5 +1,5 @@
 /**
- * Inspector section "Simulation": what a console, agent or approval block returns when simulated, written to
+ * Inspector section "Simulation": what a console, agent, approval or ask block returns when simulated, written to
  * the workflow's simulation file through the host.
  */
 import { useEffect, useRef } from 'react';
@@ -9,7 +9,17 @@ import { Disclosure } from '../inspector/settings/common';
 import { useLiveData } from '../live/LiveDataProvider';
 import { useWorkflowState } from '../store';
 import { MockRowEditor } from './MockRowEditor';
-import { defaultsText, type MockKind, mockKind, newRow, prettyJson, rowProblem, sampleFor } from './mockRows';
+import {
+  answerChoices,
+  defaultAnswer,
+  defaultsText,
+  type MockKind,
+  mockKind,
+  newRow,
+  prettyJson,
+  rowProblem,
+  sampleFor,
+} from './mockRows';
 import { useMocksDraft } from './useMocksDraft';
 import './simulation.css';
 
@@ -18,7 +28,8 @@ type Raw = Record<string, unknown>;
 const NO_RESULTS: SimulationResult[] = [];
 
 /** First field of a new row (after the "Fail this call" switch). */
-const FIRST_FIELD = 'input:not([role="switch"]), textarea, [role="radio"][tabindex="0"]';
+const FIRST_FIELD =
+  'input:not([role="switch"]), textarea, [role="radio"][tabindex="0"], button[aria-haspopup="listbox"]';
 
 export interface SimulationSectionProps {
   stepId: string;
@@ -46,7 +57,7 @@ function useBlockResults(simulation: SimulationState, stepId: string): Simulatio
 function Defaults({ kind, step, simulation }: { kind: MockKind; step: Raw; simulation: SimulationState }) {
   return (
     <div className="wf-sim-defaults">
-      <p className="wf-sim-muted">{defaultsText(kind, simulation.file.approvals)}</p>
+      <p className="wf-sim-muted">{defaultsText(kind, simulation.file.approvals, step)}</p>
       {kind === 'json' ? <pre className="wf-sim-sample">{prettyJson(sampleFor(step))}</pre> : null}
     </div>
   );
@@ -71,6 +82,7 @@ function SimulationEditor({
   const addRef = useRef<HTMLButtonElement>(null);
   const focusAfter = useRef<{ key: number; action: string } | 'add' | 'new' | null>(null);
   const defaultApproved = simulation.file.approvals !== 'reject';
+  const ask = kind === 'ask' ? { choices: answerChoices(step), fallback: defaultAnswer(step) } : undefined;
 
   useEffect(() => {
     const target = focusAfter.current;
@@ -144,6 +156,7 @@ function SimulationEditor({
                   count={count}
                   kind={kind}
                   defaultApproved={defaultApproved}
+                  ask={ask}
                   onChange={(change, mode) => draft.update(index, change, mode)}
                   onFlush={draft.flush}
                   onMove={(delta) => {

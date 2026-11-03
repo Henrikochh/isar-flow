@@ -14,8 +14,8 @@ status on the canvas, console output in a terminal and a history of past runs.
 - **River editor**: blocks sit on a vertical stream; If / else splits it into lanes, a loop draws a return
   channel. Add blocks from the palette or the **+** between blocks, drag them around or use **Move to…** and
   the keyboard. Every visual edit rewrites only the changed part of the YAML.
-- **Seven blocks**: Agent, Console, Loop (until, while or a fixed number of times), If / else, Break, Stop and
-  Approval.
+- **Eight blocks**: Agent, Console, Loop (until, while or a fixed number of times), If / else, Break, Stop,
+  Approval and Ask (a question with choices, a default and a timeout).
 - **Expressions**: `${{ steps.tests.exitCode == 0 }}`, `${{ tail(steps.tests.output, 80) }}` and 16 more
   functions, or conditions built from rules without writing an expression.
 - **Agents** with a model, fallback models, a system prompt, built-in tools (read, list and search files,
@@ -44,6 +44,16 @@ status on the canvas, console output in a terminal and a history of past runs.
   evaluated to in the last run when you hover it on the canvas, in the inspector or in the YAML editor.
   **Simulate** runs a workflow with mocks from a `.sim.yaml` file, edited in the inspector: no commands, no
   model calls, no file changes, so you can test loops and conditions in seconds, even in Restricted Mode.
+- **Everyday use**: workflows read the code you are looking at (`${{ editor.selection }}`, `${{ git.diff }}`)
+  and run on a selection from the editor's context menu. `on:` triggers start them when files are saved or
+  change, or on a schedule, only after you approved their commands once. Approvals and questions reach you as
+  notifications when the canvas is closed, and finished runs report back. Agents keep short project notes in
+  `.isarflow/memory.md` with the `remember` tool. **Export report** saves a Markdown report of a run, and
+  **Copy for PR description** a short summary.
+- **Copilot**: workflows with `expose: true` can be listed and run from GitHub Copilot chat, through two
+  language model tools and the `@isarflow` participant (`/list`, `/run`, `/status`). You confirm every run.
+- **Command line**: `isar-flow run` runs a workflow in a terminal or CI job with OpenAI-compatible models
+  from `.isarflow/config.yaml`, terminal prompts, `--json` output and `--simulate`.
 - **Safety**: runs need a trusted workspace, console commands are confirmed before they run, agent tools stay
   inside the workflow's folder, every change can be reviewed and reverted, loops need a limit, and an optional
   token budget stops expensive runs.
@@ -53,7 +63,7 @@ status on the canvas, console output in a terminal and a history of past runs.
 ## Quick start
 
 1. **Install** the extension from a `.vsix` file: in VS Code run **Extensions: Install from VSIX…** and pick
-   `isar-flow-0.1.0.vsix` (or `code --install-extension isar-flow-0.1.0.vsix`). See
+   `isar-flow-0.2.0.vsix` (or `code --install-extension isar-flow-0.2.0.vsix`). See
    [Development](#development) to build the file yourself.
 2. **Open the sidebar**: open a folder and select the Isar Flow icon in the Activity Bar.
 3. **Add a LiteLLM endpoint**: start your proxy (`litellm --config config.yaml`, port 4000). Under
@@ -73,13 +83,41 @@ to `.isarflow/simulations/<workflow file name>.sim.yaml` to see the tests fail o
 in round 2.
 
 The [user guide](docs/user-guide.md) explains every block, expressions, agents, models, runs, reviewing
-changes, Run from here, live values, test mode and security in detail. The [examples](examples/) folder has
-ready-made workflows, agents and simulation mocks.
+changes, Run from here, live values, test mode, workflows on code, triggers, Copilot, the command line and
+security in detail. The [examples](examples/) folder has ready-made workflows, agents, simulation mocks, a
+project memory and a command line config.
 
 <p>
   <img src="docs/images/sidebar-agents-dark.png" alt="The sidebar with agents and model endpoints" width="260">
   <img src="docs/images/agent-editor-try-it-dark.png" alt="The agent editor with Try it" width="560">
 </p>
+
+## Command line
+
+`isar-flow run` runs a workflow outside VS Code, for example in a CI job. Build it once, then run it with
+Node 20 or later from your project folder:
+
+```bash
+npm run build:cli
+node packages/cli/dist/cli.js run fix-tests --input task="Fix the login test"
+node packages/cli/dist/cli.js run .isarflow/workflows/deploy.workflow.yaml --json --yes
+node packages/cli/dist/cli.js --help
+```
+
+- `<file>` is a `.workflow.yaml` path or the name of a workflow in `.isarflow/workflows/`.
+- `--input name=value` (repeatable), `--simulate` (mocks from `.isarflow/simulations/`, nothing runs),
+  `--json` (one JSON result on stdout, progress on stderr), `--yes` (approve approvals, use default answers,
+  allow agent tools).
+- Agent blocks use OpenAI-compatible providers from `.isarflow/config.yaml`
+  ([example](examples/.isarflow/config.yaml)) or the variables `ISARFLOW_<PROVIDER>_BASE_URL` /
+  `ISARFLOW_<PROVIDER>_API_KEY`. API keys never go into the file. `secrets.<name>` reads
+  `ISARFLOW_SECRET_<NAME>`.
+- Approvals, Ask blocks and agent tool permissions ask in the terminal.
+- Exit codes: 0 success, 1 failure, 130 cancelled (Ctrl+C).
+- Not available on the command line: VS Code models (`vscode/…`), user agents from VS Code and triggers.
+  There is no MCP mode.
+
+See [Command line](docs/user-guide.md#16-command-line) in the user guide.
 
 ## Development
 
@@ -87,7 +125,7 @@ Requirements: Node 20 or later (developed on Node 24) and npm.
 
 ```bash
 npm install
-npm run build            # webview bundle (Vite) + extension bundle (esbuild)
+npm run build            # webview bundle (Vite) + extension bundle + command line runner (esbuild)
 npm test                 # unit, contract, host and component tests (Vitest)
 npm run test:coverage    # the same with the coverage gate: core ≥ 90 %, extension ≥ 70 % of lines
 npm run typecheck
@@ -100,11 +138,12 @@ npm run package          # builds and writes packages/extension/isar-flow-<versi
 Open the repository in VS Code and press `F5` (**Run Isar Flow**) to build and start an Extension
 Development Host; **Run Isar Flow (fixture workspace)** opens it on the test fixture workspace.
 
-| Package               | Contents                                                                                                                                                                                                                                |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/core`       | Isomorphic TypeScript without `vscode` imports: schemas, YAML parsing and comment-preserving edits, expressions, conditions, validation, the workflow engine, the agent runtime, the OpenAI-compatible client and the webview protocol. |
-| `packages/extension`  | The VS Code extension: sidebar and custom editors, model registry, console runner, agent tool host, run manager, history. Bundled with esbuild.                                                                                         |
-| `packages/webview-ui` | React webviews (sidebar, river editor, agent editor) built with Vite, plus a browser harness with a mock host for screenshots.                                                                                                          |
+| Package               | Contents                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/core`       | Isomorphic TypeScript without `vscode` imports: schemas, YAML parsing and comment-preserving edits, expressions, conditions, validation, the workflow engine, the agent runtime, run reports, the OpenAI-compatible client and the webview protocol. The Node-only entry `@isar-flow/core/node` holds the console runner, the agent tool host and git capture, shared by the extension and the command line. |
+| `packages/extension`  | The VS Code extension: sidebar and custom editors, model registry, run manager, history, triggers, notifications, project memory, Copilot tools and the `@isarflow` participant. Bundled with esbuild.                                                                                                                                                                                                       |
+| `packages/webview-ui` | React webviews (sidebar, river editor, agent editor) built with Vite, plus a browser harness with a mock host for screenshots.                                                                                                                                                                                                                                                                               |
+| `packages/cli`        | The command line runner `isar-flow run`, bundled with esbuild into `dist/cli.js`.                                                                                                                                                                                                                                                                                                                            |
 
 **Tests** follow the test concept in [§11 of the design spec](docs/superpowers/specs/2026-10-25-isar-flow-design.md#11-test-concept):
 TDD for core and host logic; Vitest unit tests for the core (expressions, conditions, schemas, YAML edits

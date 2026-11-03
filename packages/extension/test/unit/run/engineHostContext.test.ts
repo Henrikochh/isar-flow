@@ -51,3 +51,24 @@ describe('createEngineHost contextTokens', () => {
     expect('contextTokens' in seen[1]).toBe(false);
   });
 });
+
+describe('createEngineHost memory', () => {
+  it('passes the project memory of the run to the agent runtime', async () => {
+    seen.length = 0;
+    const memory = { read: async () => 'notes', append: async () => '- line' };
+    await createEngineHost({
+      runId: 'run-1',
+      workspaceRoot: '/ws',
+      runCommand: async () => Promise.reject(new Error('unused')),
+      terminal: new FakeTerminal(),
+      models: { resolve: async () => Promise.reject(new Error('unused')) },
+      toolHost: { execute: async () => ({ content: '' }) },
+      readContextFiles: async () => [],
+      approve: async () => ({ approved: true }),
+      memory,
+    }).runAgent(request, io);
+    await engineHost().runAgent(request, io);
+    expect(seen[0].memory).toBe(memory);
+    expect('memory' in seen[1]).toBe(false);
+  });
+});

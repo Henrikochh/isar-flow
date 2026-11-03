@@ -1,0 +1,47 @@
+/* Workflow settings "Triggers": a switch per trigger, its patterns or interval indented under it. */
+.wf-insp-trigger {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wf-insp-trigger + .wf-insp-trigger {
+  margin-top: 12px;
+}
+
+.wf-insp-trigger-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 36px;
+}
+
+.wf-insp-every {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.wf-insp-every-input {
+  flex: 0 1 96px;
+  width: 96px;
+  min-width: 64px;
+}
+
+.wf-insp-presets {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* The preset in the field is tinted and ringed like the selected segment of a SegmentedControl. */
+.wf-insp-presets [aria-pressed='true'] {
+  background: color-mix(in srgb, var(--if-fg) 8%, var(--if-input-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--if-fg) 55%, transparent);
+}
+
+body.vscode-high-contrast .wf-insp-presets [aria-pressed='true'],
+body.vscode-high-contrast-light .wf-insp-presets [aria-pressed='true'] {
+  box-shadow: inset 0 0 0 1px var(--vscode-contrastActiveBorder, var(--if-focus));
+}

@@ -151,7 +151,7 @@ describe('workflow schema diagnostics', () => {
     expect(diagnostics[0]).toMatchObject({
       code: 'missing-property',
       message:
-        "Missing required property 'type'. Use one of: agent, console, loop, if, break, stop, approval.",
+        "Missing required property 'type'. Use one of: agent, console, loop, if, break, stop, approval, ask.",
       stepId: 'a',
       range: { start: { line: 3, character: 4 }, end: { line: 3, character: 9 } },
     });
@@ -179,7 +179,8 @@ describe('workflow schema diagnostics', () => {
     expect(diagnostics).toEqual([
       expect.objectContaining({
         code: 'unknown-block-type',
-        message: "'type' must not be empty. Use one of: agent, console, loop, if, break, stop, approval.",
+        message:
+          "'type' must not be empty. Use one of: agent, console, loop, if, break, stop, approval, ask.",
         range: { start: { line: 4, character: 4 }, end: { line: 4, character: 8 } },
         stepId: 'a',
       }),

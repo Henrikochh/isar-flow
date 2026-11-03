@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ProjectConfigSchema } from './config';
 import { SimulationFileSchema } from './simulation';
 import { AgentDefinitionSchema, WorkflowSchema } from './zod';
 
@@ -23,5 +24,13 @@ export function simulationJsonSchema(): Record<string, unknown> {
   return {
     ...z.toJSONSchema(SimulationFileSchema, { target: 'draft-7', unrepresentable: 'any' }),
     title: 'Isar Flow simulation mocks',
+  };
+}
+
+/** JSON Schema for `.isarflow/config.yaml` (command line runner). */
+export function projectConfigJsonSchema(): Record<string, unknown> {
+  return {
+    ...z.toJSONSchema(ProjectConfigSchema, { target: 'draft-7', unrepresentable: 'any' }),
+    title: 'Isar Flow project config',
   };
 }

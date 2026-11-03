@@ -90,11 +90,14 @@ export function Banner({
   title,
   children,
   actions,
+  icon,
 }: {
   tone?: BannerTone;
   title?: ReactNode;
   children?: ReactNode;
   actions?: ReactNode;
+  /** Codicon instead of the tone's own, e.g. `comment-discussion` for a question. */
+  icon?: string;
 }) {
   const titleId = useId();
   return (
@@ -103,7 +106,7 @@ export function Banner({
       role={tone === 'error' ? 'alert' : 'status'}
       aria-labelledby={title ? titleId : undefined}
     >
-      <i className={`codicon codicon-${BANNER_ICONS[tone]}`} aria-hidden="true" />
+      <i className={`codicon codicon-${icon ?? BANNER_ICONS[tone]}`} aria-hidden="true" />
       <div className="if-banner__body">
         {title ? (
           <div id={titleId} className="if-banner__title">

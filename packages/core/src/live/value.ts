@@ -13,6 +13,10 @@ export interface LiveValueScope {
 
 const ENV_UNAVAILABLE = "Environment values aren't saved with runs.";
 const LOOP_UNAVAILABLE = 'loop is only set inside a loop.';
+const ROOT_UNAVAILABLE = {
+  editor: "This run didn't record editor values.",
+  git: "This run didn't record git values.",
+};
 /** Guards the walk for cut strings against deeply nested or cyclic data. */
 const MAX_DEPTH = 64;
 
@@ -33,6 +37,9 @@ function unavailableReason(
   loopId: string | undefined,
 ): string | undefined {
   if (references.some(([root]) => root === 'env')) return ENV_UNAVAILABLE;
+  for (const root of ['editor', 'git'] as const) {
+    if (!context[root] && references.some(([name]) => name === root)) return ROOT_UNAVAILABLE[root];
+  }
   for (const [root, id] of references) {
     if (root === 'steps' && id !== undefined && !Object.hasOwn(context.steps, id)) {
       return `${id} has no result in this run.`;
@@ -100,6 +107,8 @@ export function liveValue(context: LiveContext, expression: string, scope?: Live
     workspace: context.workspace,
     run: { id: context.runId },
     loop: loopId === undefined ? undefined : context.loops[loopId],
+    editor: context.editor,
+    git: context.git,
   };
   let result: unknown;
   try {

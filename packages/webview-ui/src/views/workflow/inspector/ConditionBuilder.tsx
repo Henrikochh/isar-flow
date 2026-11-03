@@ -26,7 +26,7 @@ import {
 import { TextField } from './fields';
 import { FieldIssues } from './Issues';
 import { RuleRow } from './RuleRow';
-import { GROUP_LABELS, TYPE_LABELS, useVariables, variableLabel } from './variables';
+import { GROUP_ICONS, GROUP_LABELS, TYPE_LABELS, useVariables, variableLabel } from './variables';
 import './condition.css';
 
 export interface ConditionBuilderProps {
@@ -216,6 +216,12 @@ function RuleList({
         description: v.description,
         group: GROUP_LABELS[v.group],
         meta: TYPE_LABELS[v.type],
+        leading: GROUP_ICONS[v.group] ? (
+          <i
+            className={`codicon codicon-${GROUP_ICONS[v.group]} wf-insp-var-group-icon`}
+            aria-hidden="true"
+          />
+        ) : undefined,
       })),
     [variables],
   );

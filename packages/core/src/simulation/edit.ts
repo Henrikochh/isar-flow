@@ -14,7 +14,16 @@ import { newSimulationText } from './template';
 
 const BOM = '﻿';
 const FILE_KEY_ORDER = ['version', 'approvals', 'blocks'];
-const RESULT_KEY_ORDER = ['exitCode', 'output', 'text', 'json', 'approved', 'comment', 'error'] as const;
+const RESULT_KEY_ORDER = [
+  'exitCode',
+  'output',
+  'text',
+  'json',
+  'approved',
+  'comment',
+  'answer',
+  'error',
+] as const;
 
 function cannotRead(reason: string): Error {
   return new Error(`The simulation file can't be read: ${reason}. Fix it in the file first.`);

@@ -11,12 +11,20 @@ import {
   type SimulationResult,
   type Workflow,
 } from '@isar-flow/core';
-import { SIMULATION_BROKEN_TEXT, SIMULATION_ERRORS_TEXT, SIMULATION_TEXT } from './fixtures';
+import { isEverydayScenario } from './everydayScenarios';
+import {
+  RELEASE_SIMULATION_PATH,
+  RELEASE_SIMULATION_TEXT,
+  SIMULATION_BROKEN_TEXT,
+  SIMULATION_ERRORS_TEXT,
+  SIMULATION_TEXT,
+} from './fixtures';
 import { probe, type Send } from './mockShared';
 
 export const SIMULATION_PATH = '.isarflow/simulations/review-loop.sim.yaml';
 
 function initialText(scenario: string): string {
+  if (isEverydayScenario(scenario)) return RELEASE_SIMULATION_TEXT;
   if (scenario === 'simulation-errors') return SIMULATION_ERRORS_TEXT;
   if (scenario === 'simulation-broken') return SIMULATION_BROKEN_TEXT;
   return SIMULATION_TEXT;
@@ -24,13 +32,14 @@ function initialText(scenario: string): string {
 
 export function simulationMock(scenario: string, send: Send<HostToWorkflowEditor>) {
   let text = initialText(scenario);
+  const path = isEverydayScenario(scenario) ? RELEASE_SIMULATION_PATH : SIMULATION_PATH;
   let opened = 0;
   probe.simulationText = () => text;
   probe.openedSimulation = () => opened;
 
   const sendState = (workflow: Workflow | null) => {
     const { file, diagnostics } = checkSimulationText(text, workflow);
-    send({ type: 'simulation', simulation: { path: SIMULATION_PATH, exists: true, file, diagnostics } });
+    send({ type: 'simulation', simulation: { path, exists: true, file, diagnostics } });
   };
 
   return {
@@ -55,7 +64,7 @@ export function simulationMock(scenario: string, send: Send<HostToWorkflowEditor
     load(workflow: Workflow | null): { file: SimulationFile } | { error: string } {
       const { file, diagnostics } = checkSimulationText(text, workflow);
       const error = diagnostics.find((d) => d.severity === 'error');
-      return error ? { error: `Fix ${SIMULATION_PATH} before simulating: ${error.message}` } : { file };
+      return error ? { error: `Fix ${path} before simulating: ${error.message}` } : { file };
     },
   };
 }

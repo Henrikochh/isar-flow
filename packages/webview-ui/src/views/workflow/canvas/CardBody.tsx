@@ -138,6 +138,47 @@ function ApprovalBody({ step }: { step: Raw }) {
   );
 }
 
+/** Choice chips a card shows before it counts the rest. */
+const MAX_CHOICE_CHIPS = 4;
+
+function AskBody({ step }: { step: Raw }) {
+  const choices = Array.isArray(step.choices) ? step.choices.map(textOf).filter((c) => c.trim()) : [];
+  const fallback = textOf(step.default).trim();
+  const shown = choices.slice(0, MAX_CHOICE_CHIPS);
+  const more = choices.length - shown.length;
+  return (
+    <>
+      <div className="wf-card__line">Ask</div>
+      <Clamped text={textOf(step.question)} placeholder="No question yet" stepId={idOf(step)} />
+      <Chips>
+        {choices.length
+          ? [
+              ...shown.map((choice, index) =>
+                choice.trim() === fallback ? (
+                  <Chip key={index} tone="isar" icon="check" title="Default answer">
+                    {choice}
+                    <span className="if-visually-hidden">, default</span>
+                  </Chip>
+                ) : (
+                  <Chip key={index} tone="outline">
+                    {choice}
+                  </Chip>
+                ),
+              ),
+              more > 0 ? <Chip key="more">{`+${more} more`}</Chip> : null,
+            ]
+          : [
+              fallback ? (
+                <Chip key="default" tone="outline" title="Default answer">
+                  {`Default: ${fallback}`}
+                </Chip>
+              ) : null,
+            ]}
+      </Chips>
+    </>
+  );
+}
+
 export function CardBody({ entry }: { entry: BlockEntry }) {
   const step = entry.step as Step & Raw;
   switch (entry.type) {
@@ -149,6 +190,8 @@ export function CardBody({ entry }: { entry: BlockEntry }) {
       return <StopBody step={step} />;
     case 'approval':
       return <ApprovalBody step={step} />;
+    case 'ask':
+      return <AskBody step={step} />;
     case undefined:
       return (
         <div className="wf-card__text">

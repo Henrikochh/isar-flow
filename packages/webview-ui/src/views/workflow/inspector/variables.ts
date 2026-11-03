@@ -16,6 +16,14 @@ export const GROUP_LABELS: Record<VariableInfo['group'], string> = {
   workflow: 'Workflow',
   env: 'Environment',
   run: 'Run',
+  editor: 'Editor',
+  git: 'Git',
+};
+
+/** Codicons of the groups captured from VS Code, so they stand out from workflow data. */
+export const GROUP_ICONS: Partial<Record<VariableInfo['group'], string>> = {
+  editor: 'code',
+  git: 'git-branch',
 };
 
 export const TYPE_LABELS: Record<OutputType, string> = {

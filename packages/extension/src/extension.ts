@@ -1,18 +1,32 @@
 import * as vscode from 'vscode';
 import { registerCodeLens } from './codelens';
 import { registerCreateCommands } from './commands/create';
+import { registerMemoryCommand } from './commands/memoryCommand';
 import { registerWorkflowCommands } from './commands/workflowCommands';
-import type { RunManagerDeps, RunTerminal, Services, SetupCheck } from './contracts';
+import { createCodeContextCapture } from './context/codeContext';
+import { registerSelectionCommand } from './context/selectionCommand';
+import type {
+  CodeContextCapture,
+  MemoryService,
+  RunManagerDeps,
+  RunTerminal,
+  Services,
+  SetupCheck,
+  TriggerService,
+} from './contracts';
+import { type CopilotRegistration, registerCopilot } from './copilot/registerCopilot';
 import { registerDiagnostics } from './diagnostics';
 import { registerAgentEditor } from './editors/agentEditor';
 import { registerWorkflowEditor } from './editors/workflowEditor';
 import { registerLiveValueHover } from './liveValues/hoverProvider';
+import { createMemoryService } from './memory/memoryService';
 import {
   createModelRegistry,
   createSetupCheck,
   registerModelCommands,
   registerSetupCommands,
 } from './models';
+import { registerReportCommands } from './report/reportCommands';
 import { createWorkspaceContextReader } from './run/contextFiles';
 import { createRunManager, type WorkflowRunManager } from './run/runManager';
 import { registerSecretCommands, WorkflowSecrets } from './run/secrets';
@@ -24,6 +38,7 @@ import { createWorkflowStore, type IndexedWorkflowStore } from './store/workflow
 import { createPermissionPrompt } from './tools/permissionPrompt';
 import { createToolHostFactory } from './tools/toolHostFactory';
 import { createVscodeWorkspaceAdapter } from './tools/vscodeWorkspace';
+import { createTriggerService } from './triggers/triggerService';
 
 /** Returned from activate(); integration tests drive the extension through it. */
 export interface IsarFlowApi extends Services {
@@ -31,6 +46,14 @@ export interface IsarFlowApi extends Services {
   workflows: IndexedWorkflowStore;
   runs: WorkflowRunManager;
   setupCheck: SetupCheck;
+  triggers: TriggerService;
+  memory: MemoryService;
+  codeContext: CodeContextCapture;
+  /**
+   * The Copilot tools and the @isarflow handler. Integration tests call them here: vscode.lm.invokeTool outside a
+   * chat shows the run confirmation as a modal dialog.
+   */
+  copilot: CopilotRegistration;
 }
 
 /** Default folder for agent tools and context files; runs use the workflow's own folder. */
@@ -84,6 +107,11 @@ export function activate(context: vscode.ExtensionContext): IsarFlowApi {
     return readContextFilesIn(root)(globs, signal);
   };
 
+  // editor.* / git.* at run start, and .isarflow/memory.md for agents.
+  const codeContext = createCodeContextCapture({ log: output });
+  const memory = createMemoryService({ log: output });
+  context.subscriptions.push(codeContext, memory);
+
   const secrets = new WorkflowSecrets(context);
   context.subscriptions.push(registerSecretCommands(context, secrets));
 
@@ -97,6 +125,8 @@ export function activate(context: vscode.ExtensionContext): IsarFlowApi {
       tools,
       terminalFor,
       readContextFiles,
+      codeContext,
+      memory,
     },
     { secrets, readContextFilesIn },
   );
@@ -110,11 +140,28 @@ export function activate(context: vscode.ExtensionContext): IsarFlowApi {
   const workflows = createWorkflowStore({ context, log: output, agents, history: runs.history });
   context.subscriptions.push(workflows);
 
+  const triggers = createTriggerService({ runs, workflows, log: output });
+  context.subscriptions.push(triggers);
+
   const setupCheck = createSetupCheck({ models, workflows, agents, log: output });
   context.subscriptions.push(setupCheck, registerSetupCommands({ registry: models, setupCheck, agents }));
 
-  const services: IsarFlowApi = { context, agents, workflows, models, runs, tools, output, setupCheck };
+  const services = {
+    context,
+    agents,
+    workflows,
+    models,
+    runs,
+    tools,
+    output,
+    setupCheck,
+    triggers,
+    memory,
+    codeContext,
+  } satisfies Services;
+  const copilot = registerCopilot(services);
   context.subscriptions.push(
+    copilot,
     registerSidebar(services),
     registerCreateCommands(services),
     registerWorkflowEditor(services),
@@ -123,10 +170,13 @@ export function activate(context: vscode.ExtensionContext): IsarFlowApi {
     registerCodeLens(services),
     registerLiveValueHover(services),
     registerWorkflowCommands(services),
+    registerSelectionCommand(services),
+    registerReportCommands(services),
+    registerMemoryCommand(memory),
   );
 
   output.info(`Isar Flow ${String(context.extension.packageJSON.version)} activated.`);
-  return services;
+  return { ...services, copilot };
 }
 
 /** VS Code waits for the returned promise, so runs stopped by the shutdown still reach the history. */

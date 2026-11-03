@@ -19,7 +19,7 @@ export {
   type BannerTone,
 } from './Display';
 export { CapabilityChips, ProbeChip } from './Capabilities';
-export { RunOriginChip, SimulatedChip } from './RunOrigin';
+export { hasRunOriginChip, RunOriginChip, SimulatedChip, StartedByChip } from './RunOrigin';
 export { Dialog } from './Dialog';
 export { ModelPicker, type ModelPickerProps } from './ModelPicker';
 export { Popover, type PopoverProps, type PopoverPlacement } from './Popover';

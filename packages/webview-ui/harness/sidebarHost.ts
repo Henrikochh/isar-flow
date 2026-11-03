@@ -1,4 +1,4 @@
-/** Sidebar side of the mock host: agents, workflows, runs, models and the setup check. */
+/** Sidebar side of the mock host: agents, workflows, runs, models, the setup check and the memory files. */
 import type {
   ActiveRunSummary,
   AgentSummary,
@@ -12,12 +12,16 @@ import {
   AGENTS,
   CATALOG,
   MARKED_RUNS,
+  MEMORY_FILE,
+  MEMORY_MISSING,
+  ORIGIN_RUNS,
   RECENT_RUNS,
+  RELEASE_WORKFLOW,
   SETUP_REPORT,
   SETUP_REPORT_RUNNING,
   WORKFLOWS,
 } from './fixtures';
-import { markReady, testModel, type Send } from './mockShared';
+import { markReady, probe, testModel, type Send } from './mockShared';
 
 /** Names, ids and paths at the edge of what people write, to check ellipses and wrapping (token "long"). */
 const LONG_AGENT: AgentSummary = {
@@ -65,6 +69,11 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
   const markers = has('markers');
   const lastRunOf = (workflow: WorkflowSummary) =>
     MARKED_RUNS.find((run) => run.workflowUri === workflow.uri) ?? workflow.lastRun;
+  // "memory" (Package C): two workspace folders, one without a memory file; the release workflow has triggers and
+  // Copilot access, the test fixer Copilot access only; recent runs started on save, by Copilot and on a selection.
+  const memory = has('memory');
+  const openedMemory: (string | null)[] = [];
+  probe.openedMemory = () => openedMemory;
   const state: SidebarState = {
     hasWorkspace: !has('noworkspace'),
     trusted: !has('untrusted'),
@@ -109,7 +118,9 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
             ]
           : markers
             ? WORKFLOWS.map((workflow) => ({ ...workflow, lastRun: lastRunOf(workflow) }))
-            : [...WORKFLOWS],
+            : memory
+              ? [RELEASE_WORKFLOW, WORKFLOWS[0], { ...WORKFLOWS[1], exposed: true }, ...WORKFLOWS.slice(2)]
+              : [...WORKFLOWS],
     catalog: messy
       ? {
           ...CATALOG,
@@ -143,10 +154,13 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
           ]
         : markers
           ? [...MARKED_RUNS, ...RECENT_RUNS]
-          : RECENT_RUNS,
+          : memory
+            ? [...ORIGIN_RUNS, ...RECENT_RUNS]
+            : RECENT_RUNS,
     activeRuns: running ? [running] : [],
     tab: ['workflows', 'untrusted', 'running', 'newworkflow'].some(has) ? 'workflows' : 'agents',
     setupCheck: has('setup') ? SETUP_REPORT : has('setuprunning') ? SETUP_REPORT_RUNNING : null,
+    ...(memory ? { memory: [MEMORY_FILE, MEMORY_MISSING] } : {}),
   };
   const push = () => send({ type: 'state', state: { ...state } });
   const finishRun = (runId: string, status: 'success' | 'cancelled') => {
@@ -265,6 +279,10 @@ export function sidebarHost(scenario: string, send: Send<HostToSidebar>) {
       }
       case 'openSettings':
         console.info('[mock host] open settings', message.query);
+        break;
+      // The extension opens (or creates) the file in an editor; the harness only notes the request.
+      case 'openMemory':
+        openedMemory.push(message.folderUri ?? null);
         break;
       default:
         console.info('[mock host] sidebar message', message);

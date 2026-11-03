@@ -51,4 +51,5 @@ export const editorUi: EditorUi = {
   confirm: async (message, action) =>
     (await vscode.window.showInformationMessage(message, action)) === action,
   showError: (message) => void vscode.window.showErrorMessage(message),
+  showInfo: (message) => void vscode.window.showInformationMessage(message),
 };

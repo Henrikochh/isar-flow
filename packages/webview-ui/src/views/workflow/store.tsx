@@ -12,15 +12,18 @@ import {
   validateWorkflow,
   type AgentSummary,
   type ApprovalPrompt,
+  type AskPrompt,
   type HostToWorkflowEditor,
   type ModelCatalog,
   type RunRecordSummary,
+  type RunReportAction,
   type RunReview,
   type RunView,
   type Workflow,
   type WorkflowDocumentState,
   type WorkflowEditorToHost,
   type WorkflowOp,
+  type WorkflowTriggerState,
 } from '@isar-flow/core';
 import { reconcilePending } from '../../optimistic';
 import { post, useHostMessages } from '../../vscode';
@@ -43,6 +46,10 @@ export interface WorkflowUiState {
   runLive: boolean;
   history: RunRecordSummary[];
   approvals: ApprovalPrompt[];
+  /** Ask blocks waiting for an answer, oldest first. */
+  asks: AskPrompt[];
+  /** The workflow's triggers and whether they start runs; null until the host sends them. */
+  triggers: WorkflowTriggerState | null;
   /** Selected block id. */
   selection: string | null;
   /** Last ops error from the host, shown as a dismissible banner. */
@@ -90,6 +97,8 @@ export const initialWorkflowUiState: WorkflowUiState = {
   runLive: false,
   history: [],
   approvals: [],
+  asks: [],
+  triggers: null,
   selection: null,
   opsError: null,
   review: null,
@@ -199,6 +208,15 @@ export function workflowUiReducer(state: WorkflowUiState, action: WorkflowUiActi
       };
     case 'approvalResolved':
       return { ...state, approvals: state.approvals.filter((a) => a.requestId !== action.requestId) };
+    case 'askRequest':
+      return {
+        ...state,
+        asks: [...state.asks.filter((a) => a.requestId !== action.prompt.requestId), action.prompt],
+      };
+    case 'askResolved':
+      return { ...state, asks: state.asks.filter((a) => a.requestId !== action.requestId) };
+    case 'triggers':
+      return { ...state, triggers: action.triggers };
     case 'opsFailed': {
       // The edits after the failed one were planned on it; show what the host has.
       const host = state.hostDoc ?? state.doc;
@@ -241,6 +259,14 @@ export interface WorkflowActions {
   cancelRun(): void;
   selectRun(runId: string | null): void;
   answerApproval(requestId: string, approved: boolean, comment?: string): void;
+  /** Answers an ask block; its card goes away at once. */
+  answerAsk(requestId: string, answer: string): void;
+  /** Export report or Copy for PR description of a finished run. */
+  runReport(runId: string, action: RunReportAction): void;
+  /** Opens the VS Code settings filtered by `query`. */
+  openSettings(query: string): void;
+  /** Turns triggers on again after they were paused for starting too often. */
+  resumeTriggers(): void;
   /** Keeps or reverts files of a run's review; without paths every pending file. */
   reviewFiles(runId: string, decision: 'kept' | 'reverted', paths?: string[]): void;
   openReviewDiff(runId: string, path: string): void;
@@ -292,6 +318,13 @@ export function WorkflowStoreProvider({
       selectRun: (runId) => send({ type: 'selectRun', runId }),
       answerApproval: (requestId, approved, comment) =>
         send({ type: 'approval', requestId, approved, comment }),
+      answerAsk: (requestId, answer) => {
+        send({ type: 'answer', requestId, answer });
+        dispatch({ type: 'askResolved', requestId });
+      },
+      runReport: (runId, action) => send({ type: 'runReport', runId, action }),
+      openSettings: (query) => send({ type: 'openSettings', query }),
+      resumeTriggers: () => send({ type: 'resumeTriggers' }),
       reviewFiles: (runId, decision, paths) =>
         send(
           paths ? { type: 'reviewFiles', runId, decision, paths } : { type: 'reviewFiles', runId, decision },

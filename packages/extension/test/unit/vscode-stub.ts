@@ -209,6 +209,53 @@ export class RelativePattern {
 const noop = () => undefined;
 const noopEvent = () => ({ dispose: noop });
 
+/* ---------- Package C additions (status bar, Copilot tools and chat, Markdown) ---------- */
+
+export class MarkdownString {
+  isTrusted?: boolean;
+  constructor(
+    public value = '',
+    public supportThemeIcons = false,
+  ) {}
+  appendMarkdown(value: string): this {
+    this.value += value;
+    return this;
+  }
+  appendText(value: string): this {
+    this.value += value.replace(/[\\`*_{}[\]()#+\-.!|<>]/g, '\\$&');
+    return this;
+  }
+  appendCodeblock(code: string, language = ''): this {
+    this.value += `\n\`\`\`${language}\n${code}\n\`\`\`\n`;
+    return this;
+  }
+}
+
+export class LanguageModelToolResult {
+  constructor(public content: unknown[]) {}
+}
+
+export enum StatusBarAlignment {
+  Left = 1,
+  Right = 2,
+}
+
+export enum QuickPickItemKind {
+  Separator = -1,
+  Default = 0,
+}
+
+export const chat = {
+  createChatParticipant: (id: string, requestHandler: unknown) => ({
+    id,
+    requestHandler,
+    iconPath: undefined as unknown,
+    followupProvider: undefined as unknown,
+    onDidReceiveFeedback: noopEvent,
+    dispose: noop,
+  }),
+};
+
 export enum ProgressLocation {
   SourceControl = 1,
   Window = 10,
@@ -243,6 +290,22 @@ export const window = {
     ) => Promise<R>,
   ): Promise<R> => task({ report: noop }, new CancellationTokenSource().token),
   showTextDocument: async () => undefined,
+  showSaveDialog: async () => undefined,
+  setStatusBarMessage: (_text: string, _hideAfterTimeout?: number) => ({ dispose: noop }),
+  activeTextEditor: undefined as unknown,
+  visibleTextEditors: [] as unknown[],
+  onDidChangeActiveTextEditor: noopEvent,
+  onDidChangeVisibleTextEditors: noopEvent,
+  onDidChangeTextEditorSelection: noopEvent,
+  createStatusBarItem: () => ({
+    text: '',
+    tooltip: undefined as unknown,
+    command: undefined as unknown,
+    name: undefined as string | undefined,
+    show: noop,
+    hide: noop,
+    dispose: noop,
+  }),
 };
 
 export const workspace = {
@@ -259,7 +322,10 @@ export const workspace = {
   findFiles: async () => [],
   onDidChangeWorkspaceFolders: noopEvent,
   onDidSaveTextDocument: noopEvent,
+  onDidChangeTextDocument: noopEvent,
   textDocuments: [] as unknown[],
+  openTextDocument: async (_uri: Uri) => undefined as unknown,
+  asRelativePath: (pathOrUri: string | Uri) => (typeof pathOrUri === 'string' ? pathOrUri : pathOrUri.path),
   registerTextDocumentContentProvider: (_scheme: string, _provider: unknown) => ({ dispose: noop }),
   getWorkspaceFolder: (_uri: Uri) => undefined as { uri: Uri; name: string; index: number } | undefined,
   createFileSystemWatcher: () => ({
@@ -286,6 +352,9 @@ export const commands = {
 export const lm = {
   selectChatModels: async () => [],
   onDidChangeChatModels: noopEvent,
+  registerTool: (_name: string, _tool: unknown) => ({ dispose: noop }),
+  tools: [] as unknown[],
+  invokeTool: async () => new LanguageModelToolResult([]),
 };
 
 export const env = {

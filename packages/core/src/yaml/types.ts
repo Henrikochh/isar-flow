@@ -1,5 +1,5 @@
 import type { Diagnostic, Range } from '../diagnostics';
-import type { AgentDefinition, Step, StepSlot, Workflow } from '../schema/types';
+import type { AgentDefinition, ProjectConfig, Step, StepSlot, Workflow } from '../schema/types';
 
 export interface WorkflowParseResult {
   /**
@@ -21,6 +21,15 @@ export interface AgentParseResult {
   diagnostics: Diagnostic[];
 }
 
+/** `.isarflow/config.yaml` (command line runner), parsed by parseProjectConfigText. */
+export interface ProjectConfigParseResult {
+  /** The config when it is schema-valid; null otherwise (an empty file is a valid, empty config). */
+  config: ProjectConfig | null;
+  valid: boolean;
+  /** YAML and schema problems with ranges, as for workflow files. */
+  diagnostics: Diagnostic[];
+}
+
 /** Where a block goes: the list `slot` of container `parentId` (null = workflow root), before `index`. */
 export interface InsertTarget {
   parentId: string | null;
@@ -38,7 +47,7 @@ export type WorkflowOp =
   | { op: 'updateStep'; stepId: string; set: Record<string, unknown>; unset?: string[] }
   /** Changes a block id and rewrites `steps.<old>` references in all templates. */
   | { op: 'renameStep'; stepId: string; newId: string }
-  /** Sets top-level workflow keys (name, description, inputs, env). */
+  /** Sets top-level workflow keys (name, description, inputs, env, isolation, setup, on, expose); not `steps`. */
   | { op: 'updateWorkflow'; set: Record<string, unknown>; unset?: string[] }
   /**
    * Gives every block without a valid string id (missing, empty, not a string or not matching the id rule) a

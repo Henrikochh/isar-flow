@@ -70,10 +70,10 @@ describe('run lifecycle', () => {
     );
     expect(r.trace).toEqual(['run-start', 'start:fan', 'end:fan:failure', 'run:failure']);
     expect(r.error('fan')).toBe(
-      "Unknown block type 'parallel'. Use one of: agent, console, loop, if, break, stop, approval.",
+      "Unknown block type 'parallel'. Use one of: agent, console, loop, if, break, stop, approval, ask.",
     );
     expect(r.summary.error).toBe(
-      "Block 'fan' failed: Unknown block type 'parallel'. Use one of: agent, console, loop, if, break, stop, approval.",
+      "Block 'fan' failed: Unknown block type 'parallel'. Use one of: agent, console, loop, if, break, stop, approval, ask.",
     );
     expect(host.calls).toHaveLength(0);
   });

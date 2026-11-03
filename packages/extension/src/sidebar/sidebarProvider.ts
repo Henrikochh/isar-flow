@@ -29,7 +29,7 @@ class SidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.disposeView();
-    const { context, output, agents, workflows, models, runs, setupCheck } = this.services;
+    const { context, output, agents, workflows, models, runs, setupCheck, memory } = this.services;
     view.webview.options = webviewOptions(context.extensionUri);
     view.webview.html = renderWebviewHtml(view.webview, context.extensionUri, 'sidebar', 'Isar Flow');
 
@@ -40,6 +40,7 @@ class SidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
       workflows,
       runs,
       setupCheck,
+      memory,
       executeCommand: (command, ...args) => vscode.commands.executeCommand(command, ...args),
       setTab: (tab) => context.workspaceState.update(SIDEBAR_TAB_KEY, tab),
       pushState: push,
@@ -64,6 +65,7 @@ class SidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
       runs.onDidChangeRuns(changed),
       runs.history.onDidChange(changed),
       ...(setupCheck ? [setupCheck.onDidChange(changed)] : []),
+      ...(memory ? [memory.onDidChange(changed)] : []),
       vscode.workspace.onDidGrantWorkspaceTrust(changed),
       vscode.workspace.onDidChangeWorkspaceFolders(changed),
       view.onDidDispose(() => this.disposeView()),
@@ -75,7 +77,7 @@ class SidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
   }
 
   private state(): SidebarState {
-    const { context, agents, workflows, models, runs, setupCheck } = this.services;
+    const { context, agents, workflows, models, runs, setupCheck, memory } = this.services;
     return buildSidebarState({
       hasWorkspace: (vscode.workspace.workspaceFolders?.length ?? 0) > 0,
       trusted: vscode.workspace.isTrusted,
@@ -86,6 +88,7 @@ class SidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposab
       activeRuns: runs.active(),
       tab: context.workspaceState.get(SIDEBAR_TAB_KEY),
       setupCheck: setupCheck?.current(),
+      ...(memory && { memory: memory.files() }),
     });
   }
 

@@ -20,11 +20,15 @@ YAML text are two views of the same file and stay in sync.
 10. [Agents](#10-agents)
 11. [Models](#11-models)
 12. [Running workflows](#12-running-workflows)
-13. [Secrets](#13-secrets)
-14. [Settings](#14-settings)
-15. [Commands](#15-commands)
-16. [Security](#16-security)
-17. [Troubleshooting](#17-troubleshooting)
+13. [Workflows on code](#13-workflows-on-code)
+14. [Triggers](#14-triggers)
+15. [Copilot](#15-copilot)
+16. [Command line](#16-command-line)
+17. [Secrets](#17-secrets)
+18. [Settings](#18-settings)
+19. [Commands](#19-commands)
+20. [Security](#20-security)
+21. [Troubleshooting](#21-troubleshooting)
 
 ## 1. Concepts
 
@@ -32,22 +36,24 @@ YAML text are two views of the same file and stay in sync.
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Agent**    | A reusable AI helper: a model, optional fallback models, a system prompt, tools and permissions. Stored as `<id>.agent.yaml`; workflows refer to it by its id (the file name without `.agent.yaml`). |
 | **Workflow** | A `*.workflow.yaml` file: a name, optional inputs and environment variables, and a list of blocks.                                                                                                   |
-| **Block**    | One step of a workflow: Agent, Console, Loop, If / else, Break, Stop or Approval. Every block has an `id`; later blocks read its outputs as `steps.<id>.<output>`.                                   |
+| **Block**    | One step of a workflow: Agent, Console, Loop, If / else, Break, Stop, Approval or Ask. Every block has an `id`; later blocks read its outputs as `steps.<id>.<output>`.                              |
 | **Run**      | One execution of a workflow. Runs show live on the canvas, mirror console output to a terminal and are kept in a history.                                                                            |
 | **Model**    | A language model, referred to as `<provider>/<model>`: a model VS Code offers (for example GitHub Copilot) or one from an OpenAI-compatible endpoint such as LiteLLM or Ollama.                      |
 
 Where files live:
 
-| File                           | Location                                                                                                        |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| Workspace agents               | `.isarflow/agents/<id>.agent.yaml` in a workspace folder. Shared with everyone who clones the repository.       |
-| User agents                    | `agents/` in the extension's global storage. Available in all your workspaces.                                  |
-| Workflows                      | Anywhere in the workspace (`node_modules` is skipped). New workflows go to `.isarflow/workflows/`.              |
-| Simulation mocks               | `.isarflow/simulations/<workflow file name>.sim.yaml` in a workspace folder ([Test mode](#test-mode-simulate)). |
-| Endpoints                      | The `isarFlow.providers` setting. API keys are kept in VS Code's secret storage.                                |
-| Run history, approved commands | VS Code's storage for the workspace.                                                                            |
-| Review data, worktrees         | VS Code's storage for the workspace ([Reviewing changes](#reviewing-changes)).                                  |
-| Run snapshots                  | In a git repository, commits under `refs/isarflow/runs/`, not on any branch. Removed with the run history.      |
+| File                           | Location                                                                                                               |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| Workspace agents               | `.isarflow/agents/<id>.agent.yaml` in a workspace folder. Shared with everyone who clones the repository.              |
+| User agents                    | `agents/` in the extension's global storage. Available in all your workspaces.                                         |
+| Workflows                      | Anywhere in the workspace (`node_modules` is skipped). New workflows go to `.isarflow/workflows/`.                     |
+| Simulation mocks               | `.isarflow/simulations/<workflow file name>.sim.yaml` in a workspace folder ([Test mode](#test-mode-simulate)).        |
+| Endpoints                      | The `isarFlow.providers` setting. API keys are kept in VS Code's secret storage.                                       |
+| Run history, approved commands | VS Code's storage for the workspace.                                                                                   |
+| Review data, worktrees         | VS Code's storage for the workspace ([Reviewing changes](#reviewing-changes)).                                         |
+| Run snapshots                  | In a git repository, commits under `refs/isarflow/runs/`, not on any branch. Removed with the run history.             |
+| Project memory                 | `.isarflow/memory.md` in a workspace folder ([Project memory](#project-memory)). Plain Markdown you can edit.          |
+| Command line config            | `.isarflow/config.yaml` in a workspace folder: model providers for `isar-flow run` ([Command line](#16-command-line)). |
 
 When a workspace agent and a user agent have the same id, workflows use the workspace agent. The sidebar
 marks the hidden user agent.
@@ -82,6 +88,8 @@ see [What an agent can do](#what-an-agent-can-do)). **User** marks user agents. 
 agent editor. **New** asks for a name, a starter (**Blank**, **Coder** or **Reviewer**) and where to save it
 (**Workspace** or **User**). The Blank starter is read-only; for an agent that should change code, pick
 **Coder**. The trash button deletes an agent after you confirm it in the row; the file goes to the trash.
+Under the agents, **Project memory** shows `.isarflow/memory.md` of each workspace folder with its size, or
+**Not created yet**, and an **Open** (or **Create**) button ([Project memory](#project-memory)).
 
 Below the agents, **Models** lists the model providers with their status and model count. Select an
 endpoint to edit it, use the key button to set its API key, the beaker button to test its models
@@ -93,7 +101,10 @@ all models again; **+** adds an endpoint.
 the workflow; while it runs, the button stops it. **New** asks for a name and a template: **Blank**, **Review loop** (implement, test and
 review until approved) or **Test and fix** (run tests and fix failures until they pass). **Recent runs**
 shows running and finished runs; select one to show it on the canvas. A run whose changes still wait for
-your decision shows **2 to review** ([Reviewing changes](#reviewing-changes)).
+your decision shows **2 to review** ([Reviewing changes](#reviewing-changes)). A workflow with
+[triggers](#14-triggers) shows a lightning icon (hover it for the triggers), one that Copilot may run shows a
+**Copilot** chip ([Copilot](#15-copilot)), and runs that didn't start by hand show how they started, for
+example **On save** or **Copilot**.
 
 In Restricted Mode the sidebar says that running is disabled until you trust the workspace.
 
@@ -108,11 +119,14 @@ Opening a `*.workflow.yaml` (or `.workflow.yml`) file shows the river editor:
   **Then** and an **Else** lane, a loop draws a return channel on its left.
 - **Inspector** (right): the settings of the selected block. With nothing selected it shows the workflow:
   name, description, where it runs ([Running in a separate worktree](#running-in-a-separate-worktree)),
-  inputs, environment variables and runs. During and after a run, it shows the run summary with time and
-  tokens per block ([Time and tokens](#time-and-tokens)), and a selected block has a **Run output** tab next
-  to **Settings**.
+  inputs, environment variables, **Triggers** ([Triggers](#14-triggers)), **Copilot** ([Copilot](#15-copilot))
+  and runs. During and after a run, it shows the run summary with time and tokens per block
+  ([Time and tokens](#time-and-tokens)), and a selected block has a **Run output** tab next to **Settings**.
+- **Start marker** (top of the river): for workflows with triggers, a chip per trigger and the next
+  scheduled run or what the last trigger did; during and after a run, how it started.
 - **Review card** (above the canvas): after a run that changed files, the changed files with **Keep** and
   **Revert** ([Reviewing changes](#reviewing-changes)).
+- **Question card** (above the canvas): an [Ask](#ask) block waiting for your answer.
 
 ### Adding blocks
 
@@ -186,6 +200,9 @@ installed, workflow and agent files also get completion, hovers and validation f
 version: 1 # always 1
 name: Review until approved
 description: Optional text shown in the sidebar.
+on: # optional: start the workflow by itself (see Triggers)
+  save: { files: 'src/**/*.ts' }
+expose: true # optional: Copilot may run it (see Copilot)
 inputs: # asked for when the run starts
   task: { type: string, description: What should be implemented?, required: true, multiline: true }
   rounds: { type: number, default: 5 }
@@ -198,7 +215,8 @@ setup: [npm ci] # only with isolation: worktree; runs in the worktree before the
 steps: [] # the blocks
 ```
 
-**isolation** and **setup**: see [Running in a separate worktree](#running-in-a-separate-worktree).
+**isolation** and **setup**: see [Running in a separate worktree](#running-in-a-separate-worktree). **on**:
+see [Triggers](#14-triggers). **expose**: see [Copilot](#15-copilot).
 
 **Inputs**: names start with a letter or `_` and contain letters, digits, `_` and `-`. Each input can have:
 
@@ -211,14 +229,14 @@ steps: [] # the blocks
 | `multiline`   | Shows a larger text field in the run dialog of the canvas.                                             |
 
 **Workflow env** is rendered once when the run starts, before any block runs. It can use `inputs`,
-`secrets`, `env`, `workflow`, `workspace` and `run`, but not the outputs of blocks or `loop`.
+`secrets`, `env`, `workflow`, `workspace`, `run`, `editor` and `git`, but not the outputs of blocks or `loop`.
 
 ### Fields every block has
 
 | Field             | Meaning                                                                                                                                                                                                                             |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`              | Required and unique in the workflow. Starts with a letter or `_`, then letters, digits, `_` and `-`.                                                                                                                                |
-| `type`            | `agent`, `console`, `loop`, `if`, `break`, `stop` or `approval`.                                                                                                                                                                    |
+| `type`            | `agent`, `console`, `loop`, `if`, `break`, `stop`, `approval` or `ask`.                                                                                                                                                             |
 | `name`            | Optional label shown on the canvas instead of the id.                                                                                                                                                                               |
 | `timeout`         | Seconds. The block fails with "Timed out after Ns" when it takes longer; a console command is stopped with all the processes it started.                                                                                            |
 | `continueOnError` | When `true`, a failed block does not fail the run. Its status is still `failure` and its outputs can be checked.                                                                                                                    |
@@ -294,7 +312,7 @@ Runs a command line and captures its output.
 
 | Field   | Meaning                                                                                                                                                                                                                                            |
 | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `run`   | The command line, also several lines. Supports templates (but see [Security](#16-security)).                                                                                                                                                       |
+| `run`   | The command line, also several lines. Supports templates (but see [Security](#20-security)).                                                                                                                                                       |
 | `shell` | `auto` uses PowerShell 7 (`pwsh`) or else Windows PowerShell on Windows, and your login shell (`$SHELL`), else `/bin/bash`, else `/bin/sh` elsewhere. `bash` on Windows is Git Bash. Without `shell`, the `isarFlow.defaultShell` setting applies. |
 | `cwd`   | Working folder. Relative paths start at the workspace folder of the workflow.                                                                                                                                                                      |
 | `env`   | Extra environment variables on top of VS Code's environment and the workflow `env`.                                                                                                                                                                |
@@ -377,11 +395,54 @@ Pauses the run until you approve or reject.
 ```
 
 The request appears as a banner on the canvas with an optional comment, **Approve** and **Reject**. When the
-workflow's canvas is not visible, VS Code shows a dialog with **Approve** and **Reject** instead. With `onReject: stop` a
+workflow's canvas is not visible, a notification asks instead ("Release needs your approval: …" with
+**Approve**, **Reject** and **Open workflow**; see [Notifications](#notifications)). With `onReject: stop` a
 rejection ends the run as failed ("Rejected at '…'"); with `continue` the run goes on and later blocks can
 check `steps.<id>.approved`. Stopping the run or reaching the block's `timeout` counts as a rejection.
 
 Outputs: `approved` (`true` or `false`) and `comment` (empty without a comment).
+
+### Ask
+
+Asks the person running the workflow a question and waits for the answer.
+
+```yaml
+- id: pick-env
+  type: ask
+  question: Which environment should I deploy to? # supports templates
+  choices: [dev, staging, prod] # optional; without it, any text is an answer
+  default: dev # optional; preselected, and used when nobody answers in time
+  timeout: 300 # optional, seconds
+- id: deploy
+  type: console
+  run: npm run deploy -- --env ${{ steps.pick-env.answer }}
+```
+
+In the river editor, add **Ask** from the palette (next to **Approval**). In the inspector, write the
+**Question** (with `{x}` for templates), choose **Free text** or **Choices** under **Answers** (Alt+↑ / Alt+↓
+moves a choice), pick an optional **Default answer**, and set **Timeout (seconds)** under **Advanced**.
+
+While the block waits, a **Question** card sits above the canvas and in the block's **Run output**: one
+button per choice (a list and **Answer** for more than five choices), or a text field where Enter answers,
+plus the time left ("Answer within 2:30; then 'dev' is used."). When the canvas is not visible, a
+notification asks: **Answer** opens a pick list of the choices (the default first) or an input box with the
+default filled in; closing it keeps the question open, and the run's status bar item says **Waiting for your
+answer** until you answer.
+
+- With `choices`, the answer must be one of them; case doesn't matter, and the choice's own spelling is used.
+  Any other answer fails the block ("Answer 'x' isn't one of the choices of 'pick-env': dev, staging, prod.").
+- An empty answer uses the default, or fails the block when there is none.
+- When the `timeout` runs out, the default is used and `timedOut` is `true` ("Default used" in the run
+  output). Without a default the block fails with "Timed out after Ns".
+- When nobody can be asked (a [trigger](#14-triggers), or `isar-flow run --yes` on the
+  [command line](#16-command-line)), the default is used, else the first choice. A free-text question without
+  a default then fails: give it a default.
+- Inside a loop the block asks in every round. **Run from here** reuses the answer of a block before the
+  target and asks again when the ask block is the target.
+- In a simulated run the answer comes from the mocks (`- answer: prod`), else the default, else the first
+  choice ([Test mode](#test-mode-simulate)).
+
+Outputs: `answer` (the text) and `timedOut` (`true` when the default was used because time ran out).
 
 ## 7. Expressions and templates
 
@@ -402,16 +463,18 @@ any value that contains `: ` or ` #`. Values in block style (`prompt: |`) never 
 
 ### What expressions can read
 
-| Name                             | Value                                                                                           |
-| -------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `inputs.<name>`                  | Workflow inputs, with defaults applied and converted to their `type`.                           |
-| `steps.<id>.<output>`            | Outputs of a block that already ran. Inside a loop, always the latest run of the block.         |
-| `env.<NAME>`                     | VS Code's environment variables plus the workflow `env`. Names are case-sensitive here.         |
-| `loop.iteration`, `loop.index`   | Iteration of the innermost loop: `iteration` counts from 1, `index` from 0. Only inside a loop. |
-| `workflow.name`, `workflow.file` | Name of the workflow and the full path of its file.                                             |
-| `workspace.root`                 | The workspace folder of the workflow.                                                           |
-| `run.id`                         | Id of the current run.                                                                          |
-| `secrets.<NAME>`                 | Stored workflow secrets ([Secrets](#13-secrets)). A secret that is not stored reads as empty.   |
+| Name                             | Value                                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `inputs.<name>`                  | Workflow inputs, with defaults applied and converted to their `type`.                             |
+| `steps.<id>.<output>`            | Outputs of a block that already ran. Inside a loop, always the latest run of the block.           |
+| `env.<NAME>`                     | VS Code's environment variables plus the workflow `env`. Names are case-sensitive here.           |
+| `loop.iteration`, `loop.index`   | Iteration of the innermost loop: `iteration` counts from 1, `index` from 0. Only inside a loop.   |
+| `workflow.name`, `workflow.file` | Name of the workflow and the full path of its file.                                               |
+| `workspace.root`                 | The workspace folder of the workflow.                                                             |
+| `run.id`                         | Id of the current run.                                                                            |
+| `secrets.<NAME>`                 | Stored workflow secrets ([Secrets](#17-secrets)). A secret that is not stored reads as empty.     |
+| `editor.<field>`                 | The editor you were in when the run started ([Workflows on code](#13-workflows-on-code)).         |
+| `git.<field>`                    | Branch, changed files and diff when the run started ([Workflows on code](#13-workflows-on-code)). |
 
 Ids and names may contain `-`: `steps.unit-tests.exitCode` reads the block `unit-tests`. Write `a - b` with
 spaces to subtract. Use brackets for any other key: `steps.review.json['issue count']`, `lines(x)[0]`.
@@ -608,7 +671,7 @@ a run, except that `auto` permissions ask first. Workflow runs use the saved age
 
 ### Tools
 
-Tools only work inside the workspace folder of the workflow ([Security](#16-security)).
+Tools only work inside the workspace folder of the workflow ([Security](#20-security)).
 
 | Tool         | Label            | Arguments                        | What it does                                                                                                   | Gate       |
 | ------------ | ---------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------- |
@@ -755,6 +818,38 @@ A block can define its agent inline instead of referring to a file:
   prompt: '${{ tail(steps.tests.output, 200) }}'
 ```
 
+### Project memory
+
+Agents can keep facts about your project in `.isarflow/memory.md`, one file per workspace folder: how the
+tests run, naming rules, decisions. **Memory** in the agent editor (after **Permissions**; `memory` in YAML,
+for agent files and inline agents) sets what an agent does with it:
+
+| Mode in YAML     | In the agent editor | Effect                                                                                                            |
+| ---------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `none`           | Off                 | The agent never sees the file.                                                                                    |
+| `read` (default) | Read                | The first 8 KB of the file are added to the agent's instructions under **Project memory**.                        |
+| `write`          | Read and write      | The agent also gets the `remember` tool, which adds a dated note such as `- 2026-11-03: Tests run with npm test.` |
+
+```yaml
+# .isarflow/agents/coder.agent.yaml
+memory: write
+```
+
+- The agent editor's **Memory** section shows the file's path, size and first lines, with **Open memory
+  file** (or **Create memory file**). The sidebar's **Agents** tab and **Isar Flow: Open project memory**
+  open the same file; it is created with a short header when it is missing. User agents use the memory of
+  the workspace folder they run in.
+- A note is one short fact of at most 500 characters. Empty notes, longer notes and notes that contain a
+  secret value aren't saved; the agent is told why. A file over 64 KB takes no new notes: remove old ones.
+- A note is a file change like any other: the [review card](#reviewing-changes) lists `.isarflow/memory.md`
+  and you can revert it. An open editor of the file gets the note in place.
+- **Try it** reads and writes the memory like a run. The log of each agent block says how much it read.
+- The file must be UTF-8. A memory file in another encoding (UTF-16, Latin-1) is skipped, and `remember`
+  saves no notes into it, until you save it as UTF-8. A memory file that a link leads outside the workspace
+  folder is refused.
+- The file is plain Markdown. Edit or delete notes freely; commit it to share it with your team, or add it to
+  `.gitignore` to keep it to yourself.
+
 ## 11. Models
 
 Agents name models as `<provider>/<model>`. The provider id ends at the first `/`, so model ids may
@@ -887,6 +982,10 @@ many had no price.
 - The **Run workflow** CodeLens at the top of a `.workflow.yaml` file, the editor title button, or **Run
   workflow** in the file's context menu in the Explorer.
 - **Isar Flow: Run workflow** in the Command Palette (runs the active workflow or asks which one).
+- **Run workflow on selection** in the context menu of a text editor ([Workflows on code](#13-workflows-on-code)).
+
+Workflows can also start by themselves ([Triggers](#14-triggers)), from Copilot chat ([Copilot](#15-copilot))
+and from a terminal ([Command line](#16-command-line)).
 
 A workflow runs once at a time; starting it again while it runs is refused. Runs use the workflow as it is
 in the editor, unsaved changes included.
@@ -903,7 +1002,8 @@ anything.
    **Show problems**.
 3. **Inputs**: the river editor shows a dialog with one field per input (a larger field for `multiline`
    inputs, a switch for booleans). Other ways of starting ask with input boxes, one per input, and Yes/No
-   for booleans. Leave an optional input empty to use its default.
+   for booleans. Leave an optional input empty to use its default. Triggers and Copilot never ask: a
+   required input needs a default (triggers) or a value from Copilot, otherwise the run doesn't start.
 4. **Command confirmation**: see below.
 
 ### Command confirmation
@@ -947,16 +1047,40 @@ runs show too ([Live values](#live-values)). **Run from here** needs a trusted w
 - The canvas shows each block's status, pulses the river toward the running block and counts loop
   iterations. Select a block and open **Run output** for its rendered command or prompt, its output, the
   tools an agent used and its outputs.
-- A status bar item shows the running workflow and the elapsed time; select it to open the workflow.
+- A status bar item shows the running workflow and the elapsed time; select it to open the workflow. While
+  the run waits for you it says **Waiting for your answer** or **Waiting for approval**.
 - Console output is mirrored to a terminal tab **Isar Flow: <workflow name>**. Each command starts with
   `▶ <block id>` and ends with its exit code and duration. The terminal is read-only.
-- Approval blocks and permission questions wait for your answer ([Approval](#approval),
-  [Permissions](#permissions)).
+- Approval and Ask blocks and permission questions wait for your answer ([Approval](#approval),
+  [Ask](#ask), [Permissions](#permissions)).
 
 ![A live run: the loop is in iteration 2, the review block is running](images/workflow-live-run-light.png)
 
 **Stop** (top bar, sidebar, or **Isar Flow: Stop run**) cancels the run: running commands are stopped with
 all the processes they started, model requests are aborted, and the run ends as cancelled.
+
+### Notifications
+
+You don't have to keep the canvas open. When the workflow's editor isn't visible:
+
+- **Approvals** arrive as a notification, for example "Release needs your approval: Publish these notes?",
+  with **Approve**, **Reject** and **Open workflow**.
+- **Questions** of [Ask](#ask) blocks arrive as "Release asks: Which environment should I deploy to?" with
+  **Answer** and **Open workflow**.
+- Closing a notification keeps the request open: the run's status bar item says **Waiting for approval** or
+  **Waiting for your answer**; select it to answer on the canvas. Opening the canvas moves open requests onto
+  it.
+- **Finished runs** report back:
+
+| Started by          | Succeeded                                                                                     | Failed                                       |
+| ------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| You, or a selection | "Build succeeded in 2m 3s." or "… and changed 3 files." with **Review changes**, **Open run** | "Build failed at tests: …" with **Open run** |
+| A trigger           | Only when files changed, as above                                                             | As above                                     |
+| Copilot             | Only "Build changed 3 files." with **Review changes** (the chat shows the rest)               | Nothing (the chat shows it)                  |
+| Simulated runs      | "Simulated run of Build finished."                                                            | "Simulated run of Build failed at tests."    |
+
+Cancelled runs don't notify you. With the workflow's editor visible, only "Build changed 3 files." with
+**Review changes** remains, as before.
 
 ### Time and tokens
 
@@ -993,8 +1117,27 @@ history, its snapshots, review data and worktree are removed too. Simulated runs
 simulating never pushes a real run (and its review) out of the history.
 
 The lists also mark how a run started: **Resumed** for a run that continued another one (hover it for
-"Resumed from tests") and **Simulated** for a simulated run. A failed or cancelled run offers **Run from
-<block>** in the **Runs** menu for the block where it stopped ([Run from here](#run-from-here)).
+"Resumed from tests"), **Simulated** for a simulated run, and **On save**, **On change**, **Scheduled**,
+**Copilot**, **Selection** or **Command line** for runs you didn't start by hand (hover it for the whole
+sentence, such as "Started on save of src/app.ts"). The run summary and the Start marker say the same. A
+failed or cancelled run offers **Run from <block>** in the **Runs** menu for the block where it stopped
+([Run from here](#run-from-here)).
+
+### Run reports
+
+For a finished run, the **Runs** menu and the run summary offer:
+
+- **Export report…** saves a Markdown file (suggested name `<workflow>-run-2026-11-03-1402.md` in the
+  workspace folder) with a summary (status, start, duration, tokens, cost when prices are set, how the run
+  started, inputs), a timeline of every block, the changed files with +/- lines and your keep / revert
+  decisions, agent answers (up to 4,000 characters each), the answers to questions and approvals, and errors
+  with the last 20 lines of console output.
+- **Copy for PR description** copies a short summary of at most 4,000 characters for a pull request: the
+  outcome, block counts, tokens, up to 15 changed files and the last agent answer in a collapsed section.
+
+Both are also commands, **Isar Flow: Export run report** and **Isar Flow: Copy run for PR description**, which
+let you pick a finished run. Simulated and resumed runs are always marked as such. Reports contain what the
+run view shows, so secrets stay masked.
 
 ### Reviewing changes
 
@@ -1183,7 +1326,8 @@ blocks:
   one repeats. Retries and loop rounds count as calls, so the review loop above fails its tests in round 1
   and passes in round 2.
 - Console blocks use `exitCode` and `output`. Agents use `text`, or `json` for agents with JSON answers (text
-  that contains JSON works too). Approvals use `approved` and `comment`. `error` fails the call with that
+  that contains JSON works too). Approvals use `approved` and `comment`. Ask blocks use `answer`; an answer
+  that isn't one of the block's choices fails the block, as in a real run. `error` fails the call with that
   message, on any block:
 
   ```yaml
@@ -1196,8 +1340,9 @@ blocks:
   ```
 
 - Blocks without mocks get defaults: console blocks exit with 0 and print nothing, agents answer
-  `(simulated answer)`, agents with JSON answers answer sample JSON built from their JSON fields, and
-  approvals are approved (rejected with `approvals: reject`).
+  `(simulated answer)`, agents with JSON answers answer sample JSON built from their JSON fields,
+  approvals are approved (rejected with `approvals: reject`), and ask blocks answer with their default, else
+  their first choice, else `(simulated answer)`.
 - With the YAML extension, the file is checked as you type. The workflow editor also warns about block ids
   that aren't in the workflow, mocks for loop, if, break and stop blocks, fields of another block type, and
   JSON that doesn't match the block's JSON fields.
@@ -1205,10 +1350,10 @@ blocks:
   simulating: …" with **Open simulation file**. Common mistakes get a hint, for example block ids at the top
   of the file ("Put the mocks of block tests under blocks:") or a field of another block type.
 
-**Editing mocks in the inspector.** Select a console, agent or approval block and open **Simulation**. It
+**Editing mocks in the inspector.** Select a console, agent, approval or ask block and open **Simulation**. It
 lists the results Simulate uses for the block, one per call: an exit code and output for console blocks, an
 answer for agents (a new result of a JSON agent starts with sample JSON), **Approve** or **Reject** and a
-comment for approvals. **Add result** adds one; move or remove results with the buttons next to them, and turn
+comment for approvals, and an answer for ask blocks (one of its choices, or your own text). **Add result** adds one; move or remove results with the buttons next to them, and turn
 on **Fail this call** to fail a call with an error message. Changes are saved to the simulation file as you
 type, comments in the file stay. **Open simulation file**, or **Edit simulation mocks** in the menu of the
 arrow next to **Run**, opens the file (created from a short template when it doesn't exist yet). Renaming a
@@ -1225,7 +1370,205 @@ confirmation, take no snapshot, and show no review, notification or terminal out
 the **Runs** menu, the run history and the sidebar. Their cards show no time or cost, they use no tokens, and
 they are left out of the averages of the last 20 runs. A simulated run can't be continued with Run from here.
 
-## 13. Secrets
+## 13. Workflows on code
+
+Workflows can work with the code you are looking at. Two expression roots hold it, captured once when the
+run starts:
+
+| Name               | Value                                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `editor.selection` | The selected text. With several cursors, every non-empty selection in document order, one per line (at most 100 KB).           |
+| `editor.file`      | The file of that editor, relative to the workflow's workspace folder; the full path for files outside it; empty for new files. |
+| `editor.language`  | Its language, for example `typescript`.                                                                                        |
+| `editor.line`      | The line of the cursor, starting at 1.                                                                                         |
+| `git.branch`       | The current branch; empty for a detached HEAD.                                                                                 |
+| `git.changedFiles` | Changed, staged, deleted, renamed (new name) and untracked files, relative to the workspace folder (at most 1,000).            |
+| `git.diff`         | The uncommitted changes against HEAD for files in the workspace folder, untracked files not included (at most 100 KB).         |
+
+```yaml
+- id: explain
+  type: agent
+  model: vscode/copilot/gpt-4.1
+  prompt: |
+    Explain this ${{ editor.language }} code from ${{ editor.file }} (line ${{ editor.line }}):
+    ${{ editor.selection }}
+```
+
+- The editor is the text editor you were in when the run started. When a webview such as the canvas has the
+  focus, the text editor you used last is taken, as long as it is still visible. Isar Flow's own workflow and
+  agent files never count. Without one, the values are empty.
+- git values are read only for workflows that use them, and never in Restricted Mode (git can run repository
+  hooks). Outside a git repository, or without git, they are empty. A diff larger than 100 KB ends with
+  "… The diff was shortened to 100 KB (3 files changed, …)."
+- The {x} picker and the condition builder list them under **Editor** and **Git**. The run keeps the values
+  (selection and diff cut at 2 KB, secrets masked) so [live values](#live-values) can show them; older runs say
+  "This run didn't record editor values."
+
+**Run workflow on selection**: select text, right-click and choose **Run workflow on selection** (or run the
+command from the Command Palette). Workflows that use `editor.*` are listed first, under **Use the
+selection**. The run starts without opening the canvas; the status bar and the finish notification report
+it ([Notifications](#notifications)).
+
+## 14. Triggers
+
+Workflows can start by themselves when files are saved or change, or on a schedule:
+
+```yaml
+on:
+  save: # a file you save in VS Code
+    files: 'src/**/*.ts'
+  change: # a file that changes on disk, also from other programs (created, changed or deleted)
+    files: ['docs/**', '!docs/gen/**']
+  schedule:
+    every: 1h30m # s, m, h and d; at least 1m
+```
+
+In the river editor, open the workflow settings (select nothing) and use **Triggers**: **Run on save**, **Run
+when files change** (one pattern per row) and **Run on a schedule** with **Every** (15 min, 1 hour, 1 day or
+any duration of at least 1m).
+
+- **Patterns** are relative to the workflow's workspace folder; patterns starting with `!` exclude. Files
+  in `.git/`, `node_modules/` and `.isarflow/` are ignored unless a pattern names that folder. The workflow's
+  own file never triggers it.
+- **When they run**: only while VS Code is open, in trusted workspaces, while `isarFlow.triggers.enabled` is
+  on, and after you ran the workflow once and chose **Run and remember** in the
+  [command confirmation](#command-confirmation). A workflow with nothing to confirm (no console blocks and no
+  agents that act without asking) needs one start by you. Until then the triggers are paused and one
+  notification says why.
+- **Inputs**: triggers can't ask for inputs. Give required inputs a default; otherwise the triggers pause
+  ("Input 'x' is required. Triggers can't ask for values: give it a default.").
+- **Debounce**: events within 2 seconds start one run. A save that also changes the file on disk starts one
+  run.
+- **Own changes**: a workflow never starts itself through its own changes. While it runs, events are
+  ignored (not queued), then for 3 seconds after it finished, and for 10 seconds for the files it changed.
+  A trigger that fires while the workflow runs is skipped ("The workflow was already running.").
+- **Too many starts**: more than 10 save or change starts in 10 minutes pause the triggers ("'Build' started
+  10 times in 10 minutes, so its triggers are paused.") until you choose **Resume triggers**.
+- **Schedules** are checked every 15 seconds. The first run is one interval after VS Code starts (or after
+  you add the schedule). After sleep, the missed runs become one run. While triggers are paused, the next run
+  time moves on, so turning them on again starts no catch-up run.
+- **Ask blocks** in a triggered run use their default, else their first choice ([Ask](#ask)).
+- **Editor values**: nobody started a triggered run at the editor, so schedule and change triggers get empty
+  `editor.*` values, and a save trigger only gets them when the active editor shows the saved file. A
+  selection in an unrelated file (an `.env` file, say) never reaches a triggered run.
+
+Where you see them:
+
+- The **Start marker** on the canvas shows a chip per trigger and the next scheduled run ("Next run in 12
+  min") or what the last trigger did ("Last started on save of src/app.ts 3 min ago"). Paused triggers say
+  why and offer one fix: **Run once** (approval needed), **Resume** (too many starts) or **Open settings**
+  (turned off).
+- The status bar item **⚡ 3 triggers** (or **Triggers paused**) lists every workflow with triggers; select it
+  (or run **Isar Flow: Show triggers**) to open a workflow, resume its triggers or turn triggers off.
+- The sidebar shows a lightning icon on workflows with triggers, and the history marks triggered runs
+  **On save**, **On change** or **Scheduled**.
+- Triggered runs notify you only when they fail or change files ([Notifications](#notifications)).
+
+`isarFlow.triggers.enabled` (default on) turns all triggers on or off.
+
+## 15. Copilot
+
+GitHub Copilot chat can list and run your workflows, but only those you allow: add `expose: true` to a
+workflow, or turn on **Let Copilot run this workflow** under **Copilot** in its workflow settings. Add a
+`description` too, so Copilot knows when to use it. Exposed workflows show a **Copilot** chip in the
+sidebar.
+
+```yaml
+name: Release
+description: Builds and publishes a release of this package.
+expose: true
+inputs:
+  version: { type: string, required: true }
+```
+
+**Tools in agent mode**: Isar Flow adds two tools to Copilot, **List Isar Flow workflows**
+(`#isarflowWorkflows`) and **Run an Isar Flow workflow** (`#isarflowRun`). Copilot lists the exposed
+workflows with their inputs, then asks you to confirm each run ("Run Release?" with its inputs, the
+commands it runs and the agents that edit files or run commands without asking; it warns when a command
+contains an input value). Yes/no inputs accept only yes/no words (`true`, `false`, `yes`, `no`, …), so an
+unclear answer from the model is refused instead of read as yes. The tool waits until the run has finished and gives Copilot the result: status, the
+outputs of each block and the changed files.
+
+**The @isarflow participant**:
+
+| Command                                | What it does                                                                        |
+| -------------------------------------- | ----------------------------------------------------------------------------------- |
+| `@isarflow /list`                      | Lists the workflows Copilot may run, with **Open** buttons.                         |
+| `@isarflow /run release version=1.2.0` | Runs a workflow; quote names and values with spaces (`notes="first release"`).      |
+| `@isarflow /status`                    | Shows running runs with their current block and the last 5 runs, with **Open run**. |
+
+`/run` shows each block as it starts, then the result with **Open run** and **Review changes**. Stopping the
+chat request stops the run.
+
+- Workflows without `expose: true` are never run, also not when Copilot names them.
+- Copilot runs are normal runs: Workspace Trust, validation and the [command confirmation](#command-confirmation)
+  apply, so a workflow whose commands you never approved asks first. Copilot can't simulate runs or continue
+  them from a block.
+- Copilot never sees an input box: it must pass required inputs without a default.
+- The history marks Copilot runs **Copilot**. Copilot runs that change files notify you
+  ([Notifications](#notifications)).
+
+There is no MCP server: Copilot reaches Isar Flow only through these tools and the chat participant.
+
+## 16. Command line
+
+`isar-flow run` runs a workflow in a terminal, outside VS Code, for example in a script or a CI job. Build
+it from the repository with `npm run build:cli` and run it with Node 20 or later:
+
+```bash
+node packages/cli/dist/cli.js run fix-tests --input task="Fix the login test"
+node packages/cli/dist/cli.js run .isarflow/workflows/release.workflow.yaml --json --yes
+```
+
+(Run `npm link` in `packages/cli` once to get an `isar-flow` command.)
+
+| Option                | Meaning                                                                                                          |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `<file>`              | A `.workflow.yaml` path, or the name of a workflow in `.isarflow/workflows/`.                                    |
+| `--input name=value`  | Sets an input; repeat it for more. Values are converted to the input's type.                                     |
+| `--simulate`          | Uses the mocks of `.isarflow/simulations/<name>.sim.yaml`; nothing is executed, git included (`git.*` is empty). |
+| `--json`              | Prints one JSON result on stdout (status, duration, tokens, each block's output); progress goes to stderr.       |
+| `--yes`               | Approves approvals, uses default answers and allows agent tools without asking.                                  |
+| `--help`, `--version` | Shows the help or the version.                                                                                   |
+
+The workspace root is the nearest folder above the workflow that has a `.isarflow` folder, else the git
+repository, else the current folder. Agents come from `.isarflow/agents/` there.
+
+**Models**: agent blocks use OpenAI-compatible endpoints from `.isarflow/config.yaml`:
+
+```yaml
+# .isarflow/config.yaml
+version: 1
+providers:
+  - id: litellm # models are named litellm/<model>
+    baseUrl: http://localhost:4000/v1
+    apiKeyEnv: LITELLM_API_KEY # the variable that holds the key
+  - id: ollama
+    baseUrl: http://localhost:11434/v1
+```
+
+Never put an API key into this file: store it in an environment variable and name that variable in
+`apiKeyEnv` (default `ISARFLOW_<ID>_API_KEY`; no key is sent when it is not set, as for Ollama). A provider
+that isn't in the file can come from the environment: `ISARFLOW_<ID>_BASE_URL` and `ISARFLOW_<ID>_API_KEY`
+(id upper-cased, `-` as `_`). The YAML extension validates the file with `config.schema.json`.
+
+**Secrets**: `secrets.api_token` reads the environment variable `ISARFLOW_SECRET_API_TOKEN` and is masked in
+all output. `env.*` is the process environment.
+
+**Questions in the terminal**: approvals ask `Approve? [y/n]` and then for an optional comment; Ask blocks
+show their choices as a numbered list (Enter picks the default); agent tools ask `[y]es / [a]lways for this
+run / [n]o`. Without a terminal and without `--yes`, approvals are rejected, Ask blocks fail and tools are
+denied.
+
+**Exit codes**: 0 success, 1 failure (also for unknown files, invalid workflows and usage errors), 130
+cancelled. The first Ctrl+C cancels the run and stops its commands; the second stops at once. Colors appear
+only on a terminal and never when `NO_COLOR` is set.
+
+**Not available on the command line**: VS Code models (`vscode/…`; use an endpoint instead), user agents
+from VS Code (copy the agent file into `.isarflow/agents/`), triggers, the review card, and workflows with
+`isolation: worktree` (except with `--simulate`). Project memory works as in VS Code. There is no MCP mode.
+
+## 17. Secrets
 
 Run **Isar Flow: Set workflow secret**, enter a name (letters, digits and `_`, not starting with a digit)
 and the value. Workflows read it as `${{ secrets.NAME }}`. To delete a secret, set it again with an empty
@@ -1248,7 +1591,7 @@ Pass secrets to commands through `env` rather than in the command line:
   run: npm publish
 ```
 
-## 14. Settings
+## 18. Settings
 
 | Setting                       | Default | Description                                                                                                                                                                                                |
 | ----------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1260,34 +1603,40 @@ Pass secrets to commands through `env` rather than in the command line:
 | `isarFlow.historyLimit`       | `50`    | Runs kept per workflow (1–500). The snapshots, review data and worktrees of runs dropped from the history are removed too.                                                                                 |
 | `isarFlow.agentContextTokens` | `24000` | Context size in tokens for models that don't report one (at least 2000). Agent conversations are summarized at 70 % of it ([Long conversations](#long-conversations)).                                     |
 | `isarFlow.modelPrices`        | `{}`    | Prices per 1 million input and output tokens by model reference, for example `{ "litellm/gpt-4.1": { "input": 2, "output": 8 } }`. Costs are shown only for listed models ([Model prices](#model-prices)). |
+| `isarFlow.triggers.enabled`   | `true`  | Start workflows from their `on:` triggers (save, file change, schedule) while VS Code is open ([Triggers](#14-triggers)).                                                                                  |
 
-## 15. Commands
+## 19. Commands
 
 All commands are in the Command Palette under **Isar Flow**.
 
-| Command                  | What it does                                                               |
-| ------------------------ | -------------------------------------------------------------------------- |
-| New workflow             | Asks for a name and a template and opens the new workflow.                 |
-| New agent                | Asks for a name, a starter and the scope and opens the new agent.          |
-| Run workflow             | Runs the active workflow, or asks which one to run.                        |
-| Simulate workflow        | Simulates the active workflow with its mocks, or asks which one.           |
-| Run from here            | Continues the newest run at the block under the cursor, or asks for one.   |
-| Open simulation file     | Opens the workflow's `.sim.yaml`, created from a template when needed.     |
-| Stop run                 | Stops the running workflow, or asks which one when several run.            |
-| Open in Isar Flow editor | Opens a workflow or agent YAML file in the river or agent editor.          |
-| Open YAML                | Opens the YAML of the workflow or agent beside its editor.                 |
-| Add model endpoint       | Adds an OpenAI-compatible endpoint.                                        |
-| Edit model endpoint      | Changes an endpoint's URL, name, key or extra models; tests or removes it. |
-| Remove model endpoint    | Removes an endpoint and its stored API key.                                |
-| Set provider API key     | Stores or removes the API key of an endpoint.                              |
-| Test model endpoint      | Lists an endpoint's models once and reports the result.                    |
-| Refresh models           | Lists the models of all providers again.                                   |
-| Test model               | Asks a model for a tool call and a JSON answer and reports the result.     |
-| Check setup              | Checks every endpoint and tests the models your workflows use.             |
-| Set workflow secret      | Stores or deletes a secret for `${{ secrets.NAME }}`.                      |
-| Show log                 | Opens the **Isar Flow** output channel.                                    |
+| Command                     | What it does                                                               |
+| --------------------------- | -------------------------------------------------------------------------- |
+| New workflow                | Asks for a name and a template and opens the new workflow.                 |
+| New agent                   | Asks for a name, a starter and the scope and opens the new agent.          |
+| Run workflow                | Runs the active workflow, or asks which one to run.                        |
+| Simulate workflow           | Simulates the active workflow with its mocks, or asks which one.           |
+| Run from here               | Continues the newest run at the block under the cursor, or asks for one.   |
+| Open simulation file        | Opens the workflow's `.sim.yaml`, created from a template when needed.     |
+| Stop run                    | Stops the running workflow, or asks which one when several run.            |
+| Open in Isar Flow editor    | Opens a workflow or agent YAML file in the river or agent editor.          |
+| Open YAML                   | Opens the YAML of the workflow or agent beside its editor.                 |
+| Add model endpoint          | Adds an OpenAI-compatible endpoint.                                        |
+| Edit model endpoint         | Changes an endpoint's URL, name, key or extra models; tests or removes it. |
+| Remove model endpoint       | Removes an endpoint and its stored API key.                                |
+| Set provider API key        | Stores or removes the API key of an endpoint.                              |
+| Test model endpoint         | Lists an endpoint's models once and reports the result.                    |
+| Refresh models              | Lists the models of all providers again.                                   |
+| Test model                  | Asks a model for a tool call and a JSON answer and reports the result.     |
+| Check setup                 | Checks every endpoint and tests the models your workflows use.             |
+| Set workflow secret         | Stores or deletes a secret for `${{ secrets.NAME }}`.                      |
+| Show log                    | Opens the **Isar Flow** output channel.                                    |
+| Run workflow on selection   | Runs a workflow with the selection of the active editor (`editor.*`).      |
+| Show triggers               | Lists the workflows with triggers: open one, resume or turn triggers off.  |
+| Export run report           | Saves the Markdown report of a finished run.                               |
+| Copy run for PR description | Copies a short summary of a finished run for a pull request.               |
+| Open project memory         | Opens `.isarflow/memory.md`, created when missing.                         |
 
-## 16. Security
+## 20. Security
 
 Isar Flow runs commands and lets models act in your workspace. Read this before running workflows or
 agents written by others.
@@ -1295,10 +1644,11 @@ agents written by others.
 - **Workspace Trust.** Nothing runs in Restricted Mode. The host checks trust before every run and every
   Try it.
 - **Templates are not escaped.** Values from `${{ inputs.* }}`, `${{ steps.<id>.output }}` and other
-  outputs (model answers included), `${{ env.* }}` and `${{ secrets.* }}` are pasted into a console
-  block's `run`, `cwd` and `env` as they are. The confirmation dialog shows the template, not the rendered
-  command. Do not put user input or agent output into command lines: pass it through `env` and quote it in
-  the shell:
+  outputs (model answers included), `${{ editor.* }}` and `${{ git.* }}` (branch names may contain
+  `;`, `$(`, `|` or `&`, and file names and selections can contain anything), `${{ env.* }}` and
+  `${{ secrets.* }}` are pasted into a console block's `run`, `cwd` and `env` as they are. The confirmation
+  dialog shows the template, not the rendered command. Do not put user input or agent output into command
+  lines: pass it through `env` and quote it in the shell:
 
   ```yaml
   - id: commit
@@ -1345,9 +1695,24 @@ agents written by others.
   commands still run with your permissions.
 - **Runs always end.** Loops need `maxIterations`, agents have `maxTurns`, blocks can have a `timeout`, and
   the token budget stops expensive runs.
+- **Triggers start runs without asking**, but only for workflows whose commands and agents you approved with
+  **Run and remember**, only in trusted workspaces, and at most 10 times in 10 minutes per workflow. Changing
+  a command needs a new approval. Turn them all off with `isarFlow.triggers.enabled`.
+- **Copilot runs only exposed workflows** (`expose: true`), asks you to confirm every run and goes through
+  the same trust check and command confirmation as your own runs. The run's result (block outputs, masked)
+  goes back into the chat, and from there to Copilot's model.
+- **Editor and git values go wherever the workflow sends them.** `editor.selection` and `git.diff` can hold
+  code you didn't mean to share; a workflow that uses them sends them to its agents' models. git is never
+  run in Restricted Mode.
+- **Project memory is part of the prompt.** Every agent with memory `read` or `write` sends the first 8 KB of
+  `.isarflow/memory.md` to its model, so keep secrets out of it (notes with a secret value are refused). A
+  workflow from a repository can bring its own memory file.
+- **The command line has no Workspace Trust and no command confirmation**: `isar-flow run` runs what the file
+  says, like any script. `--yes` also approves approvals and allows agent tools. API keys and secrets come
+  only from environment variables.
 - **Model output is shown as text** and is never rendered as HTML.
 
-## 17. Troubleshooting
+## 21. Troubleshooting
 
 Start with **Isar Flow: Show log**: activation, model discovery, runs and failed blocks are logged there.
 
@@ -1382,3 +1747,9 @@ Start with **Isar Flow: Show log**: activation, model discovery, runs and failed
 | "Fix … before simulating"                                               | Select **Open simulation file** and fix the line the message names. Each block id needs a list of results (`- exitCode: 0`), not a single result.                                             |
 | A simulated block uses the wrong result                                 | Each call takes the next result and the last one repeats; retries and loop rounds count as calls. Check that the block id under `blocks:` matches the block (the editor warns otherwise).     |
 | A live value says the block has no result                               | The block didn't run in that run, or it is in the other branch of an If. Run the workflow again; hovers show the newest run.                                                                  |
+| A trigger doesn't start the workflow                                    | Look at the Start marker or **Show triggers**: it says why the triggers are paused (not approved, untrusted, problems, required inputs, too many starts or turned off) and offers the fix.    |
+| `editor.selection` is empty                                             | Start the run from a text editor (or with the canvas focused while the editor is still visible), or use **Run workflow on selection**. Isar Flow's own YAML files don't count.                |
+| `git.*` values are empty                                                | The folder isn't a git repository, git isn't installed, or the workspace is in Restricted Mode.                                                                                               |
+| Copilot says a workflow "isn't available to Copilot"                    | Add `expose: true` to the workflow (or turn on **Let Copilot run this workflow**) and save it.                                                                                                |
+| An agent doesn't remember anything                                      | Set its **Memory** to **Read and write**. Notes over 500 characters, with a secret value, or in a memory file over 64 KB are refused; the agent's log says why.                               |
+| `isar-flow run`: "Provider 'x' isn't configured"                        | Add the provider to `.isarflow/config.yaml`, or set `ISARFLOW_X_BASE_URL`. VS Code models (`vscode/…`) aren't available on the command line.                                                  |

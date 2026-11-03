@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "version": {
+      "description": "Isar Flow config format version.",
+      "type": "number",
+      "const": 1
+    },
+    "providers": {
+      "description": "OpenAI-compatible endpoints for `isar-flow run` (VS Code uses its settings).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$",
+            "description": "First part of model references, e.g. \"litellm\" in \"litellm/gpt-4.1\"."
+          },
+          "label": {
+            "type": "string"
+          },
+          "baseUrl": {
+            "type": "string",
+            "description": "API root of the OpenAI-compatible endpoint, e.g. \"http://localhost:4000/v1\"."
+          },
+          "apiKeyEnv": {
+            "description": "Environment variable that holds the API key (default ISARFLOW_<ID>_API_KEY). Never put the key itself here.",
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "discoverModels": {
+            "description": "Ask the endpoint for its models (default true).",
+            "type": "boolean"
+          },
+          "models": {
+            "description": "Model ids to offer.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "headers": {
+            "description": "Extra HTTP headers.",
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "baseUrl"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "title": "Isar Flow project config"
+}

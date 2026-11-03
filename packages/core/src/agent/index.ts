@@ -27,3 +27,18 @@ export {
   type TextToolCalls,
 } from './toolCallText';
 export { type AgentRequestDeps, type ContextFile, executeAgentRequest } from './execute';
+export {
+  appendMemoryNote,
+  capMemoryText,
+  checkMemoryNote,
+  decodeMemoryText,
+  MEMORY_FILE,
+  MEMORY_FILE_MAX_BYTES,
+  MEMORY_NOT_TEXT,
+  MEMORY_NOTE_MAX_CHARS,
+  MEMORY_PROMPT_MAX_BYTES,
+  memoryNoteLine,
+  memorySection,
+  newMemoryText,
+  REMEMBER_TOOL,
+} from './memory';

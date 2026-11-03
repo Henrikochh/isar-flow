@@ -343,6 +343,19 @@ Copy: plain verbs ("Run workflow", "Add block", "Fetch models"); errors say what
 - Dark, light, high-contrast themes; 100 % and 150 % zoom; narrow sidebar (240 px).
 - Keyboard-only: add block, move selection, delete, run, cancel.
 - Untrusted workspace: running is blocked with an explanation.
+- Package C (added 2026-11-03):
+  - Real Copilot chat: `@isarflow /list`, `/run <exposed workflow> name=value`, `/status`; Copilot agent mode
+    calls `#isarflowWorkflows` and `#isarflowRun`, its tool confirmation shows the inputs and commands, and a
+    workflow whose commands were never approved also shows the command confirmation; a non-exposed workflow is
+    refused. (Integration tests call the run tool through the extension API, because `vscode.lm.invokeTool`
+    outside a chat shows the confirmation as a blocking modal.)
+  - A real save trigger and a schedule (`every: 1m`) in a normal window: first paused until **Run and
+    remember**, then started once per save, never by the workflow's own writes; the status bar item and the
+    Start marker follow; turning `isarFlow.triggers.enabled` off stops both.
+  - Ask block and approval answered from notifications with the canvas closed (pick list, input box,
+    countdown, closed notification keeps it open, status bar item opens the canvas).
+  - `isar-flow run` against the owner's LiteLLM (`.isarflow/config.yaml` with `apiKeyEnv`): an agent workflow,
+    `--json`, an ask block in the terminal, Ctrl+C during a command (exit 130) on Windows.
 
 **CI** (GitHub Actions, windows-latest + ubuntu-latest): typecheck, lint, unit/contract/component tests,
 integration tests (xvfb on Linux), build `.vsix` artifact.

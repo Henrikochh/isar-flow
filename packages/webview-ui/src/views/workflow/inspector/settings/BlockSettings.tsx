@@ -6,6 +6,7 @@ import { useWorkflowActions, useWorkflowState } from '../../store';
 import { IssueBanner } from '../Issues';
 import { blockIssues, isRecord, isStepType } from '../model';
 import { AgentSettings } from './AgentSettings';
+import { AskSettings } from './AskSettings';
 import { type SettingsProps, useStepUpdate } from './common';
 import { ConsoleSettings } from './ConsoleSettings';
 import { LoopSettings } from './LoopSettings';
@@ -19,6 +20,7 @@ const PANELS: Record<StepType, ComponentType<SettingsProps>> = {
   break: BreakSettings,
   stop: StopSettings,
   approval: ApprovalSettings,
+  ask: AskSettings,
 };
 
 /** Block properties each panel renders; diagnostics on other properties are listed at the top. */
@@ -30,6 +32,7 @@ const FIELDS: Record<StepType, string[]> = {
   break: [],
   stop: ['outcome', 'message'],
   approval: ['message', 'onReject'],
+  ask: ['question', 'choices', 'default', 'timeout'],
 };
 
 /** Header fields render their own diagnostics. */

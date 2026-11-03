@@ -4,12 +4,18 @@ import {
   runRecordSummary,
   runWorkflow,
   type ApprovalResult,
+  type AskRequest,
+  type AskResult,
+  type EditorContext,
   type EngineHost,
+  type GitContext,
   type ResumeOptions,
   type ReviewCounts,
   type RunEvent,
+  type RunOrigin,
   type RunRecordSummary,
   type RunView,
+  type StepIO,
   type Workflow,
 } from '@isar-flow/core';
 import { AGENTS } from './fixtures';
@@ -29,6 +35,8 @@ export interface FakeHostOptions {
   approveAfter?: number;
   delayMs?: number;
   approval?: (stepId: string, message: string) => Promise<ApprovalResult>;
+  /** Answers ask blocks; without it the engine uses their default (else the first choice). */
+  ask?: (req: AskRequest, io: StepIO) => Promise<AskResult>;
 }
 
 const PASSING = [
@@ -51,6 +59,22 @@ const FAILING = [
   ' Tests  1 failed | 31 passed (32)',
 ];
 
+/** What the release workflow's deploy block prints. */
+function deployLines(command: string): string[] {
+  const env = /--env\s+(\S+)/.exec(command)?.[1] || 'dev';
+  return [
+    '> shop@1.4.0 deploy',
+    `> node scripts/deploy.mjs --env ${env}`,
+    '',
+    `Building shop for ${env}…`,
+    'Uploading 38 files (2.4 MB)',
+    `Deployed to https://${env}.shop.example.com in 21 s`,
+  ];
+}
+
+const SUMMARY =
+  'Released the voucher fixes: applyVoucher() no longer runs twice when the cart is re-validated, and expired vouchers are rejected with a clear message.';
+
 /** Scripted host: tests fail once, the reviewer approves on round `approveAfter`; agents report tools and tokens. */
 export function createFakeHost(options: FakeHostOptions = {}): EngineHost {
   const calls = new Map<string, number>();
@@ -66,6 +90,15 @@ export function createFakeHost(options: FakeHostOptions = {}): EngineHost {
   };
   return {
     async runConsole(req, io) {
+      if (req.stepId === 'deploy') {
+        const lines = deployLines(req.command);
+        for (const line of lines) {
+          io.log('stdout', `${line}\n`);
+          await pause(io.signal);
+        }
+        const output = lines.join('\n') + '\n';
+        return { exitCode: 0, stdout: output, stderr: '', output, timedOut: false };
+      }
       const n = count(req.stepId);
       const failing = options.failTests || (n === 1 && !options.passTests);
       const lines = failing ? FAILING : PASSING;
@@ -95,6 +128,13 @@ export function createFakeHost(options: FakeHostOptions = {}): EngineHost {
         const usage = { inputTokens: 5_200 + 900 * n, outputTokens: 310 + 40 * n };
         return { text, json, model: req.agent.model, usage, turns: 2, toolCalls: 2, messages: [] };
       }
+      if (req.stepId === 'summarize') {
+        io.log('tool', 'gitDiff → 3 files changed, 48 insertions(+), 6 deletions(-)\n');
+        await pause(io.signal);
+        io.log('agent', SUMMARY);
+        const usage = { inputTokens: 9_800, outputTokens: 420 };
+        return { text: SUMMARY, model: req.agent.model, usage, turns: 2, toolCalls: 1, messages: [] };
+      }
       const implement = req.stepId === 'implement';
       const text = implement
         ? 'Added voucher support to the checkout: `applyVoucher()` in src/checkout.ts, a `vouchers` table migration and 6 new tests.'
@@ -121,6 +161,7 @@ export function createFakeHost(options: FakeHostOptions = {}): EngineHost {
     async requestApproval(req) {
       return options.approval ? options.approval(req.stepId, req.message) : { approved: true };
     },
+    ...(options.ask && { askUser: options.ask }),
   };
 }
 
@@ -141,6 +182,12 @@ export interface CollectOptions {
   resume?: ResumeOptions;
   /** Test mode: marks the run as simulated (the caller passes a simulation host). */
   simulated?: boolean;
+  /** Workspace-relative path of the workflow file (default: the review loop). */
+  workflowFile?: string;
+  /** `editor.*` and `git.*` as captured when the run starts, and how it was started. */
+  editor?: EditorContext;
+  git?: GitContext;
+  origin?: RunOrigin;
   signal?: AbortSignal;
   onEvent?: (event: RunEvent) => void;
 }
@@ -155,6 +202,10 @@ export async function collectEvents(
     inputs = { task: 'Add voucher codes to the checkout' },
     resume,
     simulated,
+    workflowFile = '.isarflow/workflows/review-loop.workflow.yaml',
+    editor,
+    git,
+    origin,
     signal,
     onEvent,
   }: CollectOptions = {},
@@ -167,11 +218,14 @@ export async function collectEvents(
     host,
     agents: harnessAgents(),
     workspaceRoot: 'C:/work/shop',
-    workflowFile: '.isarflow/workflows/review-loop.workflow.yaml',
+    workflowFile,
     signal,
     now: onEvent ? undefined : () => (clock += tickMs),
     ...(resume ? { resume } : {}),
     ...(simulated ? { simulated } : {}),
+    ...(editor ? { editor } : {}),
+    ...(git ? { git } : {}),
+    ...(origin ? { origin } : {}),
   });
   for (;;) {
     const next = await generator.next();
@@ -192,7 +246,7 @@ export interface PastRun {
   view: RunView;
 }
 
-export function pastRun(view: RunView, review?: ReviewCounts): PastRun {
-  const summary = runRecordSummary(view, WORKFLOW_URI);
+export function pastRun(view: RunView, review?: ReviewCounts, uri = WORKFLOW_URI): PastRun {
+  const summary = runRecordSummary(view, uri);
   return { summary: review ? { ...summary, review } : summary, view };
 }

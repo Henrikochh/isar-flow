@@ -5,6 +5,7 @@ import {
   confirmCommands,
   consoleCommandsOf,
   hashCommands,
+  needsConfirmation,
   unattendedAgentsOf,
 } from '../../../src/run/commandApproval';
 import { FakeMemento, workflowOf } from './fakes';
@@ -454,5 +455,29 @@ describe('confirmCommands', () => {
       expect(await confirmCommands({ ...base(ask), commands: [], agents: [] })).toBe(true);
       expect(ask).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('needsConfirmation', () => {
+  const options = (approvals = new CommandApprovals(new FakeMemento())) => ({
+    workflowUri: 'file:///w.workflow.yaml',
+    commands: ['npm test'],
+    agents: [] as string[],
+    approvals,
+    enabled: true,
+  });
+
+  it('is true for commands that were never approved', () => {
+    expect(needsConfirmation(options())).toBe(true);
+    const agents = ["inline agent in block 'a': edits files without asking"];
+    expect(needsConfirmation({ ...options(), commands: [], agents })).toBe(true);
+  });
+
+  it('is false once the hash is approved, without commands, or with confirmation turned off', async () => {
+    const approvals = new CommandApprovals(new FakeMemento());
+    await approvals.approve('file:///w.workflow.yaml', hashCommands(['npm test']));
+    expect(needsConfirmation(options(approvals))).toBe(false);
+    expect(needsConfirmation({ ...options(), commands: [] })).toBe(false);
+    expect(needsConfirmation({ ...options(), enabled: false })).toBe(false);
   });
 });

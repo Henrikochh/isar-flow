@@ -7,10 +7,12 @@
   "workspaces": [
     "packages/core",
     "packages/webview-ui",
-    "packages/extension"
+    "packages/extension",
+    "packages/cli"
   ],
   "scripts": {
-    "build": "npm run build -w @isar-flow/webview-ui && npm run build -w isar-flow",
+    "build": "npm run build -w @isar-flow/webview-ui && npm run build -w isar-flow && npm run build -w @isar-flow/cli",
+    "build:cli": "npm run build -w @isar-flow/cli",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -147,6 +147,10 @@ body.vscode-high-contrast-light {
 [data-type='approval'] {
   --block-color: var(--if-almgruen);
 }
+/* A question for the person running the workflow: the warm föhn tone, like the If header it often feeds. */
+[data-type='ask'] {
+  --block-color: var(--if-foehn);
+}
 [data-type] {
   --block-wash: color-mix(in srgb, var(--block-color) var(--if-wash-strength), transparent);
 }

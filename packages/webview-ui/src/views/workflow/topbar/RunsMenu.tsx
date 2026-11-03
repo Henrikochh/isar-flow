@@ -4,12 +4,14 @@ import {
   Menu,
   MenuItem,
   MenuLabel,
+  MenuSeparator,
   Popover,
   RunOriginChip,
   StatusGlyph,
   statusLabel,
 } from '../../../components';
 import { formatDuration, formatRelativeTime } from '../../../hooks';
+import { useCopied } from '../report/useCopied';
 import { ReviewCounts } from '../review/ReviewCounts';
 import { blockName, startBlocker } from '../runFromHere/model';
 import { useWorkflowActions, useWorkflowState } from '../store';
@@ -26,7 +28,9 @@ export function RunsMenu({ elapsed }: { elapsed: number | undefined }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   const { run, runLive, history, doc, trusted } = useWorkflowState();
-  const { selectRun, requestResume } = useWorkflowActions();
+  const { selectRun, requestResume, runReport } = useWorkflowActions();
+  const [copied, flashCopied] = useCopied();
+  const finished = run && run.status !== 'running' ? run : null;
   const workflow = doc?.workflow ?? null;
   const live = runLive && run?.status === 'running' ? run : null;
   const nameOf = (id: string) => blockName(workflow, id);
@@ -132,6 +136,36 @@ export function RunsMenu({ elapsed }: { elapsed: number | undefined }) {
           })}
           {!live && !history.length ? (
             <div className="wf-runs__empty">No runs yet. Runs of this workflow show up here.</div>
+          ) : null}
+          {finished ? (
+            <>
+              <MenuSeparator />
+              <MenuLabel>Report of the shown run</MenuLabel>
+              <MenuItem
+                leading={<i className="codicon codicon-export" aria-hidden="true" />}
+                onSelect={() => {
+                  ref.current?.focus();
+                  setOpen(false);
+                  runReport(finished.runId, 'export');
+                }}
+              >
+                Export report…
+              </MenuItem>
+              <MenuItem
+                leading={
+                  <i
+                    className={`codicon codicon-${copied ? 'check' : 'git-pull-request'}`}
+                    aria-hidden="true"
+                  />
+                }
+                onSelect={() => {
+                  runReport(finished.runId, 'copyForPr');
+                  flashCopied();
+                }}
+              >
+                {copied ? 'Copied' : 'Copy for PR description'}
+              </MenuItem>
+            </>
           ) : null}
         </Menu>
       </Popover>

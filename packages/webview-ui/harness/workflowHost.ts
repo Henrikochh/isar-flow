@@ -1,6 +1,7 @@
 /**
  * Workflow editor side of the mock host: real core ops, validation and engine, a scripted engine host, a seeded
- * run history, reviews of the files runs changed, the simulation file and runs that simulate or continue a past run.
+ * run history, reviews of the files runs changed, the simulation file, runs that simulate or continue a past run,
+ * questions of ask blocks and the state of the workflow's triggers.
  */
 import {
   applyWorkflowOps,
@@ -13,6 +14,7 @@ import {
   validateWorkflow,
   workflowTemplate,
   type ApprovalResult,
+  type AskResult,
   type EngineHost,
   type HostToWorkflowEditor,
   type ResumeOptions,
@@ -25,6 +27,18 @@ import {
   type WorkflowEditorToHost,
 } from '@isar-flow/core';
 import { buildFasterText, prepareBuildFaster } from './buildFasterScenarios';
+import {
+  askExpiresAt,
+  autoAnswer,
+  everydayText,
+  isEverydayScenario,
+  prepareEveryday,
+  RELEASE_FILE_NAME,
+  RELEASE_WORKFLOW_URI,
+  releaseHistory,
+  releaseRunOptions,
+  triggerState,
+} from './everydayScenarios';
 import {
   collectEvents,
   createFakeHost,
@@ -45,7 +59,7 @@ import {
   LONG_TEXT_WORKFLOW_TEXT,
   NESTED_WORKFLOW_TEXT,
 } from './fixtures';
-import { markReady, probe, type Send } from './mockShared';
+import { markReady, probe, type Send, sleep } from './mockShared';
 import {
   countsOf,
   doneReview,
@@ -61,6 +75,7 @@ import {
 import { simulationMock } from './simulationMock';
 
 function scenarioWorkflowText(scenario: string): string {
+  if (isEverydayScenario(scenario)) return everydayText(scenario);
   const review = workflowTemplate('review-loop', 'Review until approved');
   switch (scenario) {
     case 'empty':
@@ -192,6 +207,17 @@ export function workflowHost(
   probe.workflowText = () => text;
   const openedDiffs: { runId: string; path: string }[] = [];
   probe.openedDiffs = () => openedDiffs;
+  const answers: { requestId: string; answer: string }[] = [];
+  probe.answers = () => answers;
+  const reports: { runId: string; action: string }[] = [];
+  probe.reports = () => reports;
+  const settingsQueries: string[] = [];
+  probe.settingsQueries = () => settingsQueries;
+  let resumedTriggers = 0;
+  probe.resumedTriggers = () => resumedTriggers;
+  /** The release workflow of the everyday scenarios, else the review loop. */
+  const release = isEverydayScenario(scenario);
+  const workflowUri = release ? RELEASE_WORKFLOW_URI : WORKFLOW_URI;
   const simulation = simulationMock(scenario, send);
   let controller: AbortController | undefined;
   let liveView: RunView | null = null;
@@ -212,7 +238,12 @@ export function workflowHost(
     send({ type: 'lastRunContext', context: newest ? liveContext(newest.view) : null });
   };
   const pendingApprovals = new Map<string, (result: ApprovalResult) => void>();
+  const pendingAsks = new Map<string, (result: AskResult) => void>();
+  /** Id of the newest live run. */
+  let liveRunId: string | null = null;
   const currentWorkflow = () => parseWorkflowText(text).workflow;
+  const sendTriggers = () =>
+    send({ type: 'triggers', triggers: triggerState(scenario, currentWorkflow(), resumedTriggers > 0) });
 
   const sendReview = () =>
     send({ type: 'review', review: (shownRunId && reviews.get(shownRunId)?.review) || null });
@@ -243,8 +274,8 @@ export function workflowHost(
       : [];
     const diagnostics = [...parsed.diagnostics, ...semantic];
     return {
-      uri: WORKFLOW_URI,
-      fileName: 'review-loop.workflow.yaml',
+      uri: workflowUri,
+      fileName: release ? RELEASE_FILE_NAME : 'review-loop.workflow.yaml',
       text: source,
       workflow: parsed.workflow,
       valid: parsed.valid && !diagnostics.some((d) => d.severity === 'error'),
@@ -253,6 +284,11 @@ export function workflowHost(
   };
 
   const seedHistory = async () => {
+    if (release) {
+      const workflow = currentWorkflow();
+      if (workflow) history = await releaseHistory(workflow);
+      return;
+    }
     const workflow = parseWorkflowText(scenarioWorkflowText('default')).workflow;
     if (!workflow) return;
     for (const seed of SEEDS) {
@@ -273,6 +309,26 @@ export function workflowHost(
     const workflow = parseWorkflowText(text).workflow;
     if (!workflow) return;
     const makeReview = SCENARIO_REVIEWS[scenario];
+    const everyday = await prepareEveryday(scenario, {
+      workflow,
+      history: () => history,
+      setHistory: (runs) => {
+        history = runs;
+        sendHistory();
+      },
+      showRun,
+      send,
+      startAndWaitForAsk: async () => {
+        void startRun();
+        // The first question comes right away, sometimes before the run is on the canvas; give up after 3 s (the
+        // run may have ended without one).
+        const waiting = () => pendingAsks.size === 0 || shownRunId !== liveRunId;
+        for (let i = 0; i < 150 && waiting(); i++) await sleep(20);
+        return liveRunId ? { runId: liveRunId } : undefined;
+      },
+      setReview: (runId, review) => setReview(runId, review),
+    });
+    if (everyday) return;
     const handled = await prepareBuildFaster(scenario, {
       workflow,
       history: () => history,
@@ -381,6 +437,37 @@ export function workflowHost(
           pendingApprovals.set(requestId, resolve);
           send({ type: 'approvalRequest', prompt: { requestId, runId, stepId, message } });
         }),
+      ask: (req, io) => {
+        const auto = autoAnswer(scenario, req.stepId);
+        if (auto !== undefined) return Promise.resolve({ answer: auto });
+        return new Promise<AskResult>((resolve, reject) => {
+          const requestId = `ask-${Math.random().toString(36).slice(2)}`;
+          const expiresAt = askExpiresAt(scenario, req.timeoutMs);
+          pendingAsks.set(requestId, resolve);
+          send({
+            type: 'askRequest',
+            prompt: {
+              requestId,
+              runId,
+              stepId: req.stepId,
+              question: req.question,
+              ...(req.choices ? { choices: req.choices } : {}),
+              ...(req.default !== undefined ? { default: req.default } : {}),
+              ...(expiresAt !== undefined ? { expiresAt } : {}),
+            },
+          });
+          // A timeout or Stop ends the question: the card goes away like the extension's.
+          io.signal.addEventListener(
+            'abort',
+            () => {
+              if (!pendingAsks.delete(requestId)) return;
+              send({ type: 'askResolved', requestId });
+              reject(new Error('Cancelled'));
+            },
+            { once: true },
+          );
+        });
+      },
     });
     return resume ? { host, resume } : { host };
   };
@@ -389,6 +476,7 @@ export function workflowHost(
     const workflow = currentWorkflow();
     if (!workflow) return;
     const runId = `run-${Date.now().toString(36)}`;
+    liveRunId = runId;
     const engine = liveHost(workflow, runId, options);
     if ('error' in engine) {
       console.info('[mock host]', engine.error);
@@ -399,6 +487,7 @@ export function workflowHost(
     await collectEvents(workflow, engine.host, {
       runId,
       signal: controller.signal,
+      ...(release ? releaseRunOptions() : {}),
       ...(options.inputs ? { inputs: options.inputs } : {}),
       ...(engine.resume ? { resume: engine.resume } : {}),
       ...(options.simulated ? { simulated: true } : {}),
@@ -411,7 +500,7 @@ export function workflowHost(
     });
     const finished: RunView | null = liveView;
     if (!finished) return;
-    history = [pastRun(finished), ...history];
+    history = [pastRun(finished, undefined, workflowUri), ...history];
     // A simulation changes no files.
     const review = options.simulated ? null : liveReview(finished);
     if (review) setReview(runId, review);
@@ -448,7 +537,8 @@ export function workflowHost(
         send({ type: 'document', doc: doc() });
         simulation.sendState(currentWorkflow());
         send({ type: 'catalog', agents: AGENTS, catalog: CATALOG });
-        send({ type: 'trust', trusted: scenario !== 'untrusted' });
+        send({ type: 'trust', trusted: !scenario.split('-').includes('untrusted') });
+        sendTriggers();
         void (async () => {
           await seedHistory();
           sendHistory();
@@ -464,6 +554,8 @@ export function workflowHost(
           for (const op of message.ops) if (op.op === 'renameStep') simulation.rename(op.stepId, op.newId);
           send({ type: 'document', doc: doc() });
           simulation.sendState(currentWorkflow());
+          // The extension reads the triggers again whenever the file changes.
+          sendTriggers();
         }
         break;
       }
@@ -488,6 +580,25 @@ export function workflowHost(
         send({ type: 'approvalResolved', requestId: message.requestId });
         break;
       }
+      case 'answer': {
+        answers.push({ requestId: message.requestId, answer: message.answer });
+        const resolve = pendingAsks.get(message.requestId);
+        pendingAsks.delete(message.requestId);
+        resolve?.({ answer: message.answer });
+        send({ type: 'askResolved', requestId: message.requestId });
+        break;
+      }
+      // The extension writes the report to a file or the clipboard; the harness only notes the request.
+      case 'runReport':
+        reports.push({ runId: message.runId, action: message.action });
+        break;
+      case 'openSettings':
+        settingsQueries.push(message.query);
+        break;
+      case 'resumeTriggers':
+        resumedTriggers += 1;
+        sendTriggers();
+        break;
       case 'selectRun': {
         if (message.runId === null) {
           showRun(liveView, true);

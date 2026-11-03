@@ -1,0 +1,31 @@
+# Asks where to deploy, asks again before production, then deploys.
+# expose: true lets Copilot run it: "@isarflow /run deploy" or the "Run an Isar Flow workflow" tool.
+# Replace "npm run deploy" with your deploy command; it reads the environment from DEPLOY_ENV.
+version: 1
+name: Deploy
+description: Build and deploy this project to dev, staging or prod. Asks for the environment.
+expose: true
+steps:
+  - id: pick-env
+    type: ask
+    question: Which environment should I deploy to?
+    choices: [dev, staging, prod]
+    default: dev
+    # Without an answer within 5 minutes, dev is used.
+    timeout: 300
+
+  - id: production
+    type: if
+    condition: { value: '${{ steps.pick-env.answer }}', op: eq, to: prod }
+    then:
+      - id: confirm-prod
+        type: approval
+        message: Deploy to production now?
+
+  - id: deploy
+    type: console
+    # The answer is passed through the environment, never pasted into the command line.
+    env:
+      DEPLOY_ENV: ${{ steps.pick-env.answer }}
+    run: npm run deploy
+    timeout: 900

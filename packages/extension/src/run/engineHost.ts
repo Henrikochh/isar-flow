@@ -5,9 +5,13 @@ import {
   SecretMasker,
   type ApprovalRequest,
   type ApprovalResult,
+  type AskPrompt,
+  type AskRequest,
+  type AskResult,
   type ConsoleRequest,
   type EngineHost,
   type ModelResolver,
+  type ProjectMemory,
   type StepIO,
   type ToolHost,
 } from '@isar-flow/core';
@@ -31,6 +35,13 @@ export interface EngineHostDeps {
   secrets?: Record<string, string>;
   /** Context size for models that report none (`isarFlow.agentContextTokens`); agents compact above 70 %. */
   contextTokens?: number;
+  /**
+   * Asks an ask block's question (already masked) and resolves with the answer; `signal` aborts when the block times
+   * out or the run is cancelled. Without it the engine answers with the block's default.
+   */
+  ask?: (prompt: Omit<AskPrompt, 'requestId' | 'runId'>, signal: AbortSignal) => Promise<AskResult>;
+  /** Project memory of the run's folder for agents (memory read / write). */
+  memory?: ProjectMemory;
 }
 
 /** Connects the core engine to VS Code: console blocks run in the console runner and are mirrored to the terminal. */
@@ -85,6 +96,27 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
     }
   }
 
+  /** Shows the question masked like run events; a masked choice or default comes back as the real text. */
+  async function askUser(ask: NonNullable<EngineHostDeps['ask']>, req: AskRequest, io: StepIO) {
+    const choices = req.choices?.map((choice) => masker.text(choice));
+    const shownDefault = req.default === undefined ? undefined : masker.text(req.default);
+    const { answer } = await ask(
+      {
+        stepId: req.stepId,
+        question: masker.text(req.question),
+        ...(choices && { choices }),
+        ...(shownDefault !== undefined && { default: shownDefault }),
+        ...(req.timeoutMs !== undefined && { expiresAt: now() + req.timeoutMs }),
+      },
+      io.signal,
+    );
+    const index = choices?.indexOf(answer) ?? -1;
+    if (req.choices && index >= 0) return { answer: req.choices[index] };
+    if (req.default !== undefined && answer === shownDefault) return { answer: req.default };
+    return { answer };
+  }
+
+  const { ask, memory } = deps;
   return {
     runConsole,
     runAgent: (req, io) =>
@@ -94,8 +126,10 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         toolHost: deps.toolHost,
         readContextFiles: deps.readContextFiles,
         ...(deps.contextTokens !== undefined && { contextTokens: deps.contextTokens }),
+        ...(memory && { memory }),
       }),
     // The prompt is shown in the canvas or a dialog, so it gets the same masking as run events.
     requestApproval: (req, io) => deps.approve({ ...req, message: masker.text(req.message) }, io.signal),
+    ...(ask && { askUser: (req: AskRequest, io: StepIO) => askUser(ask, req, io) }),
   };
 }

@@ -380,6 +380,10 @@ body.vscode-high-contrast-light .if-split__more {
   font-size: var(--if-text-xs);
   color: var(--if-muted);
 }
+/* Muted text falls short of 4.5:1 on the highlighted row, so it takes the row's color there. */
+.if-select__option--active .if-select__option-meta {
+  color: inherit;
+}
 /* Capability and test-result chips of a model option. */
 .if-model-chips {
   display: inline-flex;
@@ -529,6 +533,10 @@ body.vscode-high-contrast-light .if-split__more {
   transition:
     background var(--if-duration) var(--if-ease),
     color var(--if-duration) var(--if-ease);
+}
+/* A control as wide as its labels keeps each on one line (e.g. "Read and write" next to "Off"). */
+.if-segmented__item--fit {
+  white-space: nowrap;
 }
 .if-segmented__item:hover {
   color: var(--if-fg);

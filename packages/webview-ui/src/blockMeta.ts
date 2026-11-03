@@ -9,6 +9,7 @@ export const BLOCK_ICONS: Record<StepType, string> = {
   break: 'debug-step-out',
   stop: 'debug-stop',
   approval: 'verified',
+  ask: 'comment-discussion',
 };
 
 const AGENT_PALETTE: StepType[] = ['agent', 'loop', 'if', 'approval', 'stop', 'console'];

@@ -52,6 +52,10 @@
               "description": "Approval blocks: the comment of the decision.",
               "type": "string"
             },
+            "answer": {
+              "description": "Ask blocks: the answer (default: the default answer, else the first choice).",
+              "type": "string"
+            },
             "error": {
               "description": "Fails this call with the message, e.g. to simulate an unreachable model.",
               "type": "string",

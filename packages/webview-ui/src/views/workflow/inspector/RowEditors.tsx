@@ -1,4 +1,5 @@
 /** Small list editors: key/value pairs (environment variables) and single values (file patterns). */
+import { useEffect } from 'react';
 import { Button, IconButton, TextInput } from '../../../components';
 import { useFocusOnAdd } from './useFocusOnAdd';
 import { useRowsDraft } from './useRowsDraft';
@@ -109,12 +110,18 @@ export function ListEditor({
   noun,
   addLabel,
   placeholder,
+  label,
+  startBlank,
 }: {
   values: string[];
   onCommit: (values: string[]) => void;
   noun: string;
   addLabel: string;
   placeholder?: string;
+  /** Accessible name of the list (a group), when no visible label names it. */
+  label?: string;
+  /** Without values, start with one empty, focused row (a list the user just turned on). */
+  startBlank?: boolean;
 }) {
   const draft = useRowsDraft<Item>(
     values.map((value) => ({ value })),
@@ -122,8 +129,19 @@ export function ListEditor({
     { isBlank: (row) => row.value.trim() === '' },
   );
   const focus = useFocusOnAdd(draft.rows.length);
+  useEffect(() => {
+    if (!startBlank || draft.rows.length > 0) return;
+    focus.markAdded();
+    draft.add({ value: '' });
+    // Only when the list first appears.
+  }, []);
   return (
-    <div className="wf-insp-rows" ref={focus.containerRef}>
+    <div
+      className="wf-insp-rows"
+      ref={focus.containerRef}
+      role={label ? 'group' : undefined}
+      aria-label={label}
+    >
       {draft.rows.map((row, index) => (
         <div key={index} className="wf-insp-item" data-row>
           <TextInput

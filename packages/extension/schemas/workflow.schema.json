@@ -77,6 +77,85 @@
         "minLength": 1
       }
     },
+    "on": {
+      "type": "object",
+      "properties": {
+        "save": {
+          "description": "Run when a matching file is saved in VS Code.",
+          "type": "object",
+          "properties": {
+            "files": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              ],
+              "description": "Workspace-relative glob or list of globs, e.g. \"src/**/*.ts\"; in a list, \"!pattern\" excludes files."
+            }
+          },
+          "required": [
+            "files"
+          ],
+          "additionalProperties": false
+        },
+        "change": {
+          "description": "Run when a matching file is created, changed or deleted on disk.",
+          "type": "object",
+          "properties": {
+            "files": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              ],
+              "description": "Workspace-relative glob or list of globs, e.g. \"src/**/*.ts\"; in a list, \"!pattern\" excludes files."
+            }
+          },
+          "required": [
+            "files"
+          ],
+          "additionalProperties": false
+        },
+        "schedule": {
+          "type": "object",
+          "properties": {
+            "every": {
+              "type": "string",
+              "pattern": "^(?:\\d+[smhd])+$",
+              "description": "Interval while VS Code is open, e.g. \"15m\", \"1h\", \"1d\" (at least 1m)."
+            }
+          },
+          "required": [
+            "every"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "description": "Start the workflow automatically (trusted workspaces only, after its commands were approved once)."
+    },
+    "expose": {
+      "description": "Let Copilot run this workflow (language model tools and @isarflow).",
+      "type": "boolean"
+    },
     "steps": {
       "$ref": "#/definitions/__schema0"
     }
@@ -227,6 +306,15 @@
                           }
                         },
                         "additionalProperties": false
+                      },
+                      "memory": {
+                        "description": "Project memory (.isarflow/memory.md): read (default) adds it to the instructions, write also lets the agent save notes with the remember tool, none ignores it.",
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "read",
+                          "write"
+                        ]
                       }
                     },
                     "additionalProperties": false
@@ -689,6 +777,75 @@
               "id",
               "type",
               "message"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+                "description": "Unique id, used to reference outputs as steps.<id>."
+              },
+              "name": {
+                "description": "Display label on the canvas.",
+                "type": "string"
+              },
+              "timeout": {
+                "description": "Timeout in seconds.",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "continueOnError": {
+                "type": "boolean"
+              },
+              "retry": {
+                "description": "Retry failed attempts; delay in seconds.",
+                "type": "object",
+                "properties": {
+                  "max": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "delay": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "max"
+                ],
+                "additionalProperties": false
+              },
+              "type": {
+                "type": "string",
+                "const": "ask"
+              },
+              "question": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Question shown to you. Supports ${{ }} templates."
+              },
+              "choices": {
+                "description": "Allowed answers; without choices the answer is free text.",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "default": {
+                "description": "Preselected answer; used when the timeout elapses without an answer.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "question"
             ],
             "additionalProperties": false
           }

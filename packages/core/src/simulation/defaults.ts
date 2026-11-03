@@ -69,6 +69,8 @@ export function defaultSimulationResult(step: Step, approvals?: SimulationApprov
     }
     case 'approval':
       return { approved: approvals !== 'reject' };
+    case 'ask':
+      return { answer: step.default ?? step.choices?.[0] ?? SIMULATED_ANSWER };
     default:
       return {};
   }

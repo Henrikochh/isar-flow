@@ -1,7 +1,7 @@
 import { type Condition, evaluateCondition, toBoolean } from '../conditions';
 import { type ExpressionContext, isNumberLike, renderText, stringifyValue, toNumber } from '../expr';
 import type { WorkflowInput } from '../schema/types';
-import type { StepOutput } from './types';
+import type { EditorContext, GitContext, StepOutput } from './types';
 
 /**
  * A block failure found before the block reaches the host (bad template, unknown agent, …).
@@ -35,6 +35,9 @@ export interface RunScope {
   workspace: { root: string };
   run: { id: string };
   secrets: Record<string, string>;
+  /** Captured at run start (RunOptions.editor/git); empty values when the run got none. */
+  editor: EditorContext;
+  git: GitContext;
 }
 
 export function expressionContext(

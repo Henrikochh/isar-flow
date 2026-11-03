@@ -143,7 +143,7 @@ describe('step helpers', () => {
   const wf = WorkflowSchema.parse(fullExample) as Workflow;
 
   it('lists step types', () => {
-    expect(STEP_TYPES).toEqual(['agent', 'console', 'loop', 'if', 'break', 'stop', 'approval']);
+    expect(STEP_TYPES).toEqual(['agent', 'console', 'loop', 'if', 'break', 'stop', 'approval', 'ask']);
   });
 
   it('walks steps in document order with parents and slots', () => {

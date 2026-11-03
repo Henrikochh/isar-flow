@@ -1,8 +1,7 @@
 import type { ChatMessage, ToolSpec } from '../models/types';
-import type { ToolName } from '../schema/types';
-import { BUILTIN_TOOLS, isToolName } from './tools';
+import { type AgentToolName, agentToolSpec, isAgentToolName } from './tools';
 
-const EXAMPLE_ARGS: Record<ToolName, Record<string, unknown>> = {
+const EXAMPLE_ARGS: Record<AgentToolName, Record<string, unknown>> = {
   readFile: { path: 'src/app.ts' },
   listFiles: { glob: 'src/**/*.ts' },
   searchText: { query: 'TODO' },
@@ -11,6 +10,7 @@ const EXAMPLE_ARGS: Record<ToolName, Record<string, unknown>> = {
   applyPatch: { patch: '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,3 +1,3 @@\n…' },
   writeFile: { path: 'notes.md', content: '# Notes' },
   runCommand: { command: 'npm test' },
+  remember: { note: 'Tests run with npm test.' },
 };
 
 /**
@@ -20,7 +20,7 @@ const EXAMPLE_ARGS: Record<ToolName, Record<string, unknown>> = {
 export function textToolSection(specs: readonly ToolSpec[]): string {
   const example = specs.find((spec) => spec.name === 'readFile') ?? specs[0];
   if (!example) return '';
-  const exampleArgs = isToolName(example.name) ? EXAMPLE_ARGS[example.name] : {};
+  const exampleArgs = isAgentToolName(example.name) ? EXAMPLE_ARGS[example.name] : {};
   const lines = [
     '## Tools',
     '',
@@ -88,8 +88,8 @@ export function toTextModeMessages(messages: readonly ChatMessage[]): ChatMessag
  * The user message that asks for a corrected call after an unreadable one. The example shows the tool's required
  * parameters.
  */
-export function correctivePrompt(name: ToolName, problem: string): string {
-  const required = BUILTIN_TOOLS[name].parameters.required;
+export function correctivePrompt(name: AgentToolName, problem: string): string {
+  const required = agentToolSpec(name).parameters.required;
   const keys = Array.isArray(required)
     ? required.filter((key): key is string => typeof key === 'string')
     : [];

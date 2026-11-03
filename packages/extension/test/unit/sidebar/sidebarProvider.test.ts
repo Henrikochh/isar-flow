@@ -181,6 +181,49 @@ describe('sidebar provider', () => {
     expect(services.setupCheck?.dismiss).toHaveBeenCalledTimes(1);
   });
 
+  it('includes the project memory files, pushes their changes and opens them', async () => {
+    installFakeWorkspace(['/ws']);
+    const { services } = fakeServices();
+    const changed = new vscode.EventEmitter<void>();
+    const file = {
+      uri: 'file:///ws/.isarflow/memory.md',
+      folderUri: 'file:///ws',
+      folderName: 'ws',
+      path: '.isarflow/memory.md',
+      exists: false,
+      bytes: 0,
+      overLimit: false,
+      preview: '',
+    };
+    const files = { list: [file] };
+    const memory = {
+      onDidChange: changed.event,
+      files: () => files.list,
+      open: vi.fn(async (_folder?: vscode.Uri) => undefined),
+    };
+    Object.assign(services, { memory });
+    const { provider } = register(services);
+    const { view, incoming, posted } = fakeView();
+    void provider.resolveWebviewView(
+      view,
+      {} as vscode.WebviewViewResolveContext,
+      {} as vscode.CancellationToken,
+    );
+    incoming.fire({ type: 'ready' });
+    await tick();
+    expect(posted[0].state.memory).toEqual([file]);
+
+    files.list = [{ ...file, exists: true, bytes: 20 }];
+    changed.fire();
+    await vi.waitFor(() => expect(posted).toHaveLength(2));
+    expect(posted[1].state.memory).toEqual([{ ...file, exists: true, bytes: 20 }]);
+
+    incoming.fire({ type: 'openMemory', folderUri: 'file:///ws' });
+    await tick();
+    expect(memory.open).toHaveBeenCalledTimes(1);
+    expect(String(memory.open.mock.calls[0][0])).toBe('file:///ws');
+  });
+
   it('stores the tab in the workspace state', async () => {
     installFakeWorkspace([]);
     const { services } = fakeServices();

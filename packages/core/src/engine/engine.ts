@@ -2,6 +2,7 @@ import { type ExpressionContext, stringifyValue } from '../expr';
 import type { ChatMessage } from '../models/types';
 import { STEP_TYPES, walkSteps } from '../schema/steps';
 import type { IfStep, LoopStep, Step, Workflow } from '../schema/types';
+import { prepareAsk } from './ask';
 import {
   checkCondition,
   errorMessage,
@@ -35,6 +36,7 @@ import {
   splitAtTarget,
   storedOutput,
 } from './resume';
+import { editorScope, gitScope } from './roots';
 import { runStartEvent } from './runStart';
 import { AbortScope, onAbort, settle, sleep, stepTimeoutMs } from './timing';
 import { addUsage, usageOfOutput } from './usage';
@@ -128,7 +130,9 @@ function withEarlierAttempts(result: BlockResult, earlier: AttemptTotals): Block
 
 function retryMessage(attempt: number, max: number, error: string | undefined, delaySeconds: number): string {
   const wait = delaySeconds > 0 ? `Retrying in ${delaySeconds}s` : 'Retrying';
-  return `Attempt ${attempt} failed: ${error ?? 'unknown error'}. ${wait} (retry ${attempt} of ${max}).\n`;
+  const reason = error ?? 'unknown error';
+  const sentence = /[.!?]$/.test(reason) ? reason : `${reason}.`;
+  return `Attempt ${attempt} failed: ${sentence} ${wait} (retry ${attempt} of ${max}).\n`;
 }
 
 class WorkflowRun {
@@ -201,7 +205,7 @@ class WorkflowRun {
         this.resume = { ...path, options: resume, reported: new Set(), afterTarget, seeded: new Map() };
       } else flow ??= { kind: 'fail', error: missingTargetError(resume.stepId) };
     }
-    this.emit(runStartEvent(this.workflow, this.options, startedAt, inputs));
+    this.emit(runStartEvent(this.workflow, this.options, startedAt, inputs, this.masker));
 
     if (!flow) {
       try {
@@ -244,6 +248,8 @@ class WorkflowRun {
       workspace: { root: this.options.workspaceRoot },
       run: { id: this.runId },
       secrets: { ...this.options.secrets },
+      editor: editorScope(this.options.editor),
+      git: gitScope(this.options.git),
     };
     this.scope = base;
     this.workflowEnv = renderEnv('env', this.workflow.env, this.context(undefined));
@@ -337,6 +343,8 @@ class WorkflowRun {
         return this.hostBlock(step, logger, prepareAgent(step, this.leafDeps(frame)));
       case 'approval':
         return this.hostBlock(step, logger, prepareApproval(step, this.leafDeps(frame)));
+      case 'ask':
+        return this.hostBlock(step, logger, prepareAsk(step, this.leafDeps(frame)));
       case 'loop':
         return { run: (scope) => this.runLoop(step, scope) };
       case 'if':
@@ -407,9 +415,11 @@ class WorkflowRun {
           ...(errorToolCalls !== undefined && { toolCalls: errorToolCalls }),
         };
         if (scope.signal.aborted || settled.kind === 'abandoned') {
+          const onTimeout = scope.timedOut ? leaf.onTimeout?.(io) : undefined;
+          if (onTimeout) return onTimeout;
           const partial = settled.kind === 'value' ? settled.value.output : failedOutput;
           // The engine's timer usually fires before the host's own, so the host cannot be relied on to set timedOut.
-          const timedOut = scope.timedOut && step.type === 'console';
+          const timedOut = scope.timedOut && (step.type === 'console' || step.type === 'ask');
           return this.interrupted(step, scope, timedOut ? { ...partial, timedOut: true } : partial);
         }
         if (settled.kind === 'error') return failure(errorMessage(settled.error), true, failedOutput);

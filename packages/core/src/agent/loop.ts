@@ -8,9 +8,10 @@ import { type Conversation, logOnce, startConversation } from './conversation';
 import { errorMessage, sentence } from './format';
 import { shapeToJsonSchema } from './json';
 import { parseAnswer, repairPrompt } from './jsonAnswer';
+import { REMEMBER_TOOL, withMemorySection } from './memory';
 import { correctivePrompt, toTextModeMessages, withToolSection } from './textTools';
 import { parseTextToolCalls, type TextToolCall } from './toolCallText';
-import { runToolCall } from './toolRun';
+import { callableTools, runToolCall } from './toolRun';
 import { isToolName, toolSpecsFor } from './tools';
 import type { AgentLoopOptions, AgentLoopResult } from './types';
 
@@ -71,7 +72,7 @@ export async function continueConversation(
   const maxTurns = Math.max(1, options.maxTurns ?? DEFAULT_MAX_TURNS);
   const json = options.output?.format === 'json';
   const shape = json ? options.output?.schema : undefined;
-  const enabled = [...new Set(options.tools.filter(isToolName))];
+  const enabled = callableTools(options);
   const channel = toolChannel(options.toolMode, model, enabled.length > 0);
   if (channel.text && options.toolMode !== 'text') {
     logOnce(
@@ -80,10 +81,14 @@ export async function continueConversation(
       `${model.ref} has no native tool calling, so the tools are described in the prompt (text tool mode).`,
     );
   }
-  const specs = channel.native ? toolSpecsFor(enabled) : [];
-  const systemPrompt = channel.text
-    ? withToolSection(options.systemPrompt, toolSpecsFor(enabled))
-    : options.systemPrompt;
+  const offered = [
+    ...toolSpecsFor(enabled.filter(isToolName)),
+    ...(options.memory?.remember ? [REMEMBER_TOOL] : []),
+  ];
+  const specs = channel.native ? offered : [];
+  // The memory section is part of the system prompt, so compaction keeps it verbatim.
+  const instructions = withMemorySection(options.systemPrompt, options.memory);
+  const systemPrompt = channel.text ? withToolSection(instructions, offered) : instructions;
   const chatOptions: ChatOptions = {
     tools: specs.length > 0 ? specs : undefined,
     temperature: options.temperature,

@@ -230,6 +230,20 @@ Companion to the spec (§9). Every webview must follow this brief so the product
   colors. The canvas pins a Banner "Simulated run" ("Simulating" while it runs) with an inline "Edit mocks"
   link, and live-value labels say "Last simulation" / "This simulation" instead of "Last run" / "This run".
   Run stays the primary action; Simulate lives in the split button's menu.
+- Ask block waiting → a question card in the approval (success) tone, like the approval card, so the card and
+  the waiting block's ring belong together. The question is body text (13 px), the default choice carries a
+  check icon (also in high contrast, where primary and secondary buttons look alike), and the first waiting
+  question takes the focus (default choice, else the Answer button or text field). Approval cards keep the
+  focus where it is, so a stray Enter never approves.
+- Triggers → the Start marker reaches 48 px past the river on both sides and shows one chip per trigger plus
+  the next scheduled run or the last start; paused triggers say why with one fix button. The chip for how
+  the shown run started uses the isar tone (like "Resumed from …"); lists keep it quiet. Active triggers are
+  visible but calm: no animation, no accent color.
+- Schedule presets (15 min / 1 hour / 1 day) are secondary buttons in a group named "Presets"; the preset
+  that matches the field is selected.
+- Agent editor Memory section → mode select plus a hint per mode that stands on its own; paths and tool names
+  (`.isarflow/memory.md`, `remember`) in the code font; without a folder: "Open a folder to use project
+  memory."
 - Empty workflow → river Start/End markers with a centered EmptyState between them: "Add your first block"
   / "Drag a block from the left or click one to add it." / buttons "Add agent", "Add console command".
 

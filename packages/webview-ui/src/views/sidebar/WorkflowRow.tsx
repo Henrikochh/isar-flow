@@ -5,6 +5,16 @@ import { formatRelativeTime } from '../../hooks';
 import { formatElapsed, plural, send, workflowLabel } from './model';
 import { PathText } from './PathText';
 
+/** Labels of the workflow's triggers ("On save: src/**", "Every hour"); a lenient host may send anything. */
+function triggerLabels(triggers: unknown): string[] {
+  if (!Array.isArray(triggers)) return [];
+  return triggers
+    .map((trigger: unknown) =>
+      typeof trigger === 'object' && trigger !== null ? (trigger as { label?: unknown }).label : undefined,
+    )
+    .filter((label): label is string => typeof label === 'string' && label.trim() !== '');
+}
+
 export function WorkflowRow({
   workflow,
   run,
@@ -18,6 +28,7 @@ export function WorkflowRow({
   now: number;
 }) {
   const label = workflowLabel(workflow);
+  const triggers = triggerLabels(workflow.triggers);
   const running = run !== undefined;
   const uri = typeof workflow.uri === 'string' ? workflow.uri : '';
   const path = workflow.relativePath || '';
@@ -53,11 +64,26 @@ export function WorkflowRow({
             <span className="sb-row__name" title={label}>
               {label}
             </span>
+            {triggers.length ? (
+              <i
+                className="codicon codicon-zap sb-trigger"
+                role="img"
+                aria-label="Triggers"
+                title={triggers.join('\n')}
+              />
+            ) : null}
           </span>
           {path ? <PathText path={path} /> : null}
           <span className="sb-row__meta">
             <RunLine workflow={workflow} run={run} now={now} />
           </span>
+          {workflow.exposed === true ? (
+            <span className="sb-row__chips">
+              <Chip icon="copilot" title="Copilot can run this workflow">
+                Copilot
+              </Chip>
+            </span>
+          ) : null}
         </span>
       </button>
       <div className="sb-row__trail">

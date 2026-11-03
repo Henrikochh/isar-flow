@@ -1,0 +1,24 @@
+# Explains the code you selected and suggests improvements, without changing anything.
+# Select code in an editor, right-click and choose "Run workflow on selection", then pick this workflow.
+# The answer appears in the block's Run output; the finish notification has "Open run".
+version: 1
+name: Explain selection
+description: Explain the selected code and suggest improvements.
+steps:
+  - id: explain
+    type: agent
+    agent:
+      model: vscode/copilot/gpt-4.1 # or a model of your own endpoint, e.g. litellm/gpt-4.1
+      systemPrompt: |
+        You explain code to a developer who knows the language but not this code base.
+        Read the surrounding files when the selection alone isn't enough. Never change files.
+      tools: [readFile, listFiles, searchText]
+      permissions: { edits: none, commands: none }
+      # Reads .isarflow/memory.md, so project notes such as naming rules shape the answer.
+      memory: read
+    prompt: |
+      Explain this ${{ editor.language }} code from ${{ editor.file }} (around line ${{ editor.line }}):
+
+      ${{ editor.selection }}
+
+      Answer in three parts: what it does, how it fits into the file, and up to three concrete improvements.

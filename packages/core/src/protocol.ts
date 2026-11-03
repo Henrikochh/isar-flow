@@ -3,7 +3,7 @@
  * the host answers with the full state for that view.
  */
 import type { Diagnostic } from './diagnostics';
-import type { ResumedFrom, RunEvent, RunStatus, Usage } from './engine/types';
+import type { ResumedFrom, RunEvent, RunOrigin, RunStatus, Usage } from './engine/types';
 import type { ChatModelInfo, ModelErrorKind, ModelProbeResult } from './models/types';
 import type { BlockRunMetrics, LiveContext, RunView } from './run/types';
 import type {
@@ -12,9 +12,11 @@ import type {
   SimulationFile,
   SimulationResult,
   ToolName,
+  TriggerKind,
   Workflow,
   WorkflowIsolation,
 } from './schema/types';
+import type { TriggerSummary } from './triggers/types';
 import type { WorkflowOp } from './yaml/types';
 
 export type WebviewKind = 'sidebar' | 'workflow' | 'agent';
@@ -123,6 +125,8 @@ export interface RunRecordSummary {
    * reused blocks not counted), offered as "Run from <block>".
    */
   stoppedAt?: string;
+  /** How the run was started ("Started on save of src/app.ts", "Started by Copilot"); missing = manual. */
+  origin?: RunOrigin;
 }
 
 /* ---------- simulation (test mode) ---------- */
@@ -152,7 +156,83 @@ export interface WorkflowSummary {
   valid: boolean;
   stepCount: number;
   lastRun?: RunRecordSummary;
+  /** `expose: true`: Copilot may run it. */
+  exposed?: boolean;
+  /**
+   * Triggers of its `on:` from the lenient model (triggerSummaries; malformed entries left out), also when the
+   * file has problems (`valid` false: they don't fire then); missing or empty = none.
+   */
+  triggers?: TriggerSummary[];
+  /** Templates read `editor.*`, so "Run workflow on selection" lists it first. */
+  usesEditor?: boolean;
 }
+
+/* ---------- triggers ---------- */
+
+/**
+ * Why a workflow's triggers don't start runs right now. disabled: the setting `isarFlow.triggers.enabled` is off.
+ * untrusted: Restricted Mode. approval: its commands were never approved; run it once and choose "Run and
+ * remember". invalid: the workflow has problems. inputs: a required input has no default (triggers can't ask).
+ * limited: file events started it too often in a short time, so its triggers were paused for this session
+ * (`resumeTriggers` turns them on again).
+ */
+export type TriggerPauseReason = 'disabled' | 'untrusted' | 'approval' | 'invalid' | 'inputs' | 'limited';
+
+/** A workflow's triggers as the canvas Start marker shows them. */
+export interface WorkflowTriggerState {
+  /** From `on:`; empty when the workflow has no (valid) triggers. */
+  triggers: TriggerSummary[];
+  /** active: the triggers start runs; paused: see `pausedReason`. Empty `triggers` are always active. */
+  status: 'active' | 'paused';
+  pausedReason?: TriggerPauseReason;
+  /** One sentence for people, e.g. "Run the workflow once to approve its commands; then its triggers start it." */
+  pausedMessage?: string;
+  /** Schedule: when it fires next (epoch ms), while active. */
+  nextRunAt?: number;
+  /** The latest trigger event: the run it started, or why it was skipped ("The workflow was already running."). */
+  lastFired?: { at: number; kind: TriggerKind; file?: string; runId?: string; skipped?: string };
+}
+
+/* ---------- project memory (.isarflow/memory.md) ---------- */
+
+/** The memory file of one workspace folder. */
+export interface MemoryFileState {
+  /** File URI (string form), also when the file does not exist yet. */
+  uri: string;
+  /** Workspace folder URI (string form) and name. */
+  folderUri: string;
+  folderName: string;
+  /** Relative to the workspace folder: ".isarflow/memory.md". */
+  path: string;
+  exists: boolean;
+  /** Size in UTF-8 bytes (0 when missing). */
+  bytes: number;
+  /** Larger than 8 KB: agents only read the first 8 KB. */
+  overLimit: boolean;
+  /** The first lines (at most 600 characters), as plain text. */
+  preview: string;
+}
+
+/* ---------- ask block ---------- */
+
+/** An ask block waiting for an answer in a workflow editor (inline card on the canvas). */
+export interface AskPrompt {
+  requestId: string;
+  runId: string;
+  stepId: string;
+  /** Rendered question, secrets masked. */
+  question: string;
+  /** Allowed answers; free text when omitted. */
+  choices?: string[];
+  default?: string;
+  /** When the block's timeout elapses (epoch ms); then the default is used or the block fails. */
+  expiresAt?: number;
+}
+
+/* ---------- run report ---------- */
+
+/** export: "Export report" (save a Markdown file). copyForPr: "Copy for PR description" (clipboard). */
+export type RunReportAction = 'export' | 'copyForPr';
 
 export type ProviderKind = 'vscode' | 'openai-compatible';
 
@@ -246,6 +326,8 @@ export interface SidebarState {
   tab: SidebarTab;
   /** Latest "Check setup" report (running or finished) until dismissed; null or missing = none. */
   setupCheck?: SetupReport | null;
+  /** The project memory file of each workspace folder (existing or not), in folder order. */
+  memory?: MemoryFileState[];
 }
 
 export type AgentStarter = 'blank' | 'coder' | 'reviewer';
@@ -276,7 +358,12 @@ export type SidebarToHost =
   | { type: 'checkSetup' }
   | { type: 'dismissSetupCheck' }
   /** Opens the VS Code settings filtered by `query`, e.g. "isarFlow.providers" (setup report fixes). */
-  | { type: 'openSettings'; query: string };
+  | { type: 'openSettings'; query: string }
+  /**
+   * Opens `.isarflow/memory.md` of a workspace folder (folder URI from SidebarState.memory; default the first
+   * folder), created with a short header when missing.
+   */
+  | { type: 'openMemory'; folderUri?: string };
 
 export type HostToSidebar = { type: 'state'; state: SidebarState };
 
@@ -331,7 +418,15 @@ export type WorkflowEditorToHost =
   /** Replaces the mocks of one block in the simulation file (null or [] removes them); creates the file. */
   | { type: 'setSimulationMocks'; stepId: string; results: SimulationResult[] | null }
   /** Opens the simulation file beside the canvas, created from a short template when it is missing. */
-  | { type: 'openSimulationFile' };
+  | { type: 'openSimulationFile' }
+  /** Answers an ask block shown as an inline card (AskPrompt.requestId). */
+  | { type: 'answer'; requestId: string; answer: string }
+  /** Export report (save a Markdown file) or Copy for PR description, for a run of this workflow. */
+  | { type: 'runReport'; runId: string; action: RunReportAction }
+  /** Opens the VS Code settings filtered by `query`, e.g. "isarFlow.triggers.enabled". */
+  | { type: 'openSettings'; query: string }
+  /** Turns this workflow's triggers on again after they were paused for starting too often ('limited'). */
+  | { type: 'resumeTriggers' };
 
 export type HostToWorkflowEditor =
   | { type: 'document'; doc: WorkflowDocumentState }
@@ -358,7 +453,13 @@ export type HostToWorkflowEditor =
    * Live values of the newest finished run of this workflow, used while the canvas shows no run. Sent after
    * `ready` and whenever another run becomes the newest finished one; null when there is none.
    */
-  | { type: 'lastRunContext'; context: LiveContext | null };
+  | { type: 'lastRunContext'; context: LiveContext | null }
+  /** An ask block waits for an answer; shown as an inline card until `askResolved`. */
+  | { type: 'askRequest'; prompt: AskPrompt }
+  /** The ask was answered (here, in a notification), timed out or its run ended. */
+  | { type: 'askResolved'; requestId: string }
+  /** The workflow's triggers and whether they are active; sent after `ready` and whenever that changes. */
+  | { type: 'triggers'; triggers: WorkflowTriggerState };
 
 /* ---------- agent editor ---------- */
 
@@ -393,10 +494,18 @@ export type AgentEditorToHost =
   /** Opens a workflow from the "Used by" list; `path` is one of AgentDocumentState.usedBy. */
   | { type: 'openWorkflow'; path: string }
   /** Runs "Test model" for a model reference; progress and result arrive in the catalog (probing / probes). */
-  | { type: 'testModel'; ref: string };
+  | { type: 'testModel'; ref: string }
+  /** Opens the project memory file shown in the Memory section (`memory` message), created when missing. */
+  | { type: 'openMemory' };
 
 export type HostToAgentEditor =
   | { type: 'document'; doc: AgentDocumentState }
   | { type: 'catalog'; catalog: ModelCatalog }
   | { type: 'tryItEvent'; event: TryItEvent }
-  | { type: 'updateFailed'; error: string };
+  | { type: 'updateFailed'; error: string }
+  /**
+   * The memory file this agent reads in runs: the agent file's workspace folder, or for user agents the first
+   * folder (they use the folder of the workflow they run in). Sent after `ready` and when the file changes; null
+   * without a workspace folder.
+   */
+  | { type: 'memory'; memory: MemoryFileState | null };

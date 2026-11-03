@@ -9,6 +9,7 @@ import {
   executeAgentRequest,
   type ModelResolver,
   type PermissionLevel,
+  type ProjectMemory,
   type ResolvedAgent,
   type StepIO,
   type ToolHost,
@@ -128,6 +129,11 @@ export interface TryItDeps {
   now?: () => number;
   /** Context size for models that report none (setting isarFlow.agentContextTokens), read at each try. */
   contextTokens?: () => number | undefined;
+  /**
+   * The project memory the agent reads (and writes with memory: write), as in a run; undefined without a
+   * workspace folder.
+   */
+  memory?: () => ProjectMemory | undefined;
   /** Runs the agent; replaced in tests. */
   execute?: (request: AgentRequest, deps: AgentRequestDeps) => Promise<AgentResult>;
 }
@@ -170,6 +176,8 @@ export class TryItSession {
       const deps: AgentRequestDeps = { resolver: this.deps.resolver, io, toolHost: this.deps.tools(runId) };
       const contextTokens = this.deps.contextTokens?.();
       if (contextTokens !== undefined) deps.contextTokens = contextTokens;
+      const memory = this.deps.memory?.();
+      if (memory) deps.memory = memory;
       const result = await (this.deps.execute ?? executeAgentRequest)(request, deps);
       emit({ type: 'done', usage: result.usage, model: result.model });
     } catch (error) {

@@ -1,6 +1,7 @@
 import { splitLines } from '../expr';
 import type { ToolSpec } from '../models/types';
 import type { ToolName } from '../schema/types';
+import { REMEMBER_TOOL } from './memory';
 import type { ToolResult } from './types';
 
 export const TOOL_NAMES: readonly ToolName[] = [
@@ -191,6 +192,17 @@ export function isToolName(name: string): name is ToolName {
   return Object.hasOwn(BUILTIN_TOOLS, name);
 }
 
+/** Tools a model can call: the built-in ones (answered by the ToolHost) and remember (answered by the loop). */
+export type AgentToolName = ToolName | 'remember';
+
+export function isAgentToolName(name: string): name is AgentToolName {
+  return isToolName(name) || name === REMEMBER_TOOL.name;
+}
+
+export function agentToolSpec(name: AgentToolName): ToolSpec {
+  return name === 'remember' ? REMEMBER_TOOL : BUILTIN_TOOLS[name];
+}
+
 /** Specs for the given tools in their order, without duplicates or unknown names. */
 export function toolSpecsFor(names: readonly ToolName[]): ToolSpec[] {
   const unique = [...new Set(names)].filter(isToolName);
@@ -198,6 +210,7 @@ export function toolSpecsFor(names: readonly ToolName[]): ToolSpec[] {
 }
 
 const MAX_LINE = 120;
+const REMEMBER_LOG_CHARS = 80;
 
 function oneLine(text: string, max: number): string {
   // A lone \r (progress output) would let a terminal overwrite the line, so it counts as a break too.
@@ -243,6 +256,8 @@ export function describeToolCall(name: string, args: Record<string, unknown>): s
         ? `${str(args.command)}${str(args.cwd) ? ` (in ${str(args.cwd)})` : ''}`
         : '';
       break;
+    case 'remember':
+      return `remember: ${oneLine(typeof args.note === 'string' ? args.note : '', REMEMBER_LOG_CHARS)}`;
     default:
       detail = Object.keys(args).length > 0 ? JSON.stringify(args) : '';
   }

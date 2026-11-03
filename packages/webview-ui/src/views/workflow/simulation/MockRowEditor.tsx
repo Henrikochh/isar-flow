@@ -1,11 +1,21 @@
 /** One mocked result in the Simulation section: its fields per block kind, "Fail this call" and row actions. */
-import { Chip, Field, IconButton, SegmentedControl, Switch, TextArea, TextInput } from '../../../components';
+import {
+  Chip,
+  Field,
+  IconButton,
+  SegmentedControl,
+  Select,
+  Switch,
+  TextArea,
+  TextInput,
+} from '../../../components';
 import { Group } from '../inspector/settings/common';
 import {
   DEFAULT_ERROR,
   type MockKind,
   type MockRow,
   rowProblem,
+  setAnswer,
   setApproved,
   setErrorText,
   setExitCode,
@@ -22,6 +32,8 @@ export interface MockRowEditorProps {
   kind: MockKind;
   /** Decision shown for approval results without one. */
   defaultApproved: boolean;
+  /** Ask blocks: the choices the list offers (none for free text) and the answer used without one. */
+  ask?: { choices: string[]; fallback: string };
   onChange: (change: (row: MockRow) => MockRow, mode?: CommitMode) => void;
   onFlush: () => void;
   onMove: (delta: -1 | 1) => void;
@@ -34,7 +46,8 @@ function KindFields({
   defaultApproved,
   onChange,
   onFlush,
-}: Pick<MockRowEditorProps, 'row' | 'kind' | 'defaultApproved' | 'onChange' | 'onFlush'>) {
+  ask,
+}: Pick<MockRowEditorProps, 'row' | 'kind' | 'defaultApproved' | 'ask' | 'onChange' | 'onFlush'>) {
   const problem = rowProblem(row, kind);
   switch (kind) {
     case 'console':
@@ -139,7 +152,58 @@ function KindFields({
           </Field>
         </>
       );
+    case 'ask':
+      return <AskAnswer row={row} ask={ask} onChange={onChange} onFlush={onFlush} />;
   }
+}
+
+const OTHER_ANSWER_HINT = 'Pick a choice, or type another answer to see the block fail.';
+
+/** The answer of an ask block: one of its choices (or typed text) from a list, or free text. */
+function AskAnswer({
+  row,
+  ask = { choices: [], fallback: '' },
+  onChange,
+  onFlush,
+}: Pick<MockRowEditorProps, 'row' | 'ask' | 'onChange' | 'onFlush'>) {
+  const answer = row.result.answer;
+  if (ask.choices.length === 0) {
+    return (
+      <Field label="Answer">
+        {({ id, describedBy }) => (
+          <TextInput
+            id={id}
+            aria-describedby={describedBy}
+            placeholder={ask.fallback}
+            value={answer ?? ''}
+            onChange={(event) => onChange((r) => setAnswer(r, event.target.value))}
+            onBlur={onFlush}
+          />
+        )}
+      </Field>
+    );
+  }
+  const other = answer !== undefined && !ask.choices.includes(answer) ? [answer] : [];
+  return (
+    <Field label="Answer" hint={OTHER_ANSWER_HINT}>
+      {({ id, describedBy }) => (
+        <Select
+          id={id}
+          describedBy={describedBy}
+          searchable
+          allowCustom
+          customLabel={(text) => `Answer "${text}"`}
+          placeholder={ask.fallback}
+          value={answer}
+          options={[
+            ...ask.choices.map((choice) => ({ value: choice, label: choice })),
+            ...other.map((text) => ({ value: text, label: text, meta: 'Not a choice' })),
+          ]}
+          onChange={(value) => onChange((r) => setAnswer(r, value), 'now')}
+        />
+      )}
+    </Field>
+  );
 }
 
 export function MockRowEditor(props: MockRowEditorProps) {

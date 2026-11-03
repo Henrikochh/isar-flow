@@ -1,4 +1,11 @@
-import { listBlocks, parseWorkflowText, type Workflow, type WorkflowSummary } from '@isar-flow/core';
+import {
+  listBlocks,
+  parseWorkflowText,
+  triggerSummaries,
+  type Workflow,
+  type WorkflowSummary,
+  workflowUsesRoot,
+} from '@isar-flow/core';
 import { baseName, fileId } from './paths';
 
 export interface WorkflowRecord {
@@ -36,6 +43,11 @@ export function summarizeWorkflow(text: string, uri: string, relativePath: strin
   if (typeof workflow?.description === 'string' && workflow.description.trim() !== '') {
     summary.description = workflow.description;
   }
+  // From the lenient model, so the sidebar and the canvas show them also while the file has problems.
+  if (workflow?.expose === true) summary.exposed = true;
+  const triggers = triggerSummaries(workflow?.on);
+  if (triggers.length > 0) summary.triggers = triggers;
+  if (workflowUsesRoot(workflow, 'editor')) summary.usesEditor = true;
   return { summary, agents: agentReferences(workflow) };
 }
 

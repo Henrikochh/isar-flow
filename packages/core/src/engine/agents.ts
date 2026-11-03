@@ -11,6 +11,7 @@ const SETTING_KEYS = [
   'tools',
   'toolMode',
   'permissions',
+  'memory',
 ] as const satisfies readonly (keyof AgentSettings)[];
 
 /** Merges the referenced agent file or inline settings with the block's model override. */

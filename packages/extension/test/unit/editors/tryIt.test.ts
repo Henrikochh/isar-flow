@@ -8,6 +8,7 @@ import type {
   ChatModel,
   ChatStreamEvent,
   ModelResolver,
+  ProjectMemory,
   ToolHost,
   TryItEvent,
 } from '@isar-flow/core';
@@ -330,6 +331,34 @@ describe('TryItSession', () => {
     tokens = undefined;
     await session.start(request());
     expect(execute.mock.calls[1][1]).not.toHaveProperty('contextTokens');
+  });
+
+  it('gives the agent the project memory of its folder, like a run', async () => {
+    const result: AgentResult = {
+      text: 'ok',
+      usage: { inputTokens: 1, outputTokens: 1 },
+      model: 'fake/model',
+      turns: 1,
+      messages: [],
+    };
+    const execute = vi.fn(async (_request: AgentRequest, _deps: AgentRequestDeps) => result);
+    const memory: ProjectMemory = { read: async () => '# Project memory\n', append: async (note) => note };
+    let available: ProjectMemory | undefined = memory;
+    const session = new TryItSession(
+      {
+        resolver: resolverFor(fakeModel([])),
+        tools: () => ({ execute: async () => ({ content: '' }) }),
+        memory: () => available,
+        execute,
+      },
+      () => undefined,
+    );
+    await session.start(request());
+    expect(execute.mock.calls[0][1].memory).toBe(memory);
+
+    available = undefined;
+    await session.start(request());
+    expect(execute.mock.calls[1][1]).not.toHaveProperty('memory');
   });
 
   it('emits nothing after dispose', async () => {

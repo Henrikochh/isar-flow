@@ -127,6 +127,7 @@ describe('STEP_OUTPUTS', () => {
     expect(keys('approval')).toEqual(['approved', 'comment', 'status', 'durationMs', 'error']);
     expect(keys('break')).toEqual(['status', 'durationMs', 'error']);
     expect(keys('stop')).toEqual(['status', 'durationMs', 'error']);
+    expect(keys('ask')).toEqual(['answer', 'timedOut', 'status', 'durationMs', 'error']);
   });
 
   it('types and describes every output', () => {
@@ -368,10 +369,83 @@ describe('availableVariables: entries', () => {
     expect(analyzeExpression("env['MY.VAR']").references).toEqual([['env', 'MY.VAR']]);
   });
 
-  it('orders groups as inputs, steps, loop, workflow, env, run', () => {
+  it('orders groups as inputs, steps, loop, workflow, editor, git, env, run', () => {
     const groups = availableVariables(sample, 'tests').map((v) => v.group);
     const order = [...new Set(groups)];
-    expect(order).toEqual(['inputs', 'steps', 'loop', 'workflow', 'env', 'run']);
+    expect(order).toEqual(['inputs', 'steps', 'loop', 'workflow', 'editor', 'git', 'env', 'run']);
+  });
+
+  it('offers the editor and git values everywhere, between the workflow and env variables', () => {
+    for (const id of ['plan', 'tests', 'nope', null]) {
+      const vars = availableVariables(sample, id);
+      const roots = vars.filter((v) => v.group === 'editor' || v.group === 'git');
+      expect(roots).toEqual([
+        {
+          expression: 'editor.selection',
+          label: 'editor.selection',
+          description: 'Text selected in the editor when the run started',
+          type: 'string',
+          group: 'editor',
+        },
+        {
+          expression: 'editor.file',
+          label: 'editor.file',
+          description: 'File open in that editor, relative to the workspace folder',
+          type: 'string',
+          group: 'editor',
+        },
+        {
+          expression: 'editor.language',
+          label: 'editor.language',
+          description: 'Language of that file, e.g. typescript',
+          type: 'string',
+          group: 'editor',
+        },
+        {
+          expression: 'editor.line',
+          label: 'editor.line',
+          description: 'Line of the cursor, starting at 1',
+          type: 'number',
+          group: 'editor',
+        },
+        {
+          expression: 'git.branch',
+          label: 'git.branch',
+          description: 'Current git branch; empty for a detached HEAD',
+          type: 'string',
+          group: 'git',
+        },
+        {
+          expression: 'git.changedFiles',
+          label: 'git.changedFiles',
+          description: 'Files with uncommitted changes',
+          type: 'list',
+          group: 'git',
+        },
+        {
+          expression: 'git.diff',
+          label: 'git.diff',
+          description: 'Uncommitted changes as a diff, at most 100 KB',
+          type: 'string',
+          group: 'git',
+        },
+      ]);
+      const expressionsAt = vars.map((v) => v.expression);
+      expect(expressionsAt.indexOf('workspace.root')).toBe(expressionsAt.indexOf('editor.selection') - 1);
+      expect(expressionsAt.indexOf('env.CI')).toBe(expressionsAt.indexOf('git.diff') + 1);
+    }
+  });
+
+  it('offers the outputs of ask blocks to later blocks', () => {
+    const wf = workflow([{ id: 'pick', type: 'ask', question: 'Where?' }, shell('use')]);
+    const vars = availableVariables(wf, 'use').filter((v) => v.stepId === 'pick');
+    expect(vars.map((v) => [v.expression, v.type])).toEqual([
+      ['steps.pick.answer', 'string'],
+      ['steps.pick.timedOut', 'boolean'],
+      ['steps.pick.status', 'string'],
+      ['steps.pick.durationMs', 'number'],
+      ['steps.pick.error', 'string'],
+    ]);
   });
 });
 

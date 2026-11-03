@@ -3,6 +3,8 @@ import type {
   AgentResult,
   ApprovalRequest,
   ApprovalResult,
+  AskRequest,
+  AskResult,
   ConsoleRequest,
   ConsoleResult,
   EngineHost,
@@ -50,12 +52,18 @@ export interface ApprovalScript extends ScriptBase {
   comment?: string;
 }
 
+export interface AskScript extends ScriptBase {
+  /** Answered as given (also non-text values, like a careless host); default: the default, else the first choice. */
+  answer?: unknown;
+}
+
 type Scripted<Req, S> = S | ((req: Req, io: StepIO) => S | Promise<S>);
 
 export type HostCall =
   | { kind: 'console'; request: ConsoleRequest; io: StepIO }
   | { kind: 'agent'; request: AgentRequest; io: StepIO }
-  | { kind: 'approval'; request: ApprovalRequest; io: StepIO };
+  | { kind: 'approval'; request: ApprovalRequest; io: StepIO }
+  | { kind: 'ask'; request: AskRequest; io: StepIO };
 
 class ScriptQueue<Req, S> {
   private readonly queues = new Map<string, Scripted<Req, S>[]>();
@@ -120,13 +128,20 @@ async function play<Req, S extends ScriptBase>(
 /**
  * Scriptable EngineHost for engine tests. Scripts are queued per step id (preferred), command, or agent id;
  * once a queue is down to its last script, that script answers every further call.
- * Unscripted calls succeed: exit code 0, agent text 'ok', approval granted.
+ * Unscripted calls succeed: exit code 0, agent text 'ok', approval granted, ask answered with its default, else
+ * its first choice, else 'ok'. `new FakeHost({ canAsk: false })` has no askUser, like hosts nobody can answer.
  */
 export class FakeHost implements EngineHost {
   readonly calls: HostCall[] = [];
   private readonly consoleScripts = new ScriptQueue<ConsoleRequest, ConsoleScript>();
   private readonly agentScripts = new ScriptQueue<AgentRequest, AgentScript>();
   private readonly approvalScripts = new ScriptQueue<ApprovalRequest, ApprovalScript>();
+  private readonly askScripts = new ScriptQueue<AskRequest, AskScript>();
+  readonly askUser?: (request: AskRequest, io: StepIO) => Promise<AskResult>;
+
+  constructor(options: { canAsk?: boolean } = {}) {
+    if (options.canAsk !== false) this.askUser = (request, io) => this.answer(request, io);
+  }
 
   /** Scripts console results for a step id or an exact (rendered) command. */
   console(key: string, ...scripts: Scripted<ConsoleRequest, ConsoleScript>[]): this {
@@ -146,6 +161,12 @@ export class FakeHost implements EngineHost {
     return this;
   }
 
+  /** Scripts answers of ask blocks for a step id. */
+  ask(key: string, ...scripts: Scripted<AskRequest, AskScript>[]): this {
+    this.askScripts.add(key, scripts);
+    return this;
+  }
+
   get consoleCalls(): ConsoleRequest[] {
     return this.calls.flatMap((c) => (c.kind === 'console' ? [c.request] : []));
   }
@@ -156,6 +177,10 @@ export class FakeHost implements EngineHost {
 
   get approvalCalls(): ApprovalRequest[] {
     return this.calls.flatMap((c) => (c.kind === 'approval' ? [c.request] : []));
+  }
+
+  get askCalls(): AskRequest[] {
+    return this.calls.flatMap((c) => (c.kind === 'ask' ? [c.request] : []));
   }
 
   /** Step ids in call order, e.g. ['tests', 'review', 'tests']. */
@@ -202,5 +227,12 @@ export class FakeHost implements EngineHost {
     return s.comment === undefined
       ? { approved: s.approved ?? true }
       : { approved: s.approved ?? true, comment: s.comment };
+  }
+
+  private async answer(request: AskRequest, io: StepIO): Promise<AskResult> {
+    this.calls.push({ kind: 'ask', request, io });
+    const s = await play(this.askScripts.take([request.stepId]), request, io);
+    const answer = s.answer === undefined ? (request.default ?? request.choices?.[0] ?? 'ok') : s.answer;
+    return { answer } as AskResult;
   }
 }

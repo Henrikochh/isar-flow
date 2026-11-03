@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { simulationJsonSchema } from '@isar-flow/core';
+import { projectConfigJsonSchema, simulationJsonSchema } from '@isar-flow/core';
 
 interface Setting {
   type?: string;
@@ -18,14 +18,17 @@ interface Setting {
 }
 
 interface Manifest {
+  activationEvents?: string[];
   capabilities: {
     untrustedWorkspaces: { supported: string; description?: string; restrictedConfigurations?: string[] };
   };
-  contributes: {
+  contributes: Record<string, unknown> & {
     configuration: { properties: Record<string, Setting> };
     commands: { command: string; title: string; category?: string; icon?: string }[];
     menus: Record<string, { command: string; when?: string; group?: string; alt?: string }[]>;
     yamlValidation: { fileMatch: string; url: string }[];
+    languageModelTools?: Record<string, unknown>[];
+    chatParticipants?: Record<string, unknown>[];
   };
 }
 
@@ -165,5 +168,141 @@ describe('package.json run from here', () => {
       when: 'resourceFilename =~ /\\.workflow\\.ya?ml$/',
       group: 'isarFlow@1',
     });
+  });
+});
+
+describe('package.json everyday use (Package C)', () => {
+  it('contributes the Package C commands in the Isar Flow category', () => {
+    expect(command('isarFlow.runWorkflowOnSelection')).toEqual({
+      command: 'isarFlow.runWorkflowOnSelection',
+      title: 'Run workflow on selection',
+      category: 'Isar Flow',
+      icon: '$(play)',
+    });
+    expect(command('isarFlow.exportRunReport')).toEqual({
+      command: 'isarFlow.exportRunReport',
+      title: 'Export run report',
+      category: 'Isar Flow',
+    });
+    expect(command('isarFlow.copyRunForPr')).toEqual({
+      command: 'isarFlow.copyRunForPr',
+      title: 'Copy run for PR description',
+      category: 'Isar Flow',
+    });
+    expect(command('isarFlow.showTriggers')).toEqual({
+      command: 'isarFlow.showTriggers',
+      title: 'Show triggers',
+      category: 'Isar Flow',
+    });
+    expect(command('isarFlow.openMemory')).toEqual({
+      command: 'isarFlow.openMemory',
+      title: 'Open project memory',
+      category: 'Isar Flow',
+    });
+  });
+
+  it('offers Run workflow on selection in the editor context menu when text is selected', () => {
+    const { menus } = manifest.contributes;
+    expect(menus['editor/context']).toContainEqual({
+      command: 'isarFlow.runWorkflowOnSelection',
+      when: 'editorHasSelection && !isInDiffEditor',
+      group: 'isarFlow@2',
+    });
+    expect(menus.commandPalette).toContainEqual({
+      command: 'isarFlow.openMemory',
+      when: 'workspaceFolderCount > 0',
+    });
+    const paletteIds = menus.commandPalette.map((entry) => entry.command);
+    for (const id of [
+      'isarFlow.runWorkflowOnSelection',
+      'isarFlow.exportRunReport',
+      'isarFlow.copyRunForPr',
+    ]) {
+      expect(paletteIds).not.toContain(id);
+    }
+  });
+
+  it('has the setting that turns triggers off', () => {
+    expect(settings['isarFlow.triggers.enabled']).toEqual({
+      type: 'boolean',
+      default: true,
+      scope: 'window',
+      markdownDescription:
+        "Start workflows from their `on:` triggers (save, file change, schedule) while VS Code is open. Triggers only run in trusted workspaces and after you approved the workflow's commands once.",
+    });
+  });
+
+  it('contributes the two Copilot tools', () => {
+    expect(manifest.contributes.languageModelTools).toEqual([
+      {
+        name: 'isarflow_listWorkflows',
+        displayName: 'List Isar Flow workflows',
+        toolReferenceName: 'isarflowWorkflows',
+        canBeReferencedInPrompt: true,
+        userDescription: 'Lists the workflows Copilot may run.',
+        modelDescription:
+          'Lists the Isar Flow workflows of this workspace that the user allows Copilot to run, with their names, paths, descriptions and inputs. Call it before isarflow_runWorkflow.',
+        tags: ['isarflow'],
+        inputSchema: { type: 'object', properties: {} },
+      },
+      {
+        name: 'isarflow_runWorkflow',
+        displayName: 'Run an Isar Flow workflow',
+        toolReferenceName: 'isarflowRun',
+        canBeReferencedInPrompt: true,
+        userDescription: 'Runs a workflow and returns its summary.',
+        modelDescription:
+          'Runs one Isar Flow workflow locally in VS Code and waits until it has finished. Returns the status, the outputs of its blocks and the files it changed. Only workflows listed by isarflow_listWorkflows can be run; the user confirms each run.',
+        tags: ['isarflow'],
+        inputSchema: {
+          type: 'object',
+          properties: {
+            workflow: {
+              type: 'string',
+              description: 'Workflow name or workspace-relative path, as listed by isarflow_listWorkflows.',
+            },
+            inputs: {
+              type: 'object',
+              description: 'Input values by input name.',
+              additionalProperties: true,
+            },
+          },
+          required: ['workflow'],
+        },
+      },
+    ]);
+  });
+
+  it('contributes the @isarflow chat participant with list, run and status', () => {
+    expect(manifest.contributes.chatParticipants).toEqual([
+      {
+        id: 'isarFlow.chat',
+        name: 'isarflow',
+        fullName: 'Isar Flow',
+        description: 'Run your local workflows',
+        commands: [
+          { name: 'list', description: 'List the workflows Copilot may run' },
+          { name: 'run', description: 'Run a workflow: /run <workflow> [name=value …]' },
+          { name: 'status', description: 'Show running and recent runs' },
+        ],
+      },
+    ]);
+  });
+
+  it('validates .isarflow/config.yaml with the generated project config schema', () => {
+    const url = './schemas/config.schema.json';
+    expect(manifest.contributes.yamlValidation).toContainEqual({ fileMatch: '.isarflow/config.yaml', url });
+    const schema: unknown = JSON.parse(fs.readFileSync(path.join(packageDir, url), 'utf8'));
+    expect(schema).toEqual(projectConfigJsonSchema());
+    const script = fs.readFileSync(path.join(packageDir, 'scripts/schemas.mjs'), 'utf8');
+    expect(script).toContain('projectConfigJsonSchema');
+    expect(script).toContain("'config.schema.json'");
+  });
+
+  it('contributes no MCP server, mode or transport', () => {
+    const contributionKeys = Object.keys(manifest.contributes).map((key) => key.toLowerCase());
+    expect(contributionKeys.filter((key) => key.includes('mcp'))).toEqual([]);
+    expect((manifest.activationEvents ?? []).filter((event) => /mcp/i.test(event))).toEqual([]);
+    expect(JSON.stringify(manifest.contributes)).not.toMatch(/mcp/i);
   });
 });

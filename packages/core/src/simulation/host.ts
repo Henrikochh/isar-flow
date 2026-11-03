@@ -4,6 +4,7 @@ import type {
   AgentRequest,
   AgentResult,
   ApprovalResult,
+  AskResult,
   ConsoleResult,
   SimulationHost,
   SimulationHostOptions,
@@ -43,7 +44,8 @@ function agentAnswer(req: AgentRequest, result: SimulationResult): { text: strin
 
 /**
  * Engine host of a simulated run: answers every call from the simulation file's mocks (call n of a block uses
- * result n, the last one repeats) or the block's default. Never runs commands, calls models or touches files.
+ * result n, the last one repeats) or the block's default. Never runs commands, calls models, touches files or asks
+ * anyone.
  */
 export function createSimulationHost({ file, delayMs = 0 }: SimulationHostOptions): SimulationHost {
   const counts = new Map<string, number>();
@@ -97,6 +99,13 @@ export function createSimulationHost({ file, delayMs = 0 }: SimulationHostOption
       const approved = result.approved ?? file.approvals !== 'reject';
       io.log('info', `Answered automatically: ${approved ? 'approved' : 'rejected'}.\n`);
       return result.comment === undefined ? { approved } : { approved, comment: result.comment };
+    },
+
+    async askUser(req, io): Promise<AskResult> {
+      const result = await take(io);
+      const answer = result.answer ?? req.default ?? req.choices?.[0] ?? SIMULATED_ANSWER;
+      io.log('info', `Answered automatically: '${answer}'.\n`);
+      return { answer };
     },
 
     calls: () => Object.fromEntries(counts),

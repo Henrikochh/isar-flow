@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { BlockNode, RunView, StepRunView, StepStatus } from '@isar-flow/core';
 import {
   Banner,
@@ -14,6 +14,7 @@ import { sourceRunLabel } from '../../runFromHere/model';
 import { useWorkflowActions, useWorkflowState } from '../../store';
 import { asNumber, asString, isRecord } from '../model';
 import { useNow } from '../useNow';
+import { AskForm } from '../../ask/AskForm';
 import { BlockMetrics } from './BlockMetrics';
 import { DetailBlock } from './DetailBlock';
 import { LogViewer } from './LogViewer';
@@ -24,11 +25,15 @@ const DETAIL_LABELS: Record<string, string> = {
   console: 'Command',
   approval: 'Message',
   stop: 'Message',
+  ask: 'Question',
 };
+
+/** Blocks that wait for the user while they run; their form replaces the detail meanwhile. */
+const WAITS = new Set(['approval', 'ask']);
 
 /** "Run output" tab of a selected block. */
 export function RunOutput({ block, stepId, run }: { block: BlockNode; stepId: string; run: RunView }) {
-  const { approvals, history } = useWorkflowState();
+  const { approvals, asks, history } = useWorkflowState();
   const stepRun = run.steps[stepId];
   const type = asString((block.step as unknown as Record<string, unknown>).type);
   if (!stepRun) {
@@ -51,9 +56,13 @@ export function RunOutput({ block, stepId, run }: { block: BlockNode; stepId: st
         status={stepRun.status}
         stepRun={stepRun}
         label={
-          stepRun.status === 'running' && approvals.some((a) => a.stepId === stepId)
-            ? 'Waiting for your decision'
-            : undefined
+          stepRun.status !== 'running'
+            ? undefined
+            : approvals.some((a) => a.stepId === stepId)
+              ? 'Waiting for your decision'
+              : asks.some((a) => a.stepId === stepId)
+                ? 'Waiting for your answer'
+                : undefined
         }
       />
       <RunFromHereButton run={run} stepId={stepId} />
@@ -68,7 +77,8 @@ export function RunOutput({ block, stepId, run }: { block: BlockNode; stepId: st
         </Banner>
       ) : null}
       {type === 'approval' ? <PendingApproval stepId={stepId} /> : null}
-      {stepRun.detail && DETAIL_LABELS[type] && !(type === 'approval' && stepRun.status === 'running') ? (
+      {type === 'ask' ? <PendingAsk stepId={stepId} /> : null}
+      {stepRun.detail && DETAIL_LABELS[type] && !(WAITS.has(type) && stepRun.status === 'running') ? (
         <DetailBlock
           key={`${stepId}:${type}`}
           label={DETAIL_LABELS[type]}
@@ -81,6 +91,7 @@ export function RunOutput({ block, stepId, run }: { block: BlockNode; stepId: st
       {type === 'loop' ? <LoopOutput stepRun={stepRun} output={output} /> : null}
       {type === 'if' ? <IfOutput output={output} /> : null}
       {type === 'approval' ? <ApprovalOutput output={output} /> : null}
+      {type === 'ask' ? <AskOutput output={output} /> : null}
       <BlockMetrics stepId={stepId} stepRun={stepRun} />
     </div>
   );
@@ -329,6 +340,51 @@ function PendingApproval({ stepId }: { stepId: string }) {
           onChange={(event) => setComment(event.target.value)}
         />
       </div>
+    </Banner>
+  );
+}
+
+function AskOutput({ output }: { output: Record<string, unknown> | undefined }) {
+  if (typeof output?.answer !== 'string') return null;
+  return (
+    <div className="wf-insp-subsection">
+      <div className="wf-insp-subtitle">
+        <span>Answer</span>
+        {output.timedOut === true ? (
+          <Chip tone="outline" icon="clock" title="Nobody answered in time, so the default was used.">
+            Default used
+          </Chip>
+        ) : null}
+      </div>
+      <div className="wf-answer">{output.answer}</div>
+    </div>
+  );
+}
+
+/** The question of a running ask block with the same answer controls as the card above the canvas. */
+function PendingAsk({ stepId }: { stepId: string }) {
+  const { asks } = useWorkflowState();
+  const actions = useWorkflowActions();
+  const questionId = useId();
+  const prompt = asks.find((a) => a.stepId === stepId);
+  if (!prompt) return null;
+  return (
+    <Banner
+      tone="success"
+      icon="comment-discussion"
+      title="Question"
+      actions={
+        <AskForm
+          key={prompt.requestId}
+          prompt={prompt}
+          questionId={questionId}
+          onAnswer={(answer) => actions.answerAsk(prompt.requestId, answer)}
+        />
+      }
+    >
+      <span id={questionId} className="wf-insp-pre wf-ask-question">
+        {prompt.question}
+      </span>
     </Banner>
   );
 }

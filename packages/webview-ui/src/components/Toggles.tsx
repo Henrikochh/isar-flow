@@ -114,7 +114,7 @@ export function SegmentedControl<T extends string>({
             }}
             type="button"
             role={itemRole}
-            className="if-segmented__item"
+            className={full ? 'if-segmented__item' : 'if-segmented__item if-segmented__item--fit'}
             aria-checked={itemRole === 'radio' ? selected : undefined}
             aria-selected={itemRole === 'tab' ? selected : undefined}
             tabIndex={selected ? 0 : -1}

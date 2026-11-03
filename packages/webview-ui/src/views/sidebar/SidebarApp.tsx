@@ -4,6 +4,7 @@ import type { HostToSidebar, SidebarState, SidebarTab } from '@isar-flow/core';
 import { Banner, EmptyState, SegmentedControl } from '../../components';
 import { useHostMessages } from '../../vscode';
 import { AgentsPanel } from './AgentsPanel';
+import { memoryFiles } from './MemoryRows';
 import { RiverArt } from './RiverArt';
 import { SetupCheckCard } from './SetupCheckCard';
 import { WorkflowsPanel } from './WorkflowsPanel';
@@ -21,6 +22,7 @@ function normalize(state: SidebarState): SidebarState {
     recentRuns: Array.isArray(state.recentRuns) ? state.recentRuns : [],
     activeRuns: Array.isArray(state.activeRuns) ? state.activeRuns : [],
     catalog: state.catalog ?? EMPTY_CATALOG,
+    memory: memoryFiles(state.memory),
     tab: state.tab === 'workflows' ? 'workflows' : 'agents',
     setupCheck:
       state.setupCheck && typeof state.setupCheck === 'object' && Array.isArray(state.setupCheck.items)
@@ -95,6 +97,7 @@ export function SidebarApp() {
           <AgentsPanel
             agents={state.agents}
             catalog={state.catalog}
+            memory={state.memory}
             draft={view.agentDraft}
             onDraftChange={view.setAgentDraft}
           />

@@ -60,6 +60,13 @@ body.vscode-high-contrast-light .sb-tile {
   color: var(--if-isar);
 }
 
+/* The workflow starts by itself (save, file change, schedule); the tooltip lists how. */
+.sb-trigger.codicon {
+  flex: none;
+  font-size: 14px;
+  color: var(--if-muted);
+}
+
 .sb-meta-running {
   font-weight: 600;
   color: var(--if-isar);

@@ -1,0 +1,51 @@
+/* Answer controls of a waiting ask block (card above the canvas and Run output). */
+.wf-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.wf-ask__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Long answers wrap inside their button instead of pushing the card wider. */
+.wf-ask__choice {
+  max-width: 100%;
+  height: auto;
+  min-height: 24px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.wf-ask__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.wf-ask__field {
+  flex: 1 1 220px;
+  min-width: 0;
+  width: auto;
+}
+
+.wf-ask__deadline {
+  margin: 0;
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The question is what the person has to read: body size and full color, above the smaller banner text. */
+.wf-ask-question {
+  font-size: var(--if-text-m);
+  line-height: 1.45;
+  color: var(--if-fg);
+}
