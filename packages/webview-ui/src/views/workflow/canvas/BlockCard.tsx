@@ -5,6 +5,7 @@ import type { StepStatus } from '@isar-flow/core';
 import { cx } from '../cx';
 import { useCanvas } from './canvasContext';
 import { CardBody } from './CardBody';
+import { CardMetrics } from './CardMetrics';
 import { type BlockEntry, textOf } from './model';
 import { type BlockHandle, useBlockHandle } from './useBlockHandle';
 
@@ -122,6 +123,7 @@ export function BlockCard({ entry }: { entry: BlockEntry }) {
       <div className="wf-card__body">
         <CardBody entry={entry} />
       </div>
+      <CardMetrics entry={entry} status={handle.status} />
     </div>
   );
 }

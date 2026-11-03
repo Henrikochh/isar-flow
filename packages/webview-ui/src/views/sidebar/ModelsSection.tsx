@@ -19,6 +19,7 @@ export function ModelsSection({ catalog }: { catalog: ModelCatalog }) {
             aria-busy={catalog.loading || undefined}
             onClick={() => send({ type: 'refreshModels' })}
           />
+          <IconButton icon="checklist" label="Check setup" onClick={() => send({ type: 'checkSetup' })} />
           <IconButton icon="add" label="Add endpoint" onClick={() => send({ type: 'addProvider' })} />
         </span>
       }
@@ -76,11 +77,7 @@ function ProviderRow({ provider }: { provider: ProviderSummary }) {
             <span className="sb-provider__label" title={label}>
               {label}
             </span>
-            <span
-              className={editable ? 'sb-provider__count sb-provider__count--yields' : 'sb-provider__count'}
-            >
-              {providerCountText(provider)}
-            </span>
+            <span className="sb-provider__count">{providerCountText(provider)}</span>
           </span>
           {status === 'error' && provider.error ? (
             <span className="sb-provider__error" title={provider.error}>
@@ -89,16 +86,23 @@ function ProviderRow({ provider }: { provider: ProviderSummary }) {
           ) : null}
         </span>
       </button>
-      {editable ? (
-        <div className="sb-row__overlay">
-          <IconButton
-            icon="key"
-            label={provider.hasApiKey ? 'Change API key' : 'Set API key'}
-            onClick={() => send({ type: 'setProviderKey', providerId: provider.id })}
-          />
-          <IconButton icon="trash" label={`Remove ${label}`} onClick={() => setConfirming(true)} />
-        </div>
-      ) : null}
+      <div className="sb-row__overlay">
+        <IconButton
+          icon="beaker"
+          label={`Test models of ${label}`}
+          onClick={() => send({ type: 'testModel', providerId: provider.id })}
+        />
+        {editable ? (
+          <>
+            <IconButton
+              icon="key"
+              label={provider.hasApiKey ? 'Change API key' : 'Set API key'}
+              onClick={() => send({ type: 'setProviderKey', providerId: provider.id })}
+            />
+            <IconButton icon="trash" label={`Remove ${label}`} onClick={() => setConfirming(true)} />
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

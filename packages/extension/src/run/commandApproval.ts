@@ -20,8 +20,8 @@ export const RUN_AND_REMEMBER_BUTTON = 'Run and remember';
 /**
  * The commands of all console blocks, nested ones included, in document order: the raw `run` string, plus a
  * line with the shell, folder and environment when the block sets them, because they change what runs
- * (NODE_OPTIONS, PATH …). The workflow's own environment comes first. A remembered approval therefore no
- * longer applies once any of these change.
+ * (NODE_OPTIONS, PATH …). The workflow's own environment comes first, and the setup commands of a worktree run
+ * before it ("Setup: npm ci"). A remembered approval therefore no longer applies once any of these change.
  */
 export function consoleCommandsOf(workflow: Workflow): string[] {
   const commands: string[] = [];
@@ -36,7 +36,15 @@ export function consoleCommandsOf(workflow: Workflow): string[] {
   });
   const shared = envText(workflow.env);
   if (shared && commands.length > 0) commands.unshift(`(environment of all commands: ${shared})`);
-  return commands;
+  return [...setupCommandsOf(workflow).map((command) => `Setup: ${command}`), ...commands];
+}
+
+/** The `setup` commands a worktree run starts with (other runs do not run them). */
+export function setupCommandsOf(workflow: Workflow): string[] {
+  if (workflow.isolation !== 'worktree' || !Array.isArray(workflow.setup)) return [];
+  return workflow.setup.filter(
+    (command): command is string => typeof command === 'string' && command.trim() !== '',
+  );
 }
 
 function envText(env: Record<string, string> | undefined): string {

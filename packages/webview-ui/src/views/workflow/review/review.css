@@ -1,0 +1,315 @@
+/* Review card: changed files of the shown run, pinned between the banners and the canvas. */
+
+.wf-review {
+  flex: none;
+  align-self: center;
+  width: calc(100% - 32px);
+  max-width: 640px;
+  margin-top: 12px;
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-l);
+  background: var(--if-surface);
+  overflow: hidden;
+  container-type: inline-size;
+}
+
+.wf-review-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 8px 8px 14px;
+}
+
+.wf-review-icon {
+  flex: none;
+  font-size: 16px;
+  color: var(--if-isar);
+}
+
+.wf-review-title {
+  flex: none;
+  font-size: var(--if-text-l);
+  white-space: nowrap;
+}
+
+.wf-review-tags {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.wf-review-summary {
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+
+.wf-review-body {
+  border-top: 1px solid var(--if-border);
+}
+
+.wf-review-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 14px 6px;
+  list-style: none;
+}
+
+.wf-review-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+
+.wf-review-note-icon {
+  flex: none;
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+/* 500 files fit; the list scrolls instead of pushing the canvas away. */
+.wf-review-list {
+  max-height: min(320px, 36vh);
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+/* Narrow: the path gets its own line; counts, blocks and decisions share the second one. */
+.wf-review-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'status path path'
+    '. meta actions'
+    '. error error';
+  align-items: center;
+  column-gap: 8px;
+  padding: 4px 8px 4px 14px;
+}
+
+.wf-review-row:hover {
+  background: var(--if-hover);
+}
+
+/* Decided files fade their status icon (never their text, the screen reader label included). */
+.wf-review-row--decided {
+  --wf-review-status-opacity: 0.55;
+}
+
+@container (min-width: 540px) {
+  .wf-review-row {
+    grid-template-columns: 16px minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'status path meta actions'
+      '. error error error';
+  }
+
+  .wf-review-meta {
+    justify-content: flex-end;
+    max-width: 300px;
+  }
+}
+
+.wf-review-status {
+  grid-area: status;
+  display: inline-flex;
+}
+
+.wf-review-status-icon {
+  font-size: 16px;
+  opacity: var(--wf-review-status-opacity, 1);
+}
+
+.wf-review-status-icon--added {
+  color: var(--if-almgruen);
+}
+
+.wf-review-status-icon--modified {
+  color: var(--if-foehn);
+}
+
+.wf-review-status-icon--deleted {
+  color: var(--if-alpenrose);
+}
+
+.wf-review-path {
+  grid-area: path;
+  justify-self: start;
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: -4px;
+  padding: 3px 4px;
+  border: none;
+  border-radius: var(--if-radius-s);
+  background: none;
+  color: var(--if-fg);
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  text-align: left;
+}
+
+.wf-review-path--link:hover {
+  text-decoration: underline;
+}
+
+.wf-review-folder {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--if-muted);
+}
+
+/* The file name keeps its width; only a name longer than the row is cut. */
+.wf-review-name {
+  flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.wf-review-meta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  font-size: var(--if-text-s);
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-review-add {
+  font-family: var(--if-font-code);
+  color: color-mix(in srgb, var(--if-almgruen) var(--if-ink-strength), var(--if-fg));
+}
+
+.wf-review-del {
+  font-family: var(--if-font-code);
+  color: color-mix(in srgb, var(--if-alpenrose) var(--if-ink-strength), var(--if-fg));
+}
+
+.wf-review-block {
+  display: inline-flex;
+  max-width: 180px;
+  padding: 0;
+  border: none;
+  border-radius: var(--if-radius-pill);
+  background: none;
+  color: inherit;
+}
+
+.wf-review-block:hover {
+  box-shadow: inset 0 0 0 1px var(--if-border-strong);
+}
+
+/* As wide as the Reverted chip, so counts and blocks keep their column whether a file is decided or not. */
+.wf-review-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-width: 76px;
+}
+
+.wf-review-reason {
+  display: inline-flex;
+}
+
+.wf-review-error {
+  grid-area: error;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 2px 0 4px;
+  font-size: var(--if-text-s);
+  color: var(--if-error);
+}
+
+.wf-review-error-icon {
+  flex: none;
+  margin-top: 1px;
+  font-size: 13px;
+}
+
+.wf-review-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--if-border);
+}
+
+/* Revert all keeps its distance from Keep all, the safe choice. */
+.wf-review-foot-start {
+  display: inline-flex;
+  margin-right: auto;
+}
+
+.wf-review-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+
+/* Revert all asks first, in place of the footer's buttons. */
+.wf-review-foot--asking {
+  background: color-mix(in srgb, var(--if-alpenrose) 8%, transparent);
+}
+
+.wf-review-confirm {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.wf-review-confirm-icon {
+  flex: none;
+  align-self: flex-start;
+  margin-top: 1px;
+  font-size: 16px;
+  color: var(--if-alpenrose);
+}
+
+.wf-review-confirm-text {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.wf-review-confirm-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.wf-review-confirm-detail {
+  margin: 2px 0 0;
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+
+.wf-review-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}

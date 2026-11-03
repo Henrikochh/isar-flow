@@ -3,7 +3,7 @@ import { Checkbox, Section } from '../../components';
 import type { UpdateAgent } from './agentForm';
 
 const GROUPS: { risk: ToolInfo['risk']; title: string; icon: string; hint: string }[] = [
-  { risk: 'read', title: 'Read only', icon: 'eye', hint: 'These tools never change your workspace.' },
+  { risk: 'read', title: 'Read-only', icon: 'eye', hint: 'These tools never change your workspace.' },
   {
     risk: 'edit',
     title: 'Edits files',
@@ -17,6 +17,10 @@ const GROUPS: { risk: ToolInfo['risk']; title: string; icon: string; hint: strin
     hint: 'What happens depends on the Run commands permission.',
   },
 ];
+
+/** Same words as the Blank starter, so a new read-only agent explains itself. */
+export const READ_ONLY_HINT =
+  'Read-only: it can look at files but not change them. Turn on Edit files to let it change code.';
 
 /** Tools in canonical order; names the schema does not know are kept at the end so nothing is lost. */
 function nextTools(current: string[], tool: ToolName, on: boolean): ToolName[] {
@@ -35,6 +39,7 @@ export function ToolsSection({
   update: UpdateAgent;
 }) {
   const enabled = TOOL_NAMES.filter((name) => tools.includes(name)).length;
+  const readOnly = !TOOL_NAMES.some((name) => TOOL_INFO[name].risk !== 'read' && tools.includes(name));
   return (
     <Section
       title="Tools"
@@ -49,6 +54,12 @@ export function ToolsSection({
           <i className="codicon codicon-error ag-small-icon" aria-hidden="true" />
           <span>{error}</span>
         </div>
+      ) : null}
+      {readOnly ? (
+        <p className="ag-read-only">
+          <i className="codicon codicon-info ag-small-icon" aria-hidden="true" />
+          <span>{READ_ONLY_HINT}</span>
+        </p>
       ) : null}
       <div className="ag-tool-groups">
         {GROUPS.map((group) => (

@@ -18,6 +18,8 @@ export interface AgentForm {
   maxTokens: string;
   maxTurns: string;
   tools: string[];
+  /** As written in the file (undefined = automatic); an unknown value is shown as it is, next to its error. */
+  toolMode: string | undefined;
   edits: PermissionLevel | undefined;
   commands: PermissionLevel | undefined;
 }
@@ -53,6 +55,7 @@ export function readAgentForm(agent: AgentDefinition | null): AgentForm {
     maxTokens: text(raw.maxTokens),
     maxTurns: text(raw.maxTurns),
     tools: strings(raw.tools),
+    toolMode: typeof raw.toolMode === 'string' ? raw.toolMode : undefined,
     edits: level(permissions.edits),
     commands: level(permissions.commands),
   };

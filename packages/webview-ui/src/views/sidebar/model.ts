@@ -5,7 +5,6 @@
 import {
   parseWorkflowText,
   stepChildren,
-  TOOL_INFO,
   workflowTemplate,
   type ActiveRunSummary,
   type AgentSummary,
@@ -13,7 +12,6 @@ import {
   type SidebarToHost,
   type Step,
   type StepType,
-  type ToolName,
   type WorkflowSummary,
   type WorkflowTemplateId,
 } from '@isar-flow/core';
@@ -82,21 +80,9 @@ export function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-export interface AgentReach {
-  tools: number;
-  edits: boolean;
-  commands: boolean;
-}
-
-/** What an agent can do, derived from its tools (the summary carries no permission levels). */
-export function agentReach(agent: AgentSummary): AgentReach {
-  const tools = Array.isArray(agent.tools) ? [...new Set(agent.tools)] : [];
-  const risk = (tool: ToolName) => TOOL_INFO[tool]?.risk;
-  return {
-    tools: tools.length,
-    edits: tools.some((tool) => risk(tool) === 'edit'),
-    commands: tools.some((tool) => risk(tool) === 'command'),
-  };
+/** Number of distinct tools an agent lists (what it may do with them is in its capability badges). */
+export function toolCount(agent: AgentSummary): number {
+  return Array.isArray(agent.tools) ? new Set(agent.tools).size : 0;
 }
 
 /** Lower-case file-name form used to spot name clashes before the host does. */

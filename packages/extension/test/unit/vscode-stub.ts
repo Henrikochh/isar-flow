@@ -87,6 +87,9 @@ export class WorkspaceEdit {
   createFile(uri: Uri, _options?: unknown): void {
     this.edits.push({ kind: 'create', uri });
   }
+  deleteFile(uri: Uri, _options?: unknown): void {
+    this.edits.push({ kind: 'delete', uri });
+  }
 }
 
 export class CancellationTokenSource {
@@ -206,6 +209,12 @@ export class RelativePattern {
 const noop = () => undefined;
 const noopEvent = () => ({ dispose: noop });
 
+export enum ProgressLocation {
+  SourceControl = 1,
+  Window = 10,
+  Notification = 15,
+}
+
 export const window = {
   showInformationMessage: async () => undefined,
   showWarningMessage: async () => undefined,
@@ -226,6 +235,14 @@ export const window = {
   createTerminal: () => ({ show: noop, dispose: noop }),
   onDidCloseTerminal: noopEvent,
   registerWebviewViewProvider: () => ({ dispose: noop }),
+  withProgress: async <R>(
+    _options: unknown,
+    task: (
+      progress: { report: (value: unknown) => void },
+      token: CancellationTokenSource['token'],
+    ) => Promise<R>,
+  ): Promise<R> => task({ report: noop }, new CancellationTokenSource().token),
+  showTextDocument: async () => undefined,
 };
 
 export const workspace = {
@@ -242,6 +259,8 @@ export const workspace = {
   findFiles: async () => [],
   onDidChangeWorkspaceFolders: noopEvent,
   onDidSaveTextDocument: noopEvent,
+  textDocuments: [] as unknown[],
+  registerTextDocumentContentProvider: (_scheme: string, _provider: unknown) => ({ dispose: noop }),
   getWorkspaceFolder: (_uri: Uri) => undefined as { uri: Uri; name: string; index: number } | undefined,
   createFileSystemWatcher: () => ({
     onDidCreate: noopEvent,

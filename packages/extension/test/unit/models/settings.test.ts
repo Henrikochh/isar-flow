@@ -3,6 +3,7 @@ import {
   apiKeySecret,
   checkBaseUrl,
   checkProviderId,
+  contextTokensSetting,
   providerIdFromSecret,
   readProviderConfigs,
   suggestProviderId,
@@ -134,5 +135,19 @@ describe('provider id and URL checks', () => {
     expect(apiKeySecret('litellm')).toBe('isarFlow.provider.litellm.apiKey');
     expect(providerIdFromSecret('isarFlow.provider.litellm.apiKey')).toBe('litellm');
     expect(providerIdFromSecret('isarFlow.secret.TOKEN')).toBeUndefined();
+  });
+});
+
+describe('contextTokensSetting', () => {
+  it('accepts sizes of 2000 tokens and more', () => {
+    expect(contextTokensSetting(24000)).toBe(24000);
+    expect(contextTokensSetting(32768.7)).toBe(32768);
+    expect(contextTokensSetting(500)).toBe(2000);
+  });
+
+  it('leaves other values to the default', () => {
+    for (const value of [undefined, null, '24000', 0, -1, Number.NaN, Infinity]) {
+      expect(contextTokensSetting(value)).toBeUndefined();
+    }
   });
 });

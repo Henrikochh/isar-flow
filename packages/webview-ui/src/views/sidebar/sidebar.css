@@ -267,6 +267,11 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+.sb-create__suggest {
+  align-self: flex-start;
+  font-size: var(--if-text-s);
+  line-height: 17px;
+}
 
 /* ---------- empty-state art: a short stretch of river ---------- */
 .sb-art {

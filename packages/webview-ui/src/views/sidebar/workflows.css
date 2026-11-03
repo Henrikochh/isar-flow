@@ -244,6 +244,7 @@ body.vscode-high-contrast-light .sb-run::before {
   grid-template-areas:
     'stone name'
     '. meta'
+    '. review'
     '. error';
   column-gap: 10px;
   align-items: center;
@@ -296,6 +297,14 @@ body.vscode-high-contrast-light .sb-run::before {
   white-space: nowrap;
 }
 
+/* "2 to review": changed files of the run wait for Keep or Revert. */
+.sb-run__review {
+  grid-area: review;
+  display: flex;
+  min-width: 0;
+  margin: 2px 0 1px;
+}
+
 .sb-run__error {
   grid-area: error;
   min-width: 0;
@@ -312,6 +321,7 @@ body.vscode-high-contrast-light .sb-run::before {
     grid-template-columns: 28px minmax(0, 1fr) auto;
     grid-template-areas:
       'stone name meta'
+      '. review review'
       '. error error';
   }
 }

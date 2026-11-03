@@ -160,6 +160,18 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "isarFlow.testModel",
+        "title": "Test model",
+        "category": "Isar Flow",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "isarFlow.checkSetup",
+        "title": "Check setup",
+        "category": "Isar Flow",
+        "icon": "$(checklist)"
+      },
+      {
         "command": "isarFlow.setSecret",
         "title": "Set workflow secret",
         "category": "Isar Flow"
@@ -194,6 +206,11 @@
           "command": "isarFlow.refreshModels",
           "when": "view == isarFlow.sidebar",
           "group": "navigation@3"
+        },
+        {
+          "command": "isarFlow.checkSetup",
+          "when": "view == isarFlow.sidebar",
+          "group": "overflow"
         },
         {
           "command": "isarFlow.showLog",
@@ -317,7 +334,37 @@
           "default": 50,
           "minimum": 1,
           "maximum": 500,
-          "description": "Runs kept per workflow."
+          "description": "Runs kept per workflow. The snapshots and worktrees of older runs are removed too."
+        },
+        "isarFlow.agentContextTokens": {
+          "type": "number",
+          "default": 24000,
+          "minimum": 2000,
+          "description": "Context size in tokens for models that don't report one. Agent conversations are summarized at 70 % of it."
+        },
+        "isarFlow.modelPrices": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "input",
+              "output"
+            ],
+            "properties": {
+              "input": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Price per 1 million input tokens"
+              },
+              "output": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Price per 1 million output tokens"
+              }
+            }
+          },
+          "markdownDescription": "Prices per 1 million tokens by model reference, used to estimate the cost of runs. Costs are shown only for the models listed here. Example: `{ \"litellm/gpt-4.1\": { \"input\": 2, \"output\": 8 } }`"
         }
       }
     },

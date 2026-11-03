@@ -53,14 +53,18 @@
 
 .ag-header__title-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
   min-width: 0;
 }
 
+/* Scope and capability chips; they wrap below a name that needs the whole row. */
 .ag-header__scope {
-  flex: none;
   display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
 }
 
 .ag-header__name,
@@ -182,6 +186,56 @@
   gap: 6px;
   color: var(--if-foehn);
 }
+/* How the agent copes with the model: plain text, the icon carries the tone. */
+.ag-model-summary__note--info {
+  color: var(--if-fg);
+}
+.ag-model-summary__note--info .codicon {
+  color: var(--if-link);
+}
+
+/* Main model picker with "Test model" beside it. */
+.ag-model-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ag-model-row__picker {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+/* Latest "Test model" result: the probe's sentence, then its duration. */
+.ag-probe {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+.ag-probe__icon.codicon {
+  align-self: center;
+  font-size: 13px;
+}
+.ag-probe--tools .ag-probe__icon {
+  color: var(--if-almgruen);
+}
+.ag-probe--text .ag-probe__icon {
+  color: var(--if-foehn);
+}
+.ag-probe--failed .ag-probe__icon {
+  color: var(--if-alpenrose);
+}
+.ag-probe__message {
+  min-width: 0;
+  color: var(--if-fg);
+  overflow-wrap: anywhere;
+}
+.ag-probe__latency {
+  color: var(--if-muted);
+  font-variant-numeric: tabular-nums;
+}
 
 .ag-model-summary__icon.codicon {
   font-size: 13px;
@@ -259,6 +313,19 @@
 /* ---------- Tools ---------- */
 
 /* Hover rows bleed 8 px past the column so their text lines up with the section titles. */
+/* Shown while no tool can change files or run commands. */
+.ag-read-only {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-size: var(--if-text-s);
+  line-height: 18px;
+}
+.ag-read-only .codicon {
+  color: var(--if-link);
+}
+
 .ag-tool-groups {
   display: flex;
   flex-direction: column;

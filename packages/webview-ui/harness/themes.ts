@@ -3,7 +3,8 @@
 export type HarnessTheme = 'dark' | 'light' | 'hc' | 'hcl';
 
 const common = {
-  '--vscode-font-family': '-apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", system-ui, Ubuntu, sans-serif',
+  '--vscode-font-family':
+    '-apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", system-ui, Ubuntu, sans-serif',
   '--vscode-font-size': '13px',
   '--vscode-editor-font-family': 'Consolas, "Courier New", monospace',
 };

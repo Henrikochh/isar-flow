@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, type Ref, useId, useState } from 'react';
+import { type FormEvent, type ReactNode, type Ref, useEffect, useId, useRef, useState } from 'react';
 import type { AgentScope, AgentStarter, AgentSummary } from '@isar-flow/core';
 import { Button, Field, SegmentedControl, TextInput, type SegmentOption } from '../../components';
 import { agentLabel, slugOf } from './model';
@@ -11,7 +11,7 @@ const STARTER_OPTIONS: SegmentOption<AgentStarter>[] = [
 ];
 
 const STARTER_HINTS: Record<AgentStarter, string> = {
-  blank: 'Read-only tools and short general instructions.',
+  blank: 'Read-only: it can look at files but not change them. Turn on Edit files to let it change code.',
   coder: 'Implements tasks: edits files and asks before running commands.',
   reviewer: 'Reviews changes without editing and answers in JSON.',
 };
@@ -80,6 +80,15 @@ export function NewAgentCard({
     onChange({ ...draft, starter, name: untouched ? STARTER_NAMES[starter] : draft.name });
   };
 
+  // The suggestion disappears once Coder is picked, so focus moves to the chosen starter instead of the page.
+  const starterRef = useRef<HTMLDivElement>(null);
+  const [focusStarter, setFocusStarter] = useState(false);
+  useEffect(() => {
+    if (!focusStarter) return;
+    setFocusStarter(false);
+    starterRef.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
+  }, [focusStarter]);
+
   return (
     <form
       className="sb-create"
@@ -109,7 +118,7 @@ export function NewAgentCard({
           />
         )}
       </Field>
-      <div className="if-field">
+      <div className="if-field" ref={starterRef}>
         <span className="if-field__label">Starter</span>
         <SegmentedControl
           label="Starter"
@@ -119,6 +128,18 @@ export function NewAgentCard({
           onChange={pickStarter}
         />
         <span className="if-field__hint">{STARTER_HINTS[draft.starter]}</span>
+        {draft.starter === 'blank' ? (
+          <Button
+            variant="link"
+            className="sb-create__suggest"
+            onClick={() => {
+              pickStarter('coder');
+              setFocusStarter(true);
+            }}
+          >
+            For an agent that should change code, pick Coder.
+          </Button>
+        ) : null}
       </div>
       <div className="if-field">
         <span className="if-field__label">Scope</span>

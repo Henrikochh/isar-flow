@@ -7,6 +7,7 @@ import {
   type HostToAgentEditor,
 } from '@isar-flow/core';
 import type { Services } from '../contracts';
+import { contextTokensSetting } from '../models/settings';
 import { IGNORE_PATH_CASE } from '../store/paths';
 import { buildAgentDocumentState, validationContext } from './documentState';
 import { EditQueue } from './editQueue';
@@ -15,6 +16,7 @@ import { DOCUMENT_DEBOUNCE_MS, type EditorDocument, type EditorUi, WORKFLOW_EDIT
 import { buildTryItRequest, TryItSession } from './tryIt';
 
 const UNTRUSTED = 'Trust this workspace to try agents. Nothing runs in Restricted Mode.';
+const UNTRUSTED_TEST = 'Trust this workspace to test models.';
 
 const uriKey = (uri: vscode.Uri) => (IGNORE_PATH_CASE ? uri.toString().toLowerCase() : uri.toString());
 
@@ -41,6 +43,10 @@ export class AgentPanel implements vscode.Disposable {
         resolver: services.models,
         tools: (runId) => services.tools(runId, this.toolRoot()),
         info: (text) => services.output.info(`Try it: ${text.trimEnd()}`),
+        contextTokens: () =>
+          contextTokensSetting(
+            vscode.workspace.getConfiguration('isarFlow').get<unknown>('agentContextTokens'),
+          ),
       },
       (event) => this.post({ type: 'tryItEvent', event }),
     );
@@ -77,6 +83,8 @@ export class AgentPanel implements vscode.Disposable {
         return;
       case 'openWorkflow':
         return this.openWorkflow(message.path);
+      case 'testModel':
+        return this.testModel(message.ref);
       default: {
         const unknown: never = message;
         throw new Error(`Unknown agent editor message ${JSON.stringify(unknown)}`);
@@ -156,6 +164,13 @@ export class AgentPanel implements vscode.Disposable {
     const outcome = await this.edits.apply((text) => applyAgentUpdate(text, set, unset));
     if (outcome.status === 'applied') this.sendDocument();
     else if (outcome.status === 'failed') this.post({ type: 'updateFailed', error: outcome.error });
+  }
+
+  /** "Test model": progress (catalog.probing) and the result (catalog.probes) reach the editor with the catalog. */
+  private async testModel(ref: unknown): Promise<void> {
+    if (!this.ui.isTrusted()) return this.ui.showError(UNTRUSTED_TEST);
+    if (typeof ref !== 'string' || ref.trim() === '') return;
+    await this.services.models.probe?.(ref.trim());
   }
 
   private startTry(prompt: string, history: { role: 'user' | 'assistant'; content: string }[]): void {

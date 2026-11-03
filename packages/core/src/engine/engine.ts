@@ -13,7 +13,7 @@ import {
   type RunScope,
   StepSetupError,
 } from './context';
-import { usageOfError } from './errors';
+import { toolCallsOfError, usageOfError } from './errors';
 import {
   type LeafDeps,
   type PreparedLeaf,
@@ -26,6 +26,7 @@ import { copyData, MaskedStream, SecretMasker } from './mask';
 import { EventQueue } from './queue';
 import type { BlockResult, Flow } from './result';
 import { AbortScope, onAbort, settle, sleep, stepTimeoutMs } from './timing';
+import { addUsage, usageOfOutput } from './usage';
 import type {
   LogStream,
   RunEvent,
@@ -80,6 +81,31 @@ function retryPolicy(retry: Step['retry']): { max: number; delaySeconds: number 
 
 function failure(error: string, retryable = true, output: Record<string, unknown> = {}): BlockResult {
   return { status: 'failure', output, error, ...(retryable ? {} : { retryable: false }) };
+}
+
+/** Tokens and tool calls of a block's attempts so far. */
+interface AttemptTotals {
+  usage?: Usage;
+  toolCalls: number;
+}
+
+const toolCallsOfOutput = (output: Record<string, unknown>) =>
+  typeof output.toolCalls === 'number' && Number.isFinite(output.toolCalls) && output.toolCalls > 0
+    ? output.toolCalls
+    : 0;
+
+/** Adds the earlier attempts to the result, so a retried block's numbers cover every attempt. */
+function withEarlierAttempts(result: BlockResult, earlier: AttemptTotals): BlockResult {
+  if (!earlier.usage && earlier.toolCalls === 0) return result;
+  const output = { ...result.output };
+  if (earlier.usage) {
+    output.usage = addUsage(
+      earlier.usage,
+      usageOfOutput(result.output) ?? { inputTokens: 0, outputTokens: 0 },
+    );
+  }
+  if (earlier.toolCalls > 0) output.toolCalls = earlier.toolCalls + toolCallsOfOutput(result.output);
+  return { ...result, output };
 }
 
 function retryMessage(attempt: number, max: number, error: string | undefined, delaySeconds: number): string {
@@ -296,7 +322,11 @@ class WorkflowRun {
         const errorUsage = settled.kind === 'error' ? usageOfError(settled.error) : undefined;
         const usage = settled.kind === 'value' ? settled.value.usage : errorUsage;
         if (usage) this.addUsage(usage);
-        const failedOutput = errorUsage ? { usage: errorUsage } : {};
+        const errorToolCalls = settled.kind === 'error' ? toolCallsOfError(settled.error) : undefined;
+        const failedOutput = {
+          ...(errorUsage && { usage: errorUsage }),
+          ...(errorToolCalls !== undefined && { toolCalls: errorToolCalls }),
+        };
         if (scope.signal.aborted || settled.kind === 'abandoned') {
           const partial = settled.kind === 'value' ? settled.value.output : failedOutput;
           // The engine's timer usually fires before the host's own, so the host cannot be relied on to set timedOut.
@@ -319,6 +349,8 @@ class WorkflowRun {
   ): Promise<BlockResult> {
     const { max: maxRetries, delaySeconds } = retryPolicy(step.retry);
     const timeoutMs = stepTimeoutMs(step.timeout);
+    // Tokens and tool calls of earlier attempts, so the block's usage covers every attempt like the run total does.
+    let earlier: AttemptTotals = { toolCalls: 0 };
     for (let attempt = 1; ; attempt++) {
       const scope = new AbortScope(frame.signal, timeoutMs);
       let result: BlockResult;
@@ -329,6 +361,8 @@ class WorkflowRun {
       } finally {
         scope.dispose();
       }
+      result = withEarlierAttempts(result, earlier);
+      earlier = { usage: usageOfOutput(result.output), toolCalls: toolCallsOfOutput(result.output) };
       if (
         result.status !== 'failure' ||
         result.control ||

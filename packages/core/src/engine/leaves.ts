@@ -108,7 +108,14 @@ function agentOutcome(
   };
   return {
     status: 'success',
-    output: { text: result.text, json: result.json, model: result.model, usage, turns: result.turns },
+    output: {
+      text: result.text,
+      json: result.json,
+      model: result.model,
+      usage,
+      turns: result.turns,
+      toolCalls: result.toolCalls ?? 0,
+    },
     usage,
     commit: () => sessions.set(step.id, result.messages ?? []),
   };

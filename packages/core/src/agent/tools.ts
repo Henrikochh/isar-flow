@@ -9,6 +9,7 @@ export const TOOL_NAMES: readonly ToolName[] = [
   'searchText',
   'gitDiff',
   'editFile',
+  'applyPatch',
   'writeFile',
   'runCommand',
 ];
@@ -80,19 +81,34 @@ export const BUILTIN_TOOLS: Record<ToolName, ToolSpec> = {
   editFile: {
     name: 'editFile',
     description:
-      'Edit an existing workspace file by replacing oldText with newText. oldText must match the current file content ' +
-      'exactly, including whitespace and indentation, and must occur exactly once; include a few surrounding lines ' +
-      'to make it unique. Read the file first. To create a file or replace all of it, use writeFile.',
+      'Edit an existing workspace file by replacing oldText with newText. oldText is matched exactly; if it is not ' +
+      'found, line endings and then whitespace per line are ignored, and the indentation comes from the file. ' +
+      'The match must be unique: oldText must occur exactly once, so include a few surrounding lines. ' +
+      'Read the file first. To create a file or replace all of it, use writeFile.',
     parameters: objectSchema(
       {
         path: { type: 'string', description: PATH_HINT },
         oldText: {
           type: 'string',
-          description: 'Exact text to replace; must occur exactly once in the file.',
+          description: 'Text to replace, copied from the file; must occur exactly once.',
         },
         newText: { type: 'string', description: 'Replacement text.' },
       },
       ['path', 'oldText', 'newText'],
+    ),
+  },
+  applyPatch: {
+    name: 'applyPatch',
+    description:
+      'Change one or more workspace files with a unified diff, the format of "git diff" and "diff -u". ' +
+      'Each file starts with "--- a/<path>" and "+++ b/<path>"; use "--- /dev/null" to create a file and ' +
+      '"+++ /dev/null" to delete one. Hunks start with "@@ -<line>,<count> +<line>,<count> @@" and should ' +
+      'include 3 unchanged context lines. Context is matched ignoring whitespace and line-ending differences, ' +
+      'near the stated line. Either every hunk applies or no file is changed. Read the files first; for one ' +
+      'small change editFile is simpler.',
+    parameters: objectSchema(
+      { patch: { type: 'string', description: 'Unified diff with workspace-relative paths.' } },
+      ['patch'],
     ),
   },
   writeFile: {
@@ -152,6 +168,11 @@ export const TOOL_INFO: Record<ToolName, ToolInfo> = {
   editFile: {
     label: 'Edit files',
     description: 'Change parts of existing files in the workspace.',
+    risk: 'edit',
+  },
+  applyPatch: {
+    label: 'Apply patches',
+    description: 'Change several places or files at once with a diff.',
     risk: 'edit',
   },
   writeFile: {
@@ -214,6 +235,9 @@ export function describeToolCall(name: string, args: Record<string, unknown>): s
     case 'writeFile':
       detail = str(args.path) ?? '';
       break;
+    case 'applyPatch':
+      detail = describePatchFiles(patchFiles(str(args.patch) ?? ''));
+      break;
     case 'runCommand':
       detail = str(args.command)
         ? `${str(args.command)}${str(args.cwd) ? ` (in ${str(args.cwd)})` : ''}`
@@ -223,6 +247,39 @@ export function describeToolCall(name: string, args: Record<string, unknown>): s
       detail = Object.keys(args).length > 0 ? JSON.stringify(args) : '';
   }
   return oneLine(detail ? `${name} ${detail}` : name, MAX_LINE);
+}
+
+const MAX_LISTED_FILES = 3;
+
+/** `src/a.ts, src/b.ts` when that fits on the log line, otherwise `4 files`. */
+function describePatchFiles(files: string[]): string {
+  if (files.length <= 1) return files[0] ?? '';
+  const list = files.join(', ');
+  const fits = `applyPatch ${list}`.length <= MAX_LINE;
+  return files.length <= MAX_LISTED_FILES && fits ? list : `${files.length} files`;
+}
+
+/** Paths named by the `---` / `+++` header pairs of a unified diff, in order and without duplicates. */
+function patchFiles(patch: string): string[] {
+  const lines = splitLines(patch);
+  const files: string[] = [];
+  for (let i = 0; i + 1 < lines.length; i++) {
+    if (!lines[i].startsWith('--- ') || !lines[i + 1].startsWith('+++ ')) continue;
+    const before = headerPath(lines[i].slice(4));
+    const after = headerPath(lines[i + 1].slice(4));
+    const path = after ?? before;
+    if (path && !files.includes(path)) files.push(path);
+    i++;
+  }
+  return files;
+}
+
+/** The path of a diff header without timestamp, quotes and `a/` / `b/` prefix; undefined for /dev/null. */
+function headerPath(raw: string): string | undefined {
+  let path = raw.split('\t')[0].trim();
+  if (path.length > 1 && path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1);
+  if (path === '/dev/null' || path === '') return undefined;
+  return /^[ab]\//.test(path) ? path.slice(2) : path;
 }
 
 /** Short outcome of a tool call for logs: `120 lines`, the single output line, or `failed: …`. */

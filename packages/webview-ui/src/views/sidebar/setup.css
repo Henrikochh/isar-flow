@@ -1,0 +1,138 @@
+/* Setup check report: a card at the top of the sidebar body, one row per endpoint or model. */
+
+.sb-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 calc(-1 * var(--sb-bleed));
+  padding: 10px 12px 12px;
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-l);
+  background: var(--if-bg);
+}
+
+.sb-setup__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: -4px;
+}
+
+.sb-setup__title {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--if-font-display);
+  font-size: var(--if-text-l);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.sb-setup__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  margin-left: -1px;
+}
+
+.sb-setup__result {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.sb-setup__result--ok {
+  color: color-mix(in srgb, var(--if-almgruen) var(--if-ink-strength), var(--if-fg));
+}
+.sb-setup__result--warning {
+  color: color-mix(in srgb, var(--if-foehn) var(--if-ink-strength), var(--if-fg));
+}
+.sb-setup__result--error {
+  color: color-mix(in srgb, var(--if-alpenrose) var(--if-ink-strength), var(--if-fg));
+}
+.sb-setup__result--running {
+  color: var(--if-fg);
+}
+
+.sb-setup__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 2px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--if-border);
+  list-style: none;
+}
+
+.sb-setup-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
+}
+
+.sb-setup-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 20px;
+}
+.sb-setup-status .codicon {
+  font-size: 14px;
+}
+.sb-setup-status--ok {
+  color: var(--if-almgruen);
+}
+.sb-setup-status--warning {
+  color: var(--if-foehn);
+}
+.sb-setup-status--error {
+  color: var(--if-alpenrose);
+}
+.sb-setup-status--skipped {
+  color: var(--if-muted);
+}
+
+.sb-setup-item__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sb-setup-item__label {
+  font-weight: 600;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.sb-setup-item__label--code {
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-s);
+  font-weight: 500;
+}
+
+.sb-setup-item__message {
+  font-size: var(--if-text-s);
+  line-height: 17px;
+  overflow-wrap: anywhere;
+}
+
+.sb-setup-item__used {
+  font-size: var(--if-text-s);
+  line-height: 17px;
+  color: var(--if-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Agent ids and workflow paths. */
+.sb-setup-item__user {
+  font-family: var(--if-font-code);
+  font-size: inherit;
+}
+
+.sb-setup-item__fix {
+  display: flex;
+  margin-top: 5px;
+}

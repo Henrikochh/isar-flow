@@ -116,15 +116,34 @@ describe('agent texts', () => {
     });
   });
 
+  it('newAgentText stays read-only and explains how to let the agent change code', () => {
+    const text = newAgentText('Helper');
+    expect(text).toContain(
+      '# Read-only: it can look at files but not change them. Add editFile, applyPatch or writeFile to let it change code.\n',
+    );
+    expect(parseAgentText(text).agent?.tools).toEqual(['readFile', 'listFiles', 'searchText', 'gitDiff']);
+  });
+
   it('defaultAgentText builds a coder that may edit files and asks before commands', () => {
     const result = parseAgentText(defaultAgentText('coder', 'litellm/gpt-4.1'));
     expect(result.valid).toBe(true);
+    expect(result.diagnostics).toEqual([]);
     expect(result.agent).toMatchObject({
       name: 'Coder',
       model: 'litellm/gpt-4.1',
-      tools: ['readFile', 'listFiles', 'searchText', 'gitDiff', 'editFile', 'writeFile', 'runCommand'],
+      tools: [
+        'readFile',
+        'listFiles',
+        'searchText',
+        'gitDiff',
+        'editFile',
+        'applyPatch',
+        'writeFile',
+        'runCommand',
+      ],
       permissions: { edits: 'auto', commands: 'ask' },
     });
+    expect(result.agent?.systemPrompt).toMatch(/applyPatch for changes in several places or files/);
   });
 
   it('defaultAgentText builds a read-only reviewer that answers in JSON', () => {

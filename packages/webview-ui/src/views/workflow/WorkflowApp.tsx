@@ -1,4 +1,4 @@
-/** Workflow editor webview: top bar, palette, river canvas and inspector. */
+/** Workflow editor webview: top bar, palette, river canvas (with banners and the review card) and inspector. */
 import './workflow.css';
 import './canvas/canvas.css';
 import { useEffect } from 'react';
@@ -9,6 +9,7 @@ import { EditorDnd } from './canvas/dnd';
 import { EditorProvider } from './editorContext';
 import { Inspector } from './inspector/Inspector';
 import { Palette } from './palette/Palette';
+import { ReviewCard } from './review/ReviewCard';
 import { WorkflowStoreProvider } from './store';
 import { TopBar } from './topbar/TopBar';
 
@@ -21,6 +22,7 @@ function WorkflowShell() {
           <Palette />
           <main className="wf-main">
             <CanvasBanners />
+            <ReviewCard />
             <Canvas />
           </main>
           <div className="wf-app__inspector" data-wf-inspector="">

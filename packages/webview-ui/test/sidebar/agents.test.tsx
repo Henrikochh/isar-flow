@@ -21,13 +21,14 @@ describe('Agents tab', () => {
     renderSidebar();
     const coder = agentRow(/^Coder/);
     expect(coder).toHaveTextContent('litellm/claude-sonnet');
-    expect(coder).toHaveTextContent('7 tools');
+    expect(coder).toHaveTextContent(`${AGENTS[0].tools.length} tools`);
     expect(coder).toHaveTextContent('Edits files');
     expect(coder).toHaveTextContent('Runs commands');
     expect(coder).not.toHaveTextContent('User');
 
     const reviewer = agentRow(/^Reviewer/);
     expect(reviewer).toHaveTextContent('4 tools');
+    expect(reviewer).toHaveTextContent('Read-only');
     expect(reviewer).not.toHaveTextContent('Edits files');
 
     expect(agentRow(/^Docs writer/)).toHaveTextContent('User');

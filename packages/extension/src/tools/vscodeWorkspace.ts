@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
+import { walkFiles } from './fsWalk';
 import type { ToolWorkspace } from './types';
 
 const EXCLUDE = '{**/node_modules/**,**/.git/**}';
@@ -9,7 +10,8 @@ const EXCLUDE = '{**/node_modules/**,**/.git/**}';
  * File access for agent tools through VS Code: reads see unsaved editor changes, writes go through
  * WorkspaceEdit (undoable) and are saved right away so console commands run later see them on disk.
  * `root` is the folder findFiles searches (default: the first workspace folder); pass the same folder
- * as the tool host's workspaceRoot.
+ * as the tool host's workspaceRoot. Folders outside the workspace (git worktrees of runs) are searched on disk,
+ * because VS Code's search only covers workspace folders.
  */
 export function createVscodeWorkspaceAdapter(root?: string): ToolWorkspace {
   const searchRoot = (): string => {
@@ -43,16 +45,33 @@ export function createVscodeWorkspaceAdapter(root?: string): ToolWorkspace {
       if (document.isDirty && !(await document.save())) throw new Error(`VS Code could not save ${absPath}.`);
     },
 
+    async deleteFile(absPath) {
+      const edit = new vscode.WorkspaceEdit();
+      edit.deleteFile(vscode.Uri.file(absPath), { ignoreIfNotExists: false });
+      if (!(await vscode.workspace.applyEdit(edit))) throw new Error(`VS Code could not delete ${absPath}.`);
+    },
+
     async findFiles(glob, max) {
       const base = searchRoot();
+      if (!vscode.workspace.getWorkspaceFolder(vscode.Uri.file(base))) return walkFiles(base, glob, max);
       const pattern = new vscode.RelativePattern(vscode.Uri.file(base), glob);
-      const uris = await vscode.workspace.findFiles(pattern, EXCLUDE, max);
+      let uris: vscode.Uri[];
+      try {
+        uris = await vscode.workspace.findFiles(pattern, EXCLUDE, max);
+      } catch {
+        return walkFiles(base, glob, max);
+      }
       return uris.map((uri) => path.relative(base, uri.fsPath).split(path.sep).join('/'));
     },
 
     realPath: (absPath) => fs.promises.realpath(absPath),
 
     exists,
+
+    unsavedText(absPath) {
+      const document = openDocument(absPath);
+      return document?.isDirty ? document.getText() : undefined;
+    },
 
     async fileSize(absPath) {
       const document = openDocument(absPath);

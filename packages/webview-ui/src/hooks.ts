@@ -74,6 +74,17 @@ export function formatRelativeTime(timestamp: number, now = Date.now()): string 
   return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/**
+ * An estimated cost without a currency symbol (prices are in whatever unit the user wrote them): two decimals,
+ * and two significant digits below a cent so small runs never read as "0.00".
+ */
+export function formatCost(cost: number): string {
+  if (!(cost > 0)) return '0.00';
+  if (cost >= 0.01) return cost.toFixed(2);
+  const decimals = 1 - Math.floor(Math.log10(cost));
+  return decimals > 6 ? '< 0.000001' : cost.toFixed(decimals);
+}
+
 export function formatTokens(count: number): string {
   if (count < 1000) return String(count);
   if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}k`;

@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import type { HostToSidebar, ModelCatalog, RunRecordSummary, SidebarToHost } from '@isar-flow/core';
+import type {
+  HostToSidebar,
+  ModelCatalog,
+  RunRecordSummary,
+  SetupReport,
+  SidebarToHost,
+} from '@isar-flow/core';
 import type { Services } from '../../../src/contracts';
 import { registerSidebar, SIDEBAR_TAB_KEY, SIDEBAR_VIEW_ID } from '../../../src/sidebar/sidebarProvider';
 import { fakeContext, fakeLog, installFakeWorkspace } from '../store/fakeWorkspace';
@@ -21,7 +27,9 @@ function fakeServices() {
     models: new vscode.EventEmitter<void>(),
     runs: new vscode.EventEmitter<void>(),
     history: new vscode.EventEmitter<void>(),
+    setupCheck: new vscode.EventEmitter<void>(),
   };
+  const setup = { report: undefined as SetupReport | undefined };
   const catalog: ModelCatalog = { models: [], providers: [], loading: false };
   const listAgents = vi.fn(() => []);
   const services = {
@@ -30,6 +38,12 @@ function fakeServices() {
     agents: { onDidChange: emitters.agents.event, list: listAgents },
     workflows: { onDidChange: emitters.workflows.event, list: () => [], usersOfAgent: () => [] },
     models: { onDidChange: emitters.models.event, catalog: () => catalog },
+    setupCheck: {
+      onDidChange: emitters.setupCheck.event,
+      current: () => setup.report,
+      run: async () => ({ startedAt: 0, items: [] }),
+      dismiss: vi.fn(),
+    },
     runs: {
       onDidChangeRuns: emitters.runs.event,
       history: { onDidChange: emitters.history.event, list: () => [finished] },
@@ -42,7 +56,7 @@ function fakeServices() {
       ],
     },
   } as unknown as Services;
-  return { services, emitters, listAgents };
+  return { services, emitters, listAgents, setup };
 }
 
 function fakeView() {
@@ -128,6 +142,7 @@ describe('sidebar provider', () => {
           recentRuns: [finished],
           activeRuns: [{ runId: 'r', workflowUri: FLOW_URI, workflowName: 'A', startedAt: 5 }],
           tab: 'workflows',
+          setupCheck: null,
         },
       },
     ]);
@@ -142,6 +157,28 @@ describe('sidebar provider', () => {
     expect(posted).toHaveLength(1);
     vi.advanceTimersByTime(1);
     expect(posted).toHaveLength(2);
+  });
+
+  it('pushes the setup report when it changes', async () => {
+    installFakeWorkspace(['/ws']);
+    const { services, emitters, setup } = fakeServices();
+    const { provider } = register(services);
+    const { view, incoming, posted } = fakeView();
+    void provider.resolveWebviewView(
+      view,
+      {} as vscode.WebviewViewResolveContext,
+      {} as vscode.CancellationToken,
+    );
+    incoming.fire({ type: 'ready' });
+    await tick();
+    setup.report = { startedAt: 7, items: [] };
+    emitters.setupCheck.fire();
+    await vi.waitFor(() => expect(posted).toHaveLength(2));
+    expect(posted[1].state.setupCheck).toEqual({ startedAt: 7, items: [] });
+
+    incoming.fire({ type: 'dismissSetupCheck' });
+    await tick();
+    expect(services.setupCheck?.dismiss).toHaveBeenCalledTimes(1);
   });
 
   it('stores the tab in the workspace state', async () => {

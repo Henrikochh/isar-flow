@@ -1,5 +1,15 @@
 /** Realistic sample data for the harness, component tests and screenshots. */
-import type { AgentSummary, ChatModelInfo, ModelCatalog, RunRecordSummary, WorkflowSummary } from '@isar-flow/core';
+import type {
+  AgentSummary,
+  ChatModelInfo,
+  ModelCatalog,
+  ModelProbeResult,
+  RunRecordSummary,
+  SetupReport,
+  WorkflowSummary,
+} from '@isar-flow/core';
+
+export * from './reviews';
 
 const NOW = Date.UTC(2026, 9, 26, 9, 30);
 export const FIXTURE_NOW = NOW;
@@ -27,9 +37,45 @@ export const MODELS: ChatModelInfo[] = [
   model('litellm', 'LiteLLM (localhost:4000)', 'qwen-coder-32b'),
 ];
 
+/** "Test model" results: native tool calls, text tool mode and a failure. */
+export const PROBES: Record<string, ModelProbeResult> = {
+  'litellm/claude-sonnet': {
+    ref: 'litellm/claude-sonnet',
+    outcome: 'tools',
+    message: 'Tool calls work',
+    toolCalls: true,
+    json: true,
+    latencyMs: 820,
+    testedAt: NOW - 2 * 3_600_000,
+  },
+  'litellm/llama-3.3-70b': {
+    ref: 'litellm/llama-3.3-70b',
+    outcome: 'text',
+    message: 'Needs text tool mode',
+    toolCalls: false,
+    json: true,
+    latencyMs: 2_350,
+    testedAt: NOW - 2 * 3_600_000,
+  },
+  'litellm/gpt-4.1': {
+    ref: 'litellm/gpt-4.1',
+    outcome: 'failed',
+    message: 'The API key was rejected. Set a new API key for LiteLLM.',
+    toolCalls: false,
+    json: false,
+    testedAt: NOW - 3_600_000,
+  },
+};
+
 export const CATALOG: ModelCatalog = {
   loading: false,
   models: MODELS,
+  probes: PROBES,
+  // Prices of the coder's and the reviewer's models; the docs writer's model has none.
+  prices: {
+    'litellm/claude-sonnet': { input: 3, output: 15 },
+    'vscode/copilot/gpt-4.1': { input: 2.5, output: 10 },
+  },
   providers: [
     { id: 'vscode', label: 'VS Code', kind: 'vscode', hasApiKey: false, status: 'ok', modelCount: 4 },
     {
@@ -60,7 +106,17 @@ export const AGENTS: AgentSummary[] = [
     name: 'Coder',
     description: 'Implements changes and fixes review findings',
     model: 'litellm/claude-sonnet',
-    tools: ['readFile', 'listFiles', 'searchText', 'gitDiff', 'editFile', 'writeFile', 'runCommand'],
+    tools: [
+      'readFile',
+      'listFiles',
+      'searchText',
+      'gitDiff',
+      'editFile',
+      'applyPatch',
+      'writeFile',
+      'runCommand',
+    ],
+    permissions: { edits: 'auto', commands: 'ask' },
     scope: 'workspace',
     uri: 'file:///c%3A/work/shop/.isarflow/agents/coder.agent.yaml',
     valid: true,
@@ -71,6 +127,7 @@ export const AGENTS: AgentSummary[] = [
     description: 'Strict senior code reviewer',
     model: 'vscode/copilot/gpt-4.1',
     tools: ['readFile', 'listFiles', 'searchText', 'gitDiff'],
+    permissions: { edits: 'none', commands: 'none' },
     scope: 'workspace',
     uri: 'file:///c%3A/work/shop/.isarflow/agents/reviewer.agent.yaml',
     valid: true,
@@ -81,6 +138,7 @@ export const AGENTS: AgentSummary[] = [
     description: 'Keeps the README and changelog current',
     model: 'litellm/llama-3.3-70b',
     tools: ['readFile', 'writeFile'],
+    permissions: { edits: 'ask' },
     scope: 'user',
     uri: 'file:///c%3A/Users/me/AppData/Roaming/Code/User/globalStorage/isarflow.isar-flow/agents/docs-writer.agent.yaml',
     valid: true,
@@ -96,6 +154,7 @@ export const RECENT_RUNS: RunRecordSummary[] = [
     startedAt: NOW - 4 * 60_000,
     durationMs: 252_000,
     usage: { inputTokens: 48_210, outputTokens: 6_930 },
+    review: { total: 4, kept: 2, reverted: 0, pending: 2 },
   },
   {
     runId: 'run-6',
@@ -115,6 +174,74 @@ export const RECENT_RUNS: RunRecordSummary[] = [
     durationMs: 48_000,
   },
 ];
+
+const LITELLM_DOCS_WRITER = AGENTS[2].uri;
+
+/** A finished "Check setup": two endpoints work, Ollama is down, one model needs text mode, one key was rejected. */
+export const SETUP_REPORT: SetupReport = {
+  startedAt: NOW - 40_000,
+  finishedAt: NOW - 31_000,
+  items: [
+    { id: 'endpoint:vscode', kind: 'endpoint', label: 'VS Code', status: 'ok', message: '4 models' },
+    {
+      id: 'endpoint:litellm',
+      kind: 'endpoint',
+      label: 'LiteLLM (localhost:4000)',
+      status: 'ok',
+      message: 'Reachable, 5 models',
+    },
+    {
+      id: 'endpoint:ollama',
+      kind: 'endpoint',
+      label: 'Ollama',
+      status: 'error',
+      message: "Can't reach Ollama. Check that it is running and the base URL is right.",
+      fix: { label: 'Edit endpoint', message: { type: 'editProvider', providerId: 'ollama' } },
+    },
+    {
+      id: 'model:litellm/claude-sonnet',
+      kind: 'model',
+      label: 'litellm/claude-sonnet',
+      status: 'ok',
+      message: 'Tool calls work',
+      usedBy: ['coder', '.isarflow/workflows/review-loop.workflow.yaml'],
+    },
+    {
+      id: 'model:litellm/llama-3.3-70b',
+      kind: 'model',
+      label: 'litellm/llama-3.3-70b',
+      status: 'warning',
+      message: 'Needs text tool mode. In docs-writer, set Tool calls to Text in the prompt.',
+      usedBy: ['docs-writer', 'tools/release-notes.workflow.yaml'],
+      fix: { label: 'Open agent', message: { type: 'openAgent', uri: LITELLM_DOCS_WRITER } },
+    },
+    {
+      id: 'model:litellm/gpt-4.1',
+      kind: 'model',
+      label: 'litellm/gpt-4.1',
+      status: 'error',
+      message: 'The API key was rejected. Set a new API key for LiteLLM.',
+      usedBy: ['.isarflow/workflows/test-fix.workflow.yaml'],
+      fix: { label: 'Set API key', message: { type: 'setProviderKey', providerId: 'litellm' } },
+    },
+  ],
+};
+
+/** The same check while it runs: endpoints are done, the first model passed, the second is being tested. */
+export const SETUP_REPORT_RUNNING: SetupReport = {
+  startedAt: NOW - 6_000,
+  items: [
+    ...SETUP_REPORT.items.slice(0, 4),
+    {
+      id: 'model:litellm/llama-3.3-70b',
+      kind: 'model',
+      label: 'litellm/llama-3.3-70b',
+      status: 'running',
+      message: 'Testing the model…',
+      usedBy: ['docs-writer', 'tools/release-notes.workflow.yaml'],
+    },
+  ],
+};
 
 export const WORKFLOWS: WorkflowSummary[] = [
   {

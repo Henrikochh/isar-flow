@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { applyWorkflowOps, type WorkflowOp } from '@isar-flow/core';
+import {
+  applyWorkflowOps,
+  reduceRunEvent,
+  type RunReview,
+  type RunView,
+  type WorkflowOp,
+} from '@isar-flow/core';
+import { reviewFixture } from '../../harness/reviews';
 import {
   initialWorkflowUiState,
   workflowUiReducer,
@@ -85,5 +92,66 @@ describe('workflow store: edits before the host answers', () => {
     const next = run(opened, { type: 'localOps', ops: [{ op: 'deleteStep', stepId: 'nope' }] });
     expect(next.doc).toBe(opened.doc);
     expect(next.pending).toEqual([]);
+  });
+});
+
+describe('workflow store: review of the shown run', () => {
+  const view = (runId: string): RunView =>
+    reduceRunEvent(null, { type: 'run-start', runId, workflowName: 'W', startedAt: 0, inputs: {} });
+  const shown = (runId: string, live = false) =>
+    run(initialWorkflowUiState, { type: 'run', run: view(runId), live });
+  const review = (runId: string): RunReview => reviewFixture(runId);
+
+  it('keeps a review for the shown run and drops it when the host sends null', () => {
+    const withReview = run(shown('run-7'), { type: 'review', review: review('run-7') });
+    expect(withReview.review?.runId).toBe('run-7');
+    expect(run(withReview, { type: 'review', review: null }).review).toBeNull();
+  });
+
+  it('does not show a review of another run', () => {
+    const next = run(shown('run-7'), { type: 'review', review: review('run-3') });
+    expect(next.review).toBeNull();
+  });
+
+  it('shows a review that arrived before its run once the run is shown', () => {
+    const early = run(initialWorkflowUiState, { type: 'review', review: review('run-7') });
+    expect(early.review).toBeNull();
+    const next = run(early, { type: 'run', run: view('run-7'), live: false });
+    expect(next.review?.runId).toBe('run-7');
+    // A review parked for one run is not shown for another.
+    const other = run(early, { type: 'run', run: view('run-3'), live: false });
+    expect(other.review).toBeNull();
+  });
+
+  it('keeps the review when the same run is sent again and clears it for another run', () => {
+    const withReview = run(shown('run-7'), { type: 'review', review: review('run-7') });
+    expect(run(withReview, { type: 'run', run: view('run-7'), live: false }).review?.runId).toBe('run-7');
+    expect(run(withReview, { type: 'run', run: view('run-3'), live: false }).review).toBeNull();
+    expect(run(withReview, { type: 'run', run: null, live: true }).review).toBeNull();
+  });
+
+  it('clears the review when a live run starts', () => {
+    const withReview = run(shown('run-7'), { type: 'review', review: review('run-7') });
+    const next = run(withReview, {
+      type: 'runEvent',
+      event: { type: 'run-start', runId: 'run-9', workflowName: 'W', startedAt: 5, inputs: {} },
+    });
+    expect(next.run?.runId).toBe('run-9');
+    expect(next.review).toBeNull();
+  });
+
+  it('keeps the review of the live run while later events of that run arrive', () => {
+    const live = run(shown('run-9', true), { type: 'review', review: review('run-9') });
+    const next = run(live, {
+      type: 'runEvent',
+      event: {
+        type: 'run-end',
+        runId: 'run-9',
+        status: 'success',
+        durationMs: 10,
+        usage: { inputTokens: 0, outputTokens: 0 },
+      },
+    });
+    expect(next.review?.runId).toBe('run-9');
   });
 });

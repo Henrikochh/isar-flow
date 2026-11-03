@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AgentSummary } from '@isar-flow/core';
-import { AgentStone, Chip, IconButton } from '../../components';
+import { AgentStone, CapabilityChips, Chip, IconButton } from '../../components';
 import { ConfirmStrip } from './ConfirmStrip';
-import { agentLabel, agentReach, fileBaseName, plural, send } from './model';
+import { agentLabel, fileBaseName, plural, send, toolCount } from './model';
 
 export function AgentRow({ agent }: { agent: AgentSummary }) {
   const [confirming, setConfirming] = useState(false);
@@ -10,7 +10,7 @@ export function AgentRow({ agent }: { agent: AgentSummary }) {
   const returnFocus = useRef(false);
   const label = agentLabel(agent);
   const model = typeof agent.model === 'string' ? agent.model.trim() : '';
-  const reach = agentReach(agent);
+  const tools = toolCount(agent);
   const uri = typeof agent.uri === 'string' ? agent.uri : '';
 
   useEffect(() => {
@@ -72,20 +72,11 @@ export function AgentRow({ agent }: { agent: AgentSummary }) {
           <span className="sb-row__chips">
             <Chip
               icon="tools"
-              title={reach.tools ? undefined : 'This agent only answers; it cannot read or change files.'}
+              title={tools ? undefined : 'This agent only answers; it cannot read or change files.'}
             >
-              {reach.tools ? plural(reach.tools, 'tool') : 'No tools'}
+              {tools ? plural(tools, 'tool') : 'No tools'}
             </Chip>
-            {reach.edits ? (
-              <Chip tone="outline" icon="edit" title="Has tools that change files">
-                Edits files
-              </Chip>
-            ) : null}
-            {reach.commands ? (
-              <Chip tone="outline" icon="terminal" title="Has a tool that runs shell commands">
-                Runs commands
-              </Chip>
-            ) : null}
+            <CapabilityChips source={agent} />
             {agent.scope === 'user' ? (
               <Chip icon="account" title="User agent: available in all your workspaces">
                 User

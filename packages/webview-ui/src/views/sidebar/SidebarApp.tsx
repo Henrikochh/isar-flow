@@ -5,6 +5,7 @@ import { Banner, EmptyState, SegmentedControl } from '../../components';
 import { useHostMessages } from '../../vscode';
 import { AgentsPanel } from './AgentsPanel';
 import { RiverArt } from './RiverArt';
+import { SetupCheckCard } from './SetupCheckCard';
 import { WorkflowsPanel } from './WorkflowsPanel';
 import { send } from './model';
 import { useSidebarViewState } from './viewState';
@@ -21,6 +22,10 @@ function normalize(state: SidebarState): SidebarState {
     activeRuns: Array.isArray(state.activeRuns) ? state.activeRuns : [],
     catalog: state.catalog ?? EMPTY_CATALOG,
     tab: state.tab === 'workflows' ? 'workflows' : 'agents',
+    setupCheck:
+      state.setupCheck && typeof state.setupCheck === 'object' && Array.isArray(state.setupCheck.items)
+        ? state.setupCheck
+        : null,
   };
 }
 
@@ -85,6 +90,7 @@ export function SidebarApp() {
         {state.trusted ? null : (
           <Banner tone="warning">Running is disabled until you trust this workspace.</Banner>
         )}
+        {state.setupCheck ? <SetupCheckCard report={state.setupCheck} /> : null}
         {tab === 'agents' ? (
           <AgentsPanel
             agents={state.agents}

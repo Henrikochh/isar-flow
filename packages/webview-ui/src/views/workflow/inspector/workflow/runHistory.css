@@ -1,0 +1,11 @@
+/* Review state of a past run under its status line: "2 to review" (chip) or "3 kept, 1 reverted". */
+.wf-history-review {
+  display: flex;
+  margin-top: 2px;
+  font-size: var(--if-text-s);
+  color: var(--if-muted);
+}
+
+.wf-history-row--current .wf-history-review {
+  color: inherit;
+}

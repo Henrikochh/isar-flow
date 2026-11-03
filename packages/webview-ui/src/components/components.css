@@ -63,8 +63,27 @@
 .if-btn--danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--if-alpenrose) 14%, transparent);
 }
-.if-btn:disabled {
+.if-btn--link {
+  height: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--if-link);
+  font-size: inherit;
+  line-height: inherit;
+  white-space: normal;
+  text-align: left;
+}
+.if-btn--link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.if-btn:disabled,
+.if-btn[aria-disabled='true'] {
   opacity: 0.5;
+}
+/* Unavailable but focusable (busy after a press): no hover and no clicks. */
+.if-btn[aria-disabled='true'] {
+  pointer-events: none;
 }
 body.vscode-high-contrast .if-btn,
 body.vscode-high-contrast-light .if-btn {
@@ -300,6 +319,13 @@ body.vscode-high-contrast-light .if-btn {
 .if-select__option-meta {
   font-size: var(--if-text-xs);
   color: var(--if-muted);
+}
+/* Capability and test-result chips of a model option. */
+.if-model-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
 }
 .if-select__empty {
   padding: 12px;

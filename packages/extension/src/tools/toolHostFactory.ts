@@ -27,10 +27,11 @@ const noFolderToolHost: ToolHost = {
 /**
  * One host per run: "Allow for this run" lives in the host, and the root and shell are read at run start.
  * Every path, search and command of the host stays in `workspaceRoot` (the workflow's own folder in a
- * multi-root workspace), or in the first folder when none is given.
+ * multi-root workspace, or the run's git worktree), or in the first folder when none is given. Runs pass
+ * their edit journal in `options`; Try it passes none.
  */
 export function createToolHostFactory(deps: ToolHostFactoryDeps): ToolHostFactory {
-  return (runId, workspaceRoot) => {
+  return (runId, workspaceRoot, options) => {
     const root = workspaceRoot ?? deps.defaultRoot();
     if (!root) return noFolderToolHost;
     const configured = deps.defaultShell(root);
@@ -41,6 +42,7 @@ export function createToolHostFactory(deps: ToolHostFactoryDeps): ToolHostFactor
       runCommand: deps.runCommand,
       prompt: deps.prompt,
       defaultShell: SHELLS.find((shell) => shell === configured) ?? 'auto',
+      ...(options?.journal && { journal: options.journal }),
     });
   };
 }

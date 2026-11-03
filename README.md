@@ -19,8 +19,20 @@ status on the canvas, console output in a terminal and a history of past runs.
 - **Expressions**: `${{ steps.tests.exitCode == 0 }}`, `${{ tail(steps.tests.output, 80) }}` and 16 more
   functions, or conditions built from rules without writing an expression.
 - **Agents** with a model, fallback models, a system prompt, built-in tools (read, list and search files,
-  git diff, edit and write files, run commands) and per-agent permissions: never, ask or always. **Try it**
+  git diff, edit files, apply patches, write files, run commands) and per-agent permissions: never, ask or
+  always. Badges show at a glance whether an agent is read-only, edits files or runs commands. **Try it**
   chats with an agent before you put it into a workflow.
+- **Review every change**: after a run, a review card lists the files it changed, with the block that changed
+  each one and a diff. Keep or revert each file; reverts restore the file byte for byte. In a git repository
+  a snapshot before and after each run covers console commands too, without touching your index or branch.
+  Workflows can also run on a separate git worktree (`isolation: worktree`) and only touch your files when
+  you keep a change.
+- **Made for local models**: `applyPatch` and a tolerant `editFile` that forgive whitespace and line-ending
+  slips, tool calls written as text for models without native tool calling (`toolMode`), and long
+  conversations summarized before they outgrow the context. **Test model** and **Check setup** tell you
+  whether an endpoint and its models work, and how to fix them.
+- **Time and tokens**: every block shows its time, tokens and (with `isarFlow.modelPrices`) cost; the run
+  summary has a table per block and averages over the last 20 runs.
 - **JSON answers**: describe the shape (`{ approved: boolean, issues: "string[]" }`) and later blocks read
   `steps.review.json.approved`. Answers that do not fit get one repair round.
 - **Models**: VS Code language models and OpenAI-compatible endpoints with model discovery, API keys in
@@ -28,7 +40,8 @@ status on the canvas, console output in a terminal and a history of past runs.
 - **Live runs**: block status and loop iterations on the canvas, rendered prompts and outputs in the
   inspector, console output mirrored to a terminal, inline approvals, a run history.
 - **Safety**: runs need a trusted workspace, console commands are confirmed before they run, agent tools stay
-  inside the workflow's folder, loops need a limit, and an optional token budget stops expensive runs.
+  inside the workflow's folder, every change can be reviewed and reverted, loops need a limit, and an optional
+  token budget stops expensive runs.
 
 ![A live run in the light theme](docs/images/workflow-live-run-light.png)
 
@@ -49,8 +62,8 @@ status on the canvas, console output in a terminal and a history of past runs.
    **Run**, describe the task and confirm the commands. Watch the blocks light up; the loop repeats until
    the tests pass and the reviewer approves (at most 5 rounds).
 
-The [user guide](docs/user-guide.md) explains every block, expressions, agents, models, runs and security
-in detail. The [examples](examples/) folder has ready-made workflows and agents.
+The [user guide](docs/user-guide.md) explains every block, expressions, agents, models, runs, reviewing
+changes and security in detail. The [examples](examples/) folder has ready-made workflows and agents.
 
 <p>
   <img src="docs/images/sidebar-agents-dark.png" alt="The sidebar with agents and model endpoints" width="260">

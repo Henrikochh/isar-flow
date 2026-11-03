@@ -1,4 +1,6 @@
 /** Loop container: a frame on the river with a header and an eddy (return channel) on its left side. */
+import { formatDuration } from '../../../hooks';
+import { blockNumbers } from '../metrics';
 import { useCanvas } from './canvasContext';
 import { CardBadge, TypeStone } from './BlockCard';
 import { BreakableCode } from './BreakableCode';
@@ -49,6 +51,8 @@ export function LoopBlock({ entry }: { entry: BlockEntry }) {
       : `Ran ${progress.iteration} ${progress.iteration === 1 ? 'time' : 'times'}`
     : undefined;
   const eddy: EddyState = !run ? 'idle' : progress && progress.iteration > 1 ? 'passed' : 'pending';
+  const duration =
+    progress && !progress.running && entry.id ? blockNumbers(run?.steps[entry.id])?.durationMs : undefined;
 
   return (
     <div
@@ -99,7 +103,12 @@ export function LoopBlock({ entry }: { entry: BlockEntry }) {
         </div>
         <div className="wf-loop__aside">
           {progressLabel ? (
-            <span className={cx('wf-iter', progress?.running && 'wf-iter--live')}>{progressLabel}</span>
+            <span
+              className={cx('wf-iter', progress?.running && 'wf-iter--live')}
+              title={duration !== undefined ? `${progressLabel} in ${formatDuration(duration)}` : undefined}
+            >
+              {progressLabel}
+            </span>
           ) : max !== undefined && summary.condition ? (
             // Loops without a condition already say "Repeat N times"; the limit only adds to a condition.
             <span

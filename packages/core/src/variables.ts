@@ -32,6 +32,7 @@ export const STEP_OUTPUTS: Record<StepType, OutputInfo[]> = {
     { key: 'usage.inputTokens', type: 'number', description: 'Input tokens used' },
     { key: 'usage.outputTokens', type: 'number', description: 'Output tokens used' },
     { key: 'turns', type: 'number', description: 'Number of model round-trips' },
+    { key: 'toolCalls', type: 'number', description: 'Tool calls the agent made' },
     ...COMMON_OUTPUTS,
   ],
   console: [

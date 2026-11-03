@@ -49,7 +49,7 @@ const BAD_SPEC_HINT =
   'expected a type name like "string", a nested object or a one-element list like ["string"].';
 const MAX_PROBLEMS = 20;
 /** Upper bound on characters scanned while looking for JSON in prose, so pathological answers cannot hang. */
-const MAX_SCAN_CHARS = 2_000_000;
+export const MAX_SCAN_CHARS = 2_000_000;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -166,7 +166,7 @@ function fencedBlocks(text: string): string[] {
   return [...json, ...other];
 }
 
-function nextOpener(text: string, from: number): number {
+export function nextOpener(text: string, from: number): number {
   for (let i = from; i < text.length; i++) {
     if (text[i] === '{' || text[i] === '[') return i;
   }
@@ -174,7 +174,7 @@ function nextOpener(text: string, from: number): number {
 }
 
 /** Index of the bracket closing the one at `start` (string-aware), or -1. */
-function balancedEnd(text: string, start: number): { end: number; scanned: number } {
+export function balancedEnd(text: string, start: number): { end: number; scanned: number } {
   const stack: string[] = [];
   let inString = false;
   for (let i = start; i < text.length; i++) {

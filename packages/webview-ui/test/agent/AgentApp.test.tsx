@@ -109,10 +109,10 @@ describe('AgentApp', () => {
 
   it('groups tools by risk and writes them in canonical order', () => {
     renderEditor();
-    expect(screen.getByRole('group', { name: 'Read only' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Read-only' })).toBeInTheDocument();
     const edits = screen.getByRole('group', { name: 'Edits files' });
-    expect(within(edits).getAllByRole('checkbox')).toHaveLength(2);
-    expect(screen.getByText('4 of 7 on')).toBeInTheDocument();
+    expect(within(edits).getAllByRole('checkbox')).toHaveLength(3);
+    expect(screen.getByText('4 of 8 on')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('checkbox', { name: /^Edit files/ }));
     expect(updates()).toEqual([
@@ -131,7 +131,7 @@ describe('AgentApp', () => {
     // The host re-sends the old text (e.g. after the model list changed) before it applies the changes.
     fromHost({ type: 'document', doc: agentDoc(REVIEWER_AGENT_TEXT) });
     expect(screen.getByRole('checkbox', { name: /^Write files/ })).toBeChecked();
-    expect(screen.getByText('6 of 7 on')).toBeInTheDocument();
+    expect(screen.getByText('6 of 8 on')).toBeInTheDocument();
   });
 
   it('disables a permission until one of its tools is on', () => {
@@ -139,7 +139,7 @@ describe('AgentApp', () => {
     const edits = screen.getByRole('radiogroup', { name: 'Edit files' });
     expect(within(edits).getByRole('radio', { name: 'Never' })).toBeDisabled();
     expect(
-      screen.getByText('Turn on Edit files or Write files under Tools to use this.'),
+      screen.getByText('Turn on Edit files, Apply patches or Write files under Tools to use this.'),
     ).toBeInTheDocument();
 
     const withEdits = REVIEWER_AGENT_TEXT.replace('gitDiff]', 'gitDiff, writeFile]');
@@ -264,7 +264,7 @@ describe('AgentApp', () => {
       ),
     });
     expect(screen.getByRole('textbox', { name: 'Agent name' })).toHaveValue('42');
-    expect(screen.getByText('0 of 7 on')).toBeInTheDocument();
+    expect(screen.getByText('0 of 8 on')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove a/b' })).toBeInTheDocument();
   });
 

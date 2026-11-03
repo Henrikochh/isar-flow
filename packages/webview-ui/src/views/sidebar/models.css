@@ -45,13 +45,11 @@
   color: var(--if-fg);
 }
 
+/* Makes room for the row's hover actions instead of peeking out from under them. */
 .sb-provider__count {
   flex: none;
   font-size: var(--if-text-s);
   color: var(--if-muted);
-}
-/* Makes room for the row's hover actions instead of peeking out from under them. */
-.sb-provider__count--yields {
   opacity: calc(1 - var(--sb-reveal, 0));
   transition: opacity var(--if-duration) var(--if-ease);
 }

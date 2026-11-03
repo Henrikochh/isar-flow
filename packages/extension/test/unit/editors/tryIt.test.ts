@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
   AgentDefinition,
   AgentPermissions,
   AgentRequest,
+  AgentRequestDeps,
+  AgentResult,
   ChatModel,
   ChatStreamEvent,
   ModelResolver,
@@ -65,6 +67,11 @@ describe('buildTryItRequest', () => {
       contextFiles: [],
     };
     expect(result.request).toEqual(expected);
+  });
+
+  it('passes the Tool calls setting on', () => {
+    const result = buildTryItRequest(state(`${AGENT}toolMode: text\n`), 'x', []);
+    expect(result.ok && result.request.agent.toolMode).toBe('text');
   });
 
   it('only downgrades automatic permissions', () => {
@@ -296,6 +303,33 @@ describe('TryItSession', () => {
       { type: 'text', text: 'second' },
       { type: 'done', usage: { inputTokens: 0, outputTokens: 0 }, model: 'fake/model' },
     ]);
+  });
+
+  it('passes the context size setting to the agent', async () => {
+    const result: AgentResult = {
+      text: 'ok',
+      usage: { inputTokens: 1, outputTokens: 1 },
+      model: 'fake/model',
+      turns: 1,
+      messages: [],
+    };
+    const execute = vi.fn(async (_request: AgentRequest, _deps: AgentRequestDeps) => result);
+    let tokens: number | undefined = 8000;
+    const session = new TryItSession(
+      {
+        resolver: resolverFor(fakeModel([])),
+        tools: () => ({ execute: async () => ({ content: '' }) }),
+        contextTokens: () => tokens,
+        execute,
+      },
+      () => undefined,
+    );
+    await session.start(request());
+    expect(execute.mock.calls[0][1].contextTokens).toBe(8000);
+
+    tokens = undefined;
+    await session.start(request());
+    expect(execute.mock.calls[1][1]).not.toHaveProperty('contextTokens');
   });
 
   it('emits nothing after dispose', async () => {

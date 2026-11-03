@@ -107,6 +107,7 @@ describe('STEP_OUTPUTS', () => {
       'usage.inputTokens',
       'usage.outputTokens',
       'turns',
+      'toolCalls',
       'status',
       'durationMs',
       'error',
@@ -135,6 +136,10 @@ describe('STEP_OUTPUTS', () => {
     expect(type('console', 'timedOut')).toBe('boolean');
     expect(type('agent', 'text')).toBe('string');
     expect(type('agent', 'usage.inputTokens')).toBe('number');
+    expect(type('agent', 'toolCalls')).toBe('number');
+    expect(STEP_OUTPUTS.agent.find((o) => o.key === 'toolCalls')?.description).toBe(
+      'Tool calls the agent made',
+    );
     expect(type('loop', 'iterations')).toBe('number');
     expect(type('if', 'result')).toBe('boolean');
     expect(type('approval', 'approved')).toBe('boolean');
@@ -277,6 +282,7 @@ describe('availableVariables: entries', () => {
       expect.arrayContaining([
         'steps.plan.usage.inputTokens',
         'steps.plan.usage.outputTokens',
+        'steps.plan.toolCalls',
         'steps.fix-loop.iterations',
         'steps.fix-loop.exitReason',
         'steps.gate.branch',

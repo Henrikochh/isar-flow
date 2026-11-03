@@ -16,7 +16,16 @@ import { findPair, keyString } from './nodePath';
 /** What a mapping represents; decides key order and compact styling of new nodes. */
 export type NodeKind = 'workflow' | 'step' | 'agent' | 'condition' | 'other';
 
-export const WORKFLOW_KEY_ORDER = ['version', 'name', 'description', 'inputs', 'env', 'steps'];
+export const WORKFLOW_KEY_ORDER = [
+  'version',
+  'name',
+  'description',
+  'inputs',
+  'env',
+  'isolation',
+  'setup',
+  'steps',
+];
 
 export const STEP_KEY_ORDER = [
   'id',
@@ -58,6 +67,7 @@ export const AGENT_KEY_ORDER = [
   'maxTokens',
   'maxTurns',
   'tools',
+  'toolMode',
   'permissions',
 ];
 

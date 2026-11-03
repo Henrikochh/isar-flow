@@ -16,6 +16,7 @@ const ALL: ToolName[] = [
   'searchText',
   'gitDiff',
   'editFile',
+  'applyPatch',
   'writeFile',
   'runCommand',
 ];
@@ -44,6 +45,7 @@ describe('BUILTIN_TOOLS', () => {
     ['searchText', { query: 'string', glob: 'string', isRegex: 'boolean' }, ['query']],
     ['gitDiff', { staged: 'boolean' }, []],
     ['editFile', { path: 'string', oldText: 'string', newText: 'string' }, ['path', 'oldText', 'newText']],
+    ['applyPatch', { patch: 'string' }, ['patch']],
     ['writeFile', { path: 'string', content: 'string' }, ['path', 'content']],
     ['runCommand', { command: 'string', cwd: 'string' }, ['command']],
   ] as const)('%s has the documented parameters', (name, types, required) => {
@@ -59,6 +61,22 @@ describe('BUILTIN_TOOLS', () => {
     expect(BUILTIN_TOOLS.searchText.description).toMatch(/200/);
     expect(BUILTIN_TOOLS.editFile.description).toMatch(/exactly once/i);
     expect(BUILTIN_TOOLS.runCommand.description).toMatch(/120 seconds/);
+  });
+
+  it('explains the tolerant matching of editFile', () => {
+    const description = BUILTIN_TOOLS.editFile.description;
+    expect(description).toMatch(
+      /matched exactly; if it is not found, line endings and then whitespace per line/,
+    );
+    expect(description).toMatch(/indentation comes from the file/);
+    expect(description).toMatch(/must be unique/);
+  });
+
+  it('describes applyPatch as a unified diff for one or more files', () => {
+    const description = BUILTIN_TOOLS.applyPatch.description;
+    expect(description).toMatch(/unified diff/);
+    expect(description).toMatch(/\/dev\/null/);
+    expect(description).toMatch(/no file is changed/);
   });
 
   it('parameter schemas work with checkJsonShape', () => {
@@ -108,6 +126,52 @@ describe('tool log lines', () => {
     ['mystery', { a: 1 }, 'mystery {"a":1}'],
   ])('describes %s %j', (name, args, expected) => {
     expect(describeToolCall(name, args)).toBe(expected);
+  });
+
+  describe('applyPatch', () => {
+    const header = (from: string, to: string) => `--- ${from}\n+++ ${to}\n@@ -1 +1 @@\n-a\n+b\n`;
+
+    it.each([
+      ['one file', header('a/src/a.ts', 'b/src/a.ts'), 'applyPatch src/a.ts'],
+      [
+        'two files',
+        header('a/src/a.ts', 'b/src/a.ts') + header('a/src/b.ts', 'b/src/b.ts'),
+        'applyPatch src/a.ts, src/b.ts',
+      ],
+      ['a created file', header('/dev/null', 'b/new.ts'), 'applyPatch new.ts'],
+      ['a deleted file', header('a/old.ts', '/dev/null'), 'applyPatch old.ts'],
+      [
+        'timestamps and quotes',
+        '--- "a/my file.ts"\t2026-01-01\n+++ "b/my file.ts"\t2026-01-02\n',
+        'applyPatch my file.ts',
+      ],
+      [
+        'CRLF and a code fence',
+        '```diff\r\n--- a/x.ts\r\n+++ b/x.ts\r\n@@ -1 +1 @@\r\n```',
+        'applyPatch x.ts',
+      ],
+      ['plain paths', '--- x.ts\n+++ x.ts\n', 'applyPatch x.ts'],
+      ['the same file twice', header('a/x.ts', 'b/x.ts') + header('a/x.ts', 'b/x.ts'), 'applyPatch x.ts'],
+      ['no headers', '@@ -1 +1 @@\n-a\n+b', 'applyPatch'],
+    ])('lists the files of %s', (_label, patch, expected) => {
+      expect(describeToolCall('applyPatch', { patch })).toBe(expected);
+    });
+
+    it('counts files when there are more than three', () => {
+      const patch = ['a', 'b', 'c', 'd'].map((n) => header(`a/${n}.ts`, `b/${n}.ts`)).join('');
+      expect(describeToolCall('applyPatch', { patch })).toBe('applyPatch 4 files');
+    });
+
+    it('counts files when their names do not fit on one line', () => {
+      const long = 'packages/extension/src/some/deeply/nested/folder/with/a/long/name';
+      const patch = header(`a/${long}/a.ts`, `b/${long}/a.ts`) + header(`a/${long}/b.ts`, `b/${long}/b.ts`);
+      expect(describeToolCall('applyPatch', { patch })).toBe('applyPatch 2 files');
+    });
+
+    it('shows only the tool name without a patch', () => {
+      expect(describeToolCall('applyPatch', {})).toBe('applyPatch');
+      expect(describeToolCall('applyPatch', { patch: 42 })).toBe('applyPatch');
+    });
   });
 
   it('keeps descriptions on one short line', () => {

@@ -717,6 +717,54 @@ describe('json-field-without-json-output', () => {
   });
 });
 
+describe('setup commands', () => {
+  const steps = [shell('tests')];
+
+  it('warns about setup without isolation: worktree, pointing at setup', () => {
+    for (const isolation of [undefined, 'workspace'] as const) {
+      const diagnostics = check(steps, undefined, { setup: ['npm ci'], ...(isolation && { isolation }) });
+      expect(withCode(diagnostics, 'setup-without-worktree')).toEqual([
+        {
+          severity: 'warning',
+          code: 'setup-without-worktree',
+          path: ['setup'],
+          message:
+            'Setup commands only run with isolation: worktree. Set isolation to worktree or remove setup.',
+        },
+      ]);
+    }
+  });
+
+  it('accepts setup with isolation: worktree and workflows without setup', () => {
+    expect(check(steps, undefined, { isolation: 'worktree', setup: ['npm ci'] })).toEqual([]);
+    expect(check(steps, undefined, { isolation: 'worktree' })).toEqual([]);
+    expect(check(steps, undefined, { setup: [] })).toEqual([]);
+  });
+
+  it('warns about templates in setup commands, which are not filled in', () => {
+    const diagnostics = check(steps, undefined, {
+      isolation: 'worktree',
+      setup: ['npm ci', 'npm run build -- ${{ inputs.target }}', 'echo ${{'],
+    });
+    expect(withCode(diagnostics, 'setup-template')).toEqual([
+      expect.objectContaining({ severity: 'warning', path: ['setup', 1] }),
+      expect.objectContaining({ severity: 'warning', path: ['setup', 2] }),
+    ]);
+    expect(withCode(diagnostics, 'setup-template')[0].message).toBe(
+      'Setup commands run as written; ${{ }} templates are not filled in.',
+    );
+    // Setup commands are not rendered, so their templates are not checked as expressions.
+    expect(codes(diagnostics)).toEqual(['setup-template', 'setup-template']);
+  });
+
+  it('ignores setup entries that are not text', () => {
+    const wf = { ...workflow(steps), isolation: 'worktree', setup: [7, null] } as unknown as Workflow;
+    expect(validateWorkflow(wf)).toEqual([]);
+    const notList = { ...workflow(steps), isolation: 'worktree', setup: 'npm ci' } as unknown as Workflow;
+    expect(validateWorkflow(notList)).toEqual([]);
+  });
+});
+
 describe('robustness', () => {
   it('does not throw on lenient models of invalid documents', () => {
     const broken = {

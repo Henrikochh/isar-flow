@@ -158,3 +158,15 @@ function readOptionalFields(
   }
   return config;
 }
+
+/** The smallest context size the setting `isarFlow.agentContextTokens` allows. */
+const MIN_CONTEXT_TOKENS = 2000;
+
+/**
+ * Reads `isarFlow.agentContextTokens` (context size for models that report none). Values below the minimum are
+ * raised to it; anything that is not a positive number leaves the size to the agent loop's default.
+ */
+export function contextTokensSetting(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return undefined;
+  return Math.max(MIN_CONTEXT_TOKENS, Math.floor(value));
+}

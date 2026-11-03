@@ -29,6 +29,8 @@ export interface EngineHostDeps {
   now?: () => number;
   /** Secret values of the run; they are masked in the terminal and in approval prompts like in run events. */
   secrets?: Record<string, string>;
+  /** Context size for models that report none (`isarFlow.agentContextTokens`); agents compact above 70 %. */
+  contextTokens?: number;
 }
 
 /** Connects the core engine to VS Code: console blocks run in the console runner and are mirrored to the terminal. */
@@ -91,6 +93,7 @@ export function createEngineHost(deps: EngineHostDeps): EngineHost {
         io,
         toolHost: deps.toolHost,
         readContextFiles: deps.readContextFiles,
+        ...(deps.contextTokens !== undefined && { contextTokens: deps.contextTokens }),
       }),
     // The prompt is shown in the canvas or a dialog, so it gets the same masking as run events.
     requestApproval: (req, io) => deps.approve({ ...req, message: masker.text(req.message) }, io.signal),

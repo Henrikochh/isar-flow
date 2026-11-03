@@ -153,3 +153,64 @@ describe('createRunHistory', () => {
     expect(history.list(A)).toHaveLength(5);
   });
 });
+
+describe('run history and reviews', () => {
+  it('stores review counts in the summary and keeps them when the run is saved again', async () => {
+    const memento = new FakeMemento();
+    const history = createRunHistory(memoryStore(), memento, () => 50);
+    const changed = vi.fn();
+    await history.save(view('r1', 1), A);
+    history.onDidChange(changed);
+
+    await history.setReview?.('r1', { total: 3, kept: 1, reverted: 1, pending: 1 });
+    expect(history.list(A)[0].review).toEqual({ total: 3, kept: 1, reverted: 1, pending: 1 });
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(createRunHistory(memoryStore(), memento, () => 50).list(A)[0].review).toEqual({
+      total: 3,
+      kept: 1,
+      reverted: 1,
+      pending: 1,
+    });
+
+    await history.save(view('r1', 1, { status: 'failure' }), A);
+    expect(history.list(A)[0]).toMatchObject({ status: 'failure', review: { pending: 1 } });
+
+    await history.setReview?.('unknown', { total: 1, kept: 1, reverted: 0, pending: 0 });
+    expect(history.list().map((r) => r.runId)).toEqual(['r1']);
+  });
+
+  it('tells which runs the history limit removed', async () => {
+    const history = createRunHistory(memoryStore(), new FakeMemento(), () => 1);
+    const removed = vi.fn();
+    history.onDidRemove?.(removed);
+    await history.save(view('a1', 1), A);
+    await history.save(view('b1', 2), B);
+    expect(removed).not.toHaveBeenCalled();
+    await history.save(view('a2', 3), A);
+    expect(removed).toHaveBeenCalledWith({ workflowUri: A, runIds: ['a1'] });
+  });
+
+  it('keeps block metrics when a run is cut down to its skeleton', () => {
+    const steps: RunView['steps'] = {};
+    for (let i = 0; i < 6000; i++) {
+      steps[`s${i}`] = {
+        status: 'success',
+        executions: 1,
+        logs: [],
+        output: {
+          status: 'success',
+          ...Object.fromEntries(Array.from({ length: 10 }, (_, k) => [`k${k}`, 'v'.repeat(150)])),
+        },
+        metrics: { durationMs: 10, executions: 1, usage: { inputTokens: 5, outputTokens: 2 }, model: 'm' },
+      };
+    }
+    const trimmed = trimRunView(view('big', 1, { steps }));
+    expect(trimmed.steps.s0.output).toBeUndefined();
+    expect(trimmed.steps.s0.metrics).toEqual({
+      durationMs: 10,
+      executions: 1,
+      usage: { inputTokens: 5, outputTokens: 2 },
+      model: 'm',
+    });
+  });
+});

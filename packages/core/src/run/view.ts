@@ -1,5 +1,7 @@
-import type { LogStream, RunEvent, StepOutput, Usage } from '../engine/types';
+import type { LogStream, RunEvent, Usage } from '../engine/types';
+import { usageOfOutput } from '../engine/usage';
 import type { RunRecordSummary } from '../protocol';
+import { addExecution, blockRunMetrics } from './metrics';
 import type { RunView, StepRunView } from './types';
 
 /** Log entries kept per block; older ones are dropped. */
@@ -36,14 +38,6 @@ function withActive(view: RunView, activeStepId: string | undefined): RunView {
   return activeStepId === undefined ? rest : { ...rest, activeStepId };
 }
 
-function usageOf(output: StepOutput): Usage | undefined {
-  const usage = output.usage;
-  if (typeof usage !== 'object' || usage === null) return undefined;
-  const { inputTokens, outputTokens } = usage as Record<string, unknown>;
-  if (typeof inputTokens !== 'number' || typeof outputTokens !== 'number') return undefined;
-  return { inputTokens, outputTokens };
-}
-
 /** Splits text into lines that keep their trailing newline; the last piece may be unfinished. */
 function splitKeepingNewlines(text: string): string[] {
   const parts: string[] = [];
@@ -78,6 +72,7 @@ function startStep(previous: StepRunView, event: Extract<RunEvent, { type: 'step
     ...(event.detail !== undefined && { detail: event.detail }),
     startedAt: event.at,
     logs: [],
+    ...(previous.metrics && { metrics: previous.metrics }),
   };
 }
 
@@ -89,6 +84,9 @@ function endStep(previous: StepRunView, event: Extract<RunEvent, { type: 'step-e
     output: event.output,
     durationMs: event.durationMs,
     ...(event.error !== undefined && { error: event.error }),
+    ...(event.status !== 'skipped' && {
+      metrics: addExecution(previous.metrics, event.durationMs, event.output),
+    }),
   };
 }
 
@@ -110,7 +108,7 @@ export function reduceRunEvent(view: RunView | null, event: RunEvent): RunView {
       return withStep(current, event.stepId, (step) => appendLog(step, event.stream, event.text));
     case 'step-end': {
       let next = withStep(current, event.stepId, (step) => endStep(step, event));
-      const usage = usageOf(event.output);
+      const usage = usageOfOutput(event.output);
       if (usage) {
         next = {
           ...next,
@@ -145,8 +143,9 @@ export function reduceRunEvent(view: RunView | null, event: RunEvent): RunView {
   }
 }
 
-/** Compact record of a run for history lists. */
+/** Compact record of a run for history lists (it lives in the history index, so no text or logs). */
 export function runRecordSummary(view: RunView, workflowUri: string): RunRecordSummary {
+  const blocks = blockRunMetrics(view.steps);
   return {
     runId: view.runId,
     workflowUri,
@@ -156,5 +155,6 @@ export function runRecordSummary(view: RunView, workflowUri: string): RunRecordS
     ...(view.durationMs !== undefined && { durationMs: view.durationMs }),
     ...(view.error !== undefined && { error: view.error }),
     usage: { ...view.usage },
+    ...(Object.keys(blocks).length > 0 && { blocks }),
   };
 }

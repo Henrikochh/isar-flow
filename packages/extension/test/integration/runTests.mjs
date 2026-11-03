@@ -113,6 +113,8 @@ async function main() {
         launchArgs: [
           ...(launch.folder ? [launch.folder] : []),
           '--disable-extensions',
+          // The GPU driver on some machines can freeze the whole system under load; tests need no GPU.
+          '--disable-gpu',
           `--user-data-dir=${userDataDir}`,
           `--extensions-dir=${path.join(profileDir, 'extensions')}`,
         ],

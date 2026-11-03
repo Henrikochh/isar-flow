@@ -4,7 +4,9 @@ import type { ToolHostOptions } from '../contracts';
 import { abortError, throwIfAborted } from './abort';
 import { gitDiff, runCommand } from './commandTools';
 import { editFile, writeFile } from './editTools';
+import { journaledWorkspace } from './journal';
 import { realRelativePath, resolveInWorkspaceReal } from './pathGuard';
+import { applyPatch } from './patchTool';
 import { PermissionGate } from './permissions';
 import { listFiles, readFile, searchText } from './readTools';
 import type { ToolContext, ToolImpl, ToolWorkspace } from './types';
@@ -15,6 +17,7 @@ const TOOLS: Record<ToolName, ToolImpl> = {
   searchText,
   gitDiff,
   editFile,
+  applyPatch,
   writeFile,
   runCommand,
 };
@@ -22,7 +25,7 @@ const TOOLS: Record<ToolName, ToolImpl> = {
 /**
  * Executes the built-in agent tools inside one workspace folder. Every failure comes back as an error
  * result for the model; only an aborted run (io.signal) rejects. "Allow for this run" answers live as long
- * as this host, so create one host per run.
+ * as this host, so create one host per run. With a journal, every write and delete is reported to it first.
  */
 export function createToolHost(options: ToolHostOptions & { runId: string }): ToolHost {
   const root = path.resolve(options.workspaceRoot);
@@ -44,7 +47,7 @@ export function createToolHost(options: ToolHostOptions & { runId: string }): To
       }
       const ctx: ToolContext = {
         root,
-        workspace,
+        workspace: options.journal ? journaledWorkspace(workspace, options.journal, io.stepId) : workspace,
         io,
         defaultShell: options.defaultShell,
         runCommand: options.runCommand,

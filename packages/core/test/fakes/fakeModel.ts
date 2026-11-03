@@ -38,6 +38,8 @@ export interface RecordedChat {
 export interface FakeModelInit {
   ref?: string;
   capabilities?: Partial<ModelCapabilities>;
+  /** Context size the model reports; compaction prefers it over the configured context size. */
+  maxInputTokens?: number;
 }
 
 /** A ChatModel that replays scripted turns and records every request it receives. */
@@ -48,6 +50,7 @@ export class FakeModel implements ChatModel {
   readonly id: string;
   readonly name: string;
   readonly capabilities: ModelCapabilities;
+  readonly maxInputTokens?: number;
   readonly calls: RecordedChat[] = [];
   private readonly turns: FakeTurn[];
   private callCount = 0;
@@ -60,6 +63,7 @@ export class FakeModel implements ChatModel {
     this.id = this.ref.slice(slash + 1);
     this.name = this.id;
     this.capabilities = { tools: true, jsonSchema: false, ...init.capabilities };
+    this.maxInputTokens = init.maxInputTokens;
   }
 
   get info(): ChatModelInfo {
@@ -70,6 +74,7 @@ export class FakeModel implements ChatModel {
       id: this.id,
       name: this.name,
       capabilities: this.capabilities,
+      maxInputTokens: this.maxInputTokens,
     };
   }
 
@@ -121,4 +126,9 @@ export function say(text: string | string[], usage?: Usage): FakeTurn {
 /** Shorthand for a turn that calls tools. */
 export function callTools(...toolCalls: FakeToolCall[]): FakeTurn {
   return { toolCalls };
+}
+
+/** A tool call written as text in the `<tool_call>` format, the way models without native tool calling answer. */
+export function textCall(name: string, args: Record<string, unknown> = {}): string {
+  return `<tool_call>${JSON.stringify({ name, arguments: args })}</tool_call>`;
 }

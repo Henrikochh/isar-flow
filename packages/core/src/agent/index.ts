@@ -18,4 +18,12 @@ export {
   validateOutputShape,
 } from './json';
 export { runAgentLoop } from './loop';
+export { DEFAULT_CONTEXT_TOKENS, estimateTokens, type TokenEstimateInput } from './compaction';
+export {
+  type MalformedToolCall,
+  parseTextToolCalls,
+  type TextToolCall,
+  type TextToolCallOptions,
+  type TextToolCalls,
+} from './toolCallText';
 export { type AgentRequestDeps, type ContextFile, executeAgentRequest } from './execute';

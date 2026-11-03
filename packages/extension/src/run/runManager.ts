@@ -1,7 +1,9 @@
+import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
   createRunView,
+  DEFAULT_CONTEXT_TOKENS,
   parseWorkflowText,
   reduceRunEvent,
   runWorkflow,
@@ -12,15 +14,26 @@ import {
   type RunView,
   type ShellName,
   type Workflow,
+  type WorkflowIsolation,
 } from '@isar-flow/core';
 import type { ActiveRun, RunManager, RunManagerDeps } from '../contracts';
+import { contextTokensSetting } from '../models/settings';
+import { worktreeNeedsGit } from '../safety/gitSnapshots';
+import { createRunSafety, type RunSafety, type SafetySession } from '../safety/runSafety';
 import { createApprovalBroker, type RunApprovalBroker } from './approvals';
-import { CommandApprovals, confirmCommands, consoleCommandsOf, unattendedAgentsOf } from './commandApproval';
+import {
+  CommandApprovals,
+  confirmCommands,
+  consoleCommandsOf,
+  setupCommandsOf,
+  unattendedAgentsOf,
+} from './commandApproval';
 import { createEngineHost } from './engineHost';
 import { errorMessage, formatDuration, formatElapsed } from './format';
 import { createFileHistoryStore, createRunHistory, type FileRunHistory } from './history';
 import { promptForInputs } from './inputs';
 import { WorkflowSecrets } from './secrets';
+import { runSetupCommands } from './setupCommands';
 
 export const WORKFLOW_EDITOR_VIEW_TYPE = 'isarFlow.workflowEditor';
 const SHELLS: readonly ShellName[] = ['auto', 'pwsh', 'powershell', 'cmd', 'bash', 'sh'];
@@ -28,6 +41,9 @@ const TRUST_BUTTON = 'Manage Workspace Trust';
 const UNTRUSTED_MESSAGE = "Workflows don't run in Restricted Mode. Trust this workspace to run them.";
 const PROBLEMS_BUTTON = 'Show problems';
 const OUTCOME_WORDS = { success: 'succeeded', failure: 'failed', cancelled: 'was cancelled' } as const;
+const REVIEW_BUTTON = 'Review changes';
+/** Opens the canvas on a run (registered by the workflow editor). */
+const SHOW_RUN_COMMAND = 'isarFlow.internal.showRun';
 
 /** The part of vscode.StatusBarItem the manager uses. */
 export interface RunStatusItem {
@@ -73,6 +89,8 @@ export interface RunManagerOptions {
    * workflow's own folder. Defaults to deps.readContextFiles.
    */
   readContextFilesIn?: (workspaceRoot: string) => RunManagerDeps['readContextFiles'];
+  /** Snapshots, edit journal and review; created in the extension storage by default. */
+  safety?: RunSafety;
   now?: () => number;
 }
 
@@ -90,6 +108,23 @@ interface LiveRun extends ActiveRun {
   controller: AbortController;
   statusItem: RunStatusItem;
   timer: ReturnType<typeof setInterval>;
+}
+
+/** Everything a run needs once it is registered: the workflow, inputs and the settings read at start. */
+interface RunPlan {
+  workflow: Workflow;
+  inputs: Record<string, unknown>;
+  agents: Record<string, AgentDefinition>;
+  uri: vscode.Uri;
+  /** Folder console commands run in (see RunManagerUi.workspaceRoot); the snapshot covers it. */
+  workspaceRoot: string;
+  /** Workspace folder of the workflow; undefined outside all folders (agent tools use the first folder). */
+  folder: string | undefined;
+  isolation: WorkflowIsolation;
+  defaultShell: ShellName;
+  tokenBudget: number;
+  contextTokens: number;
+  secrets: Record<string, string>;
 }
 
 const vscodeUi: RunManagerUi = {
@@ -146,6 +181,20 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
   const approvals = options.approvals ?? createApprovalBroker();
   const secrets = options.secrets ?? new WorkflowSecrets(context);
   const commandApprovals = options.commandApprovals ?? new CommandApprovals(context.workspaceState);
+  const safety =
+    options.safety ??
+    createRunSafety({
+      storageDir:
+        (context.storageUri ?? context.globalStorageUri)?.fsPath ?? path.join(os.tmpdir(), 'isar-flow'),
+      log,
+      history,
+    });
+  // Restricted Mode runs no git commands in the workspace; the next trusted start cleans up.
+  if (ui.isTrusted()) {
+    safety
+      .cleanup()
+      .catch((error: unknown) => log.warn(`Could not clean up old run snapshots: ${errorMessage(error)}`));
+  }
 
   const onEvent = new vscode.EventEmitter<{ workflowUri: string; event: RunEvent }>();
   const onDidChangeRuns = new vscode.EventEmitter<void>();
@@ -225,25 +274,160 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     if (!disposed) onDidChangeRuns.fire();
   };
 
-  const execute = async (run: LiveRun, workflow: Workflow, runOptions: RunOptions) => {
-    const startedAt = now();
+  /**
+   * Ends a run that never reached the engine (no worktree, a failed or cancelled setup) with a start and an end
+   * event, like the engine would, and drops its snapshots and worktree.
+   */
+  const stopBeforeEngine = async (
+    run: LiveRun,
+    plan: RunPlan,
+    startedAt: number,
+    error: string | undefined,
+    session?: SafetySession,
+  ) => {
+    handleEvent(run, {
+      type: 'run-start',
+      runId: run.runId,
+      workflowName: run.name,
+      startedAt,
+      inputs: plan.inputs,
+    });
+    handleEvent(run, {
+      type: 'run-end',
+      runId: run.runId,
+      status: error === undefined ? 'cancelled' : 'failure',
+      ...(error !== undefined && { error }),
+      durationMs: now() - startedAt,
+      usage: run.view.usage,
+    });
+    await session
+      ?.discard()
+      .catch((cause: unknown) => log.warn(`Could not clean up run ${run.runId}: ${errorMessage(cause)}`));
+    await finish(run);
+    return run.view;
+  };
+
+  /** Snapshot (and worktree) before the run. A workspace run goes ahead without them when that fails. */
+  const beginSafety = async (
+    run: LiveRun,
+    plan: RunPlan,
+  ): Promise<{ session?: SafetySession; error?: string }> => {
     try {
-      for await (const event of runWorkflow(workflow, runOptions)) handleEvent(run, event);
+      const folder = plan.workspaceRoot;
+      return {
+        session: await safety.begin({
+          runId: run.runId,
+          workflowUri: run.workflowUri,
+          folder,
+          isolation: plan.isolation,
+        }),
+      };
     } catch (error) {
-      log.error(`Run ${run.runId} stopped unexpectedly: ${errorMessage(error)}`);
+      if (plan.isolation === 'worktree') return { error: errorMessage(error) };
+      log.warn(`Run ${run.runId} runs without snapshots: ${errorMessage(error)}`);
+      return {};
+    }
+  };
+
+  const execute = async (run: LiveRun, plan: RunPlan) => {
+    const startedAt = now();
+    const { runId } = run;
+    const isolated = plan.isolation === 'worktree';
+    const { session, error } = await beginSafety(run, plan);
+    if (error !== undefined) return stopBeforeEngine(run, plan, startedAt, error);
+
+    const terminal = deps.terminalFor(plan.workflow.name);
+    const root = session?.root ?? plan.workspaceRoot;
+    const setup = isolated ? setupCommandsOf(plan.workflow) : [];
+    if (setup.length > 0) {
+      const stopped = await runSetupCommands({
+        commands: setup,
+        cwd: root,
+        shell: plan.defaultShell,
+        runCommand: deps.runCommand,
+        terminal,
+        signal: run.controller.signal,
+        now,
+      });
+      if (stopped)
+        return stopBeforeEngine(
+          run,
+          plan,
+          startedAt,
+          'error' in stopped ? stopped.error : undefined,
+          session,
+        );
+    }
+
+    // Agents only see workspace folders: a workflow outside all folders gets the default (first) folder.
+    const toolRoot = isolated ? root : plan.folder;
+    const contextRoot = isolated ? root : plan.folder;
+    const host = createEngineHost({
+      runId,
+      workspaceRoot: root,
+      runCommand: deps.runCommand,
+      terminal,
+      models: deps.models,
+      toolHost: deps.tools(runId, toolRoot, session ? { journal: session.journal } : {}),
+      readContextFiles: (contextRoot && options.readContextFilesIn?.(contextRoot)) || deps.readContextFiles,
+      approve: (req, signal) =>
+        approvals.request(
+          { runId, stepId: req.stepId, message: req.message, workflowUri: run.workflowUri },
+          signal,
+        ),
+      now,
+      secrets: plan.secrets,
+      contextTokens: plan.contextTokens,
+    });
+    const runOptions: RunOptions = {
+      runId,
+      inputs: plan.inputs,
+      host,
+      agents: plan.agents,
+      signal: run.controller.signal,
+      env: stringEnv(options.env ?? process.env),
+      secrets: plan.secrets,
+      workflowFile: plan.uri.fsPath,
+      workspaceRoot: root,
+      ...(plan.tokenBudget > 0 && { tokenBudget: plan.tokenBudget }),
+      defaultShell: plan.defaultShell,
+      now,
+    };
+    try {
+      for await (const event of runWorkflow(plan.workflow, runOptions)) handleEvent(run, event);
+    } catch (error) {
+      log.error(`Run ${runId} stopped unexpectedly: ${errorMessage(error)}`);
     }
     if (run.view.status === 'running') {
       const aborted = run.controller.signal.aborted;
       handleEvent(run, {
         type: 'run-end',
-        runId: run.runId,
+        runId,
         status: aborted ? 'cancelled' : 'failure',
         ...(!aborted && { error: 'The run stopped unexpectedly. See the Isar Flow log for details.' }),
         durationMs: now() - startedAt,
         usage: run.view.usage,
       });
     }
+
+    // The run stays active until its after snapshot is taken, so the same workflow can't start in between.
+    let changed = 0;
+    if (session) {
+      try {
+        changed = await session.finish({ skipSnapshot: disposed });
+      } catch (error) {
+        log.error(`Could not build the review of run ${runId}: ${errorMessage(error)}`);
+      }
+    }
     await finish(run);
+    await session?.publish().catch((error: unknown) => {
+      log.warn(`Could not publish the review of run ${runId}: ${errorMessage(error)}`);
+    });
+    if (changed > 0 && !disposed) {
+      notify(ui.showInfo(`${run.name} changed ${plural(changed, 'file')}.`, REVIEW_BUTTON), {
+        [REVIEW_BUTTON]: () => ui.executeCommand(SHOW_RUN_COMMAND, run.workflowUri, runId),
+      });
+    }
     return run.view;
   };
 
@@ -254,27 +438,29 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     agents: Record<string, AgentDefinition>,
   ) => {
     const workflowUri = uri.toString();
-    const runId = newRunId();
     const workspaceRoot = ui.workspaceRoot(uri);
-    // Agents only see workspace folders: a workflow outside all folders gets the default (first) folder.
-    const folder = ui.workspaceFolder(uri);
-    const tokenBudget = ui.setting('maxTokensPerRun', 0, uri);
+    const isolation = workflow.isolation === 'worktree' ? 'worktree' : 'workspace';
+    if (isolation === 'worktree' && !(await safety.canIsolate(workspaceRoot))) {
+      notify(ui.showError(worktreeNeedsGit(workspaceRoot)), {});
+      return undefined;
+    }
+    const runId = newRunId();
     const configuredShell = ui.setting<string>('defaultShell', 'auto', uri);
-    const defaultShell = SHELLS.find((s) => s === configuredShell) ?? 'auto';
-    const secretValues = await secrets.getAll();
-    const host = createEngineHost({
-      runId,
+    const plan: RunPlan = {
+      workflow,
+      inputs,
+      agents,
+      uri,
       workspaceRoot,
-      runCommand: deps.runCommand,
-      terminal: deps.terminalFor(workflow.name),
-      models: deps.models,
-      toolHost: deps.tools(runId, folder),
-      readContextFiles: (folder && options.readContextFilesIn?.(folder)) || deps.readContextFiles,
-      approve: (req, signal) =>
-        approvals.request({ runId, stepId: req.stepId, message: req.message, workflowUri }, signal),
-      now,
-      secrets: secretValues,
-    });
+      folder: ui.workspaceFolder(uri),
+      isolation,
+      defaultShell: SHELLS.find((s) => s === configuredShell) ?? 'auto',
+      tokenBudget: ui.setting('maxTokensPerRun', 0, uri),
+      contextTokens:
+        contextTokensSetting(ui.setting<unknown>('agentContextTokens', undefined, uri)) ??
+        DEFAULT_CONTEXT_TOKENS,
+      secrets: await secrets.getAll(),
+    };
 
     const controller = new AbortController();
     const statusItem = ui.createStatusItem();
@@ -301,22 +487,11 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
       timer: setInterval(updateStatus, 1000),
     };
     runs.set(runId, run);
-    log.info(`Run ${runId} of '${workflow.name}' started (${uri.fsPath}).`);
+    log.info(
+      `Run ${runId} of '${workflow.name}' started (${uri.fsPath}${isolation === 'worktree' ? ', in a git worktree' : ''}).`,
+    );
     onDidChangeRuns.fire();
-    const completion = execute(run, workflow, {
-      runId,
-      inputs,
-      host,
-      agents,
-      signal: controller.signal,
-      env: stringEnv(options.env ?? process.env),
-      secrets: secretValues,
-      workflowFile: uri.fsPath,
-      workspaceRoot,
-      ...(tokenBudget > 0 && { tokenBudget }),
-      defaultShell,
-      now,
-    }).finally(() => completions.delete(runId));
+    const completion = execute(run, plan).finally(() => completions.delete(runId));
     completions.set(runId, completion);
     return runId;
   };
@@ -328,6 +503,7 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
     onDidChangeRuns: onDidChangeRuns.event,
     history,
     approvals,
+    reviews: safety.reviews,
 
     async start(uri, inputs) {
       if (disposed) return undefined;
@@ -416,6 +592,7 @@ export function createRunManager(deps: RunManagerDeps, options: RunManagerOption
         run.statusItem.dispose();
       }
       approvals.dispose();
+      safety.dispose();
       onEvent.dispose();
       onDidChangeRuns.dispose();
       history.dispose();

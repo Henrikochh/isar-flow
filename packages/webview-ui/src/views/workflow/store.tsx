@@ -15,6 +15,7 @@ import {
   type HostToWorkflowEditor,
   type ModelCatalog,
   type RunRecordSummary,
+  type RunReview,
   type RunView,
   type Workflow,
   type WorkflowDocumentState,
@@ -46,6 +47,10 @@ export interface WorkflowUiState {
   selection: string | null;
   /** Last ops error from the host, shown as a dismissible banner. */
   opsError: string | null;
+  /** Files the shown run changed and the decisions about them; null when it changed none. */
+  review: RunReview | null;
+  /** A review that arrived before its run; shown once that run is shown. */
+  parkedReview?: RunReview | null;
   /**
    * Most recent non-null workflow model. While the YAML has a syntax error (`doc.workflow` is null) the canvas
    * keeps rendering this one, dimmed.
@@ -72,6 +77,7 @@ export const initialWorkflowUiState: WorkflowUiState = {
   approvals: [],
   selection: null,
   opsError: null,
+  review: null,
 };
 
 /** The document the host will send for `text`, parsed and validated the way the host does it. */
@@ -144,13 +150,26 @@ export function workflowUiReducer(state: WorkflowUiState, action: WorkflowUiActi
       return { ...state, agents: action.agents, catalog: action.catalog };
     case 'trust':
       return { ...state, trusted: action.trusted };
-    case 'run':
-      return { ...state, run: action.run, runLive: action.live };
+    case 'run': {
+      const runId = action.run?.runId;
+      const review = [state.review, state.parkedReview].find((r) => r && r.runId === runId) ?? null;
+      return { ...state, run: action.run, runLive: action.live, review, parkedReview: null };
+    }
     case 'runEvent': {
       // While a past run is shown, live events are ignored; the host sends a 'run' snapshot when switching back.
       if (state.run && !state.runLive && action.event.type !== 'run-start') return state;
-      const base = action.event.type === 'run-start' ? null : state.run;
-      return { ...state, run: reduceRunEvent(base, action.event), runLive: true };
+      const start = action.event.type === 'run-start';
+      const run = reduceRunEvent(start ? null : state.run, action.event);
+      return start
+        ? { ...state, run, runLive: true, review: null, parkedReview: null }
+        : { ...state, run, runLive: true };
+    }
+    case 'review': {
+      const review = action.review;
+      if (!review) return { ...state, review: null, parkedReview: null };
+      return review.runId === state.run?.runId
+        ? { ...state, review, parkedReview: null }
+        : { ...state, parkedReview: review };
     }
     case 'history':
       return { ...state, history: action.runs };
@@ -185,6 +204,9 @@ export interface WorkflowActions {
   cancelRun(): void;
   selectRun(runId: string | null): void;
   answerApproval(requestId: string, approved: boolean, comment?: string): void;
+  /** Keeps or reverts files of a run's review; without paths every pending file. */
+  reviewFiles(runId: string, decision: 'kept' | 'reverted', paths?: string[]): void;
+  openReviewDiff(runId: string, path: string): void;
   openYaml(stepId?: string): void;
   openAgent(agentId: string): void;
   createAgent(): void;
@@ -221,6 +243,11 @@ export function WorkflowStoreProvider({
       selectRun: (runId) => send({ type: 'selectRun', runId }),
       answerApproval: (requestId, approved, comment) =>
         send({ type: 'approval', requestId, approved, comment }),
+      reviewFiles: (runId, decision, paths) =>
+        send(
+          paths ? { type: 'reviewFiles', runId, decision, paths } : { type: 'reviewFiles', runId, decision },
+        ),
+      openReviewDiff: (runId, path) => send({ type: 'openReviewDiff', runId, path }),
       openYaml: (stepId) => send({ type: 'openYaml', stepId }),
       openAgent: (agentId) => send({ type: 'openAgent', agentId }),
       createAgent: () => send({ type: 'createAgent' }),

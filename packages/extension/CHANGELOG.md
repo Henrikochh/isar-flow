@@ -2,6 +2,67 @@
 
 All notable changes to Isar Flow are listed here.
 
+## 0.2.0 (unreleased)
+
+Trust and real-world use.
+
+### Added
+
+- **Review changes**: after a run that changed files, a notification (`<workflow> changed 3 files.` with
+  **Review changes**) and a review card above the canvas list every changed file with its status, +/- lines
+  and the block that changed it (**Command** for console commands). Select a file for a diff of before and
+  now; **Keep** or **Revert** each file, or **Keep all** / **Revert all**. Reverts restore files byte for byte,
+  recreate deleted files and delete added ones, and ask first when a file changed again after the run. Past
+  runs keep their decisions (`3 kept, 1 reverted`, `2 to review`) in the Runs menu, the run history and the
+  sidebar.
+- **Run snapshots**: in a git repository, the workflow's folder is snapshotted before and after each run with a
+  temporary index (`refs/isarflow/runs/<run>/before` and `…/after`); your index, branch, stash and working tree
+  are never touched. Without git, an edit journal keeps the originals of files that agents write.
+- **Worktree isolation**: `isolation: worktree` runs a workflow on its own git worktree, checked out at the
+  before snapshot, with optional `setup:` commands (for example `npm ci`) that run first and are part of the
+  command confirmation. **Keep** copies a change into the workspace; the worktree is removed once every file is
+  decided. The workflow panel has a **Run in** switch and a list of setup commands. New example:
+  `examples/worktree-fix.workflow.yaml`.
+- **`applyPatch` tool** (Apply patches, edit permission): unified diffs over one or more files, including new
+  and deleted files, with tolerant hunk matching near the stated line, all or nothing, and clear per-hunk
+  errors. The Coder starter includes it.
+- **Tool calls for local models**: agent setting `toolMode` (**Tool calls**: Automatic, Native, Text in the
+  prompt). Automatic also runs tool calls a model writes as text (`<tool_call>` tags, fenced or plain JSON)
+  and switches to text tool mode for models without native tool calling.
+- **Conversation summaries**: when an agent's conversation grows above 70 % of the model's context
+  (`maxInputTokens`, else the new setting `isarFlow.agentContextTokens`, default 24000), older turns are
+  replaced by a summary from the same model. The run log notes each one.
+- **Test model**: command **Isar Flow: Test model**, a beaker button on endpoints in the sidebar and **Test
+  model** in the agent editor. One tool call and one JSON answer show whether tool calls work, the model needs
+  text tool mode, or what to fix. Results are kept for 30 days and shown as chips in the model pickers.
+- **Check setup**: command **Isar Flow: Check setup** and a sidebar button check every endpoint and test the
+  models your workflows use, with a fix button per problem.
+- **Time and tokens per block**: block cards show time, tokens and cost after a run; the inspector's run
+  summary has a table per block (status, time, tokens, model, iterations) and averages over the last 20 runs;
+  a block's run output adds turns, tool calls and its own averages. Agent blocks have a new output
+  `toolCalls`.
+- **Model prices**: setting `isarFlow.modelPrices` (per 1 million input and output tokens by model
+  reference). Costs are shown only for listed models.
+- **Capability badges**: **Read-only**, **Edits files (asks/auto)** and **Runs commands (asks/auto)** on agent
+  rows, the agent editor header and agent cards. The Blank starter says that it is read-only, and the New
+  agent card recommends Coder for agents that change code.
+
+### Changed
+
+- `editFile` matches tolerantly: exactly, then ignoring line-ending differences, then ignoring whitespace per
+  line (indentation taken from the file). The match must still be unique, also in a file with mixed line
+  endings.
+- `editFile` and `applyPatch` no longer change files that are not UTF-8: their unreadable characters would have
+  been replaced with `�`.
+- When an agent changes a file that has unsaved changes in an editor, the write saves them; **Revert** now
+  restores that unsaved text instead of the older file on disk.
+- `steps.<id>.usage` of a retried block now adds up every attempt (it was the last attempt only), so block
+  tokens add up to the run total. `toolCalls` adds up the same way, and failed agent blocks report the tool
+  calls they made.
+- `isarFlow.historyLimit` also removes the snapshots, review data and worktrees of runs dropped from the
+  history.
+- Integration tests start VS Code with `--disable-gpu`.
+
 ## 0.1.0
 
 First release.

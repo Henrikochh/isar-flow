@@ -68,6 +68,8 @@ export interface AgentResult {
   model: string;
   usage: Usage;
   turns: number;
+  /** Tool calls the agent made (all models of the block); becomes `steps.<id>.toolCalls`. */
+  toolCalls?: number;
   /** Full conversation after this call; stored by the engine for `session: continue`. */
   messages: ChatMessage[];
 }

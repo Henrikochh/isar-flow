@@ -373,7 +373,7 @@ describe('agent diagnostics', () => {
         severity: 'error',
         code: 'invalid-value',
         message:
-          "Invalid value 'fly' in 'tools'. Use one of: readFile, listFiles, searchText, gitDiff, editFile, writeFile, runCommand.",
+          "Invalid value 'fly' in 'tools'. Use one of: readFile, listFiles, searchText, gitDiff, editFile, applyPatch, writeFile, runCommand.",
         path: ['tools', 1],
         range: { start: { line: 2, character: 18 }, end: { line: 2, character: 21 } },
       },

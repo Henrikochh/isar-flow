@@ -1,0 +1,34 @@
+# Fixes failing tests on a separate git worktree, so your files stay untouched while the agent works.
+# After the run, the review card lists every changed file: Keep copies a change into your workspace,
+# Revert drops it. Needs a git repository and the agent "coder" in .isarflow/agents/ (see examples/agents).
+# Replace "npm ci" and "npm test" with your install and test commands.
+version: 1
+name: Fix tests in a worktree
+description: Fix failing tests on a copy of the repository, then keep the changes you want.
+isolation: worktree # the run gets its own git worktree, checked out with your uncommitted work
+setup: # runs in the worktree before the first block, one command after the other
+  - npm ci
+steps:
+  - id: fix_loop
+    type: loop
+    until: { value: '${{ steps.tests.exitCode }}', op: eq, to: 0 }
+    maxIterations: 5
+    steps:
+      - id: tests
+        type: console
+        run: npm test
+        continueOnError: true
+        timeout: 600
+
+      - id: failing
+        type: if
+        condition: { value: '${{ steps.tests.exitCode }}', op: neq, to: 0 }
+        then:
+          - id: fix
+            type: agent
+            agent: coder
+            prompt: |
+              The tests fail with exit code ${{ steps.tests.exitCode }}. Find the cause and fix it.
+              Change a test only if the test itself is wrong.
+              Last lines of the test output:
+              ${{ tail(steps.tests.output, 80) }}

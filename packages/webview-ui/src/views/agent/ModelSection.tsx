@@ -1,46 +1,94 @@
 import { useMemo } from 'react';
-import type { ModelCatalog } from '@isar-flow/core';
+import type { ModelCatalog, ToolMode } from '@isar-flow/core';
 import { Chip, Field, IconButton, ModelPicker, Section } from '../../components';
 import type { AgentForm, FieldIssues, UpdateAgent } from './agentForm';
+import { ProbeResult, probeOf, TestModelButton } from './ModelTest';
 import { NumberField } from './NumberField';
+import { ToolModeField } from './ToolModeField';
 
 interface CatalogActions {
   onRefresh: () => void;
   onAddProvider: () => void;
 }
 
-/** A hint about the chosen model that the schema cannot know: unlisted models, missing tool support. */
-export function modelNote(ref: string, usesTools: boolean, catalog: ModelCatalog): string | undefined {
-  if (!ref) return 'Choose the model this agent talks to.';
+export interface ModelNote {
+  text: string;
+  /** info: how the agent copes with the model; warning: something to fix. */
+  tone: 'info' | 'warning';
+}
+
+const warning = (text: string): ModelNote => ({ text, tone: 'warning' });
+
+/** Tool call mode the agent runs with: unknown values count as automatic, like the default. */
+export function effectiveToolMode(value: string | undefined): ToolMode {
+  return value === 'native' || value === 'text' ? value : 'auto';
+}
+
+/**
+ * A hint about the chosen model that the schema cannot know: unlisted models, missing tool support (from the model
+ * list or a "Test model" that needed text mode).
+ */
+export function modelNote(
+  ref: string,
+  usesTools: boolean,
+  catalog: ModelCatalog,
+  toolMode: ToolMode = 'auto',
+): ModelNote | undefined {
+  if (!ref) return warning('Choose the model this agent talks to.');
   const info = catalog.models.find((m) => m.ref === ref);
-  if (info)
-    return usesTools && !info.capabilities.tools
-      ? "This model can't call tools, so the agent's tools won't be used."
-      : undefined;
-  if (catalog.loading) return undefined;
+  const textOnly =
+    (info !== undefined && !info.capabilities.tools) || probeOf(catalog, ref)?.outcome === 'text';
+  if (usesTools && textOnly) {
+    if (toolMode === 'native')
+      return warning(
+        "This model can't call tools natively. Set Tool calls to Automatic or Text in the prompt.",
+      );
+    if (toolMode === 'auto')
+      return {
+        text: "This model can't call tools natively, so Automatic describes the tools in the prompt.",
+        tone: 'info',
+      };
+    return undefined;
+  }
+  if (info || catalog.loading) return undefined;
   const providerId = ref.split('/')[0];
   const provider = catalog.providers.find((p) => p.id === providerId);
   if (!provider)
-    return `No endpoint called "${providerId}" is set up. Add an endpoint or choose another model.`;
+    return warning(`No endpoint called "${providerId}" is set up. Add an endpoint or choose another model.`);
   if (provider.status === 'error')
-    return `${provider.label} can't be reached right now, so this model can't be checked.`;
+    return warning(`${provider.label} can't be reached right now, so this model can't be checked.`);
   if (provider.status === 'ok')
-    return `${provider.label} doesn't list this model. Refresh models or choose another one.`;
+    return warning(`${provider.label} doesn't list this model. Refresh models or choose another one.`);
   return undefined;
 }
 
-function ModelSummary({ refText, catalog, note }: { refText: string; catalog: ModelCatalog; note?: string }) {
+function ModelSummary({
+  refText,
+  catalog,
+  note,
+  toolMode,
+}: {
+  refText: string;
+  catalog: ModelCatalog;
+  note?: ModelNote;
+  toolMode: ToolMode;
+}) {
   const info = catalog.models.find((m) => m.ref === refText);
+  const probe = probeOf(catalog, refText);
   return (
     <span className="ag-model-summary">
       {/* The picker shows a listed model by its name; an unlisted one already appears there as its reference. */}
       {info ? <span className="ag-model-summary__ref">{refText}</span> : null}
       {info?.capabilities.tools ? <Chip tone="outline">Tools</Chip> : null}
       {info?.capabilities.jsonSchema ? <Chip tone="outline">JSON</Chip> : null}
+      {probe ? <ProbeResult probe={probe} settled={probe.outcome === 'text' && toolMode === 'text'} /> : null}
       {note ? (
-        <span className="ag-model-summary__note">
-          <i className="codicon codicon-warning ag-model-summary__icon" aria-hidden="true" />
-          {note}
+        <span className={`ag-model-summary__note ag-model-summary__note--${note.tone}`}>
+          <i
+            className={`codicon codicon-${note.tone === 'info' ? 'info' : 'warning'} ag-model-summary__icon`}
+            aria-hidden="true"
+          />
+          {note.text}
         </span>
       ) : null}
     </span>
@@ -126,17 +174,21 @@ export function ModelSection({
   update,
   onRefresh,
   onAddProvider,
+  onTestModel,
 }: {
   form: AgentForm;
   catalog: ModelCatalog;
   issues: FieldIssues;
   update: UpdateAgent;
+  onTestModel: (ref: string) => void;
 } & CatalogActions) {
   const modelIssue = issues.message('model');
-  const note =
+  const note: ModelNote | undefined =
     modelIssue.error || modelIssue.warning
       ? modelIssue.warning
-      : modelNote(form.model, form.tools.length > 0, catalog);
+        ? warning(modelIssue.warning)
+        : undefined
+      : modelNote(form.model, form.tools.length > 0, catalog, effectiveToolMode(form.toolMode));
   const setNumber = (key: 'temperature' | 'maxTokens' | 'maxTurns') => (value: number | undefined) =>
     value === undefined ? update({}, [key]) : update({ [key]: value });
 
@@ -145,21 +197,33 @@ export function ModelSection({
       <Field
         label="Main model"
         error={modelIssue.error}
-        hint={<ModelSummary refText={form.model} catalog={catalog} note={note} />}
+        hint={
+          <ModelSummary
+            refText={form.model}
+            catalog={catalog}
+            note={note}
+            toolMode={effectiveToolMode(form.toolMode)}
+          />
+        }
       >
         {({ id, describedBy, invalid }) => (
-          <ModelPicker
-            id={id}
-            describedBy={describedBy}
-            invalid={invalid}
-            value={form.model || undefined}
-            catalog={catalog}
-            onChange={(ref) => {
-              if (ref && ref !== form.model) update({ model: ref });
-            }}
-            onRefresh={onRefresh}
-            onAddProvider={onAddProvider}
-          />
+          <div className="ag-model-row">
+            <div className="ag-model-row__picker">
+              <ModelPicker
+                id={id}
+                describedBy={describedBy}
+                invalid={invalid}
+                value={form.model || undefined}
+                catalog={catalog}
+                onChange={(ref) => {
+                  if (ref && ref !== form.model) update({ model: ref });
+                }}
+                onRefresh={onRefresh}
+                onAddProvider={onAddProvider}
+              />
+            </div>
+            <TestModelButton refText={form.model} catalog={catalog} onTest={onTestModel} />
+          </div>
         )}
       </Field>
       <FallbackModels
@@ -171,6 +235,7 @@ export function ModelSection({
         onRefresh={onRefresh}
         onAddProvider={onAddProvider}
       />
+      <ToolModeField value={form.toolMode} error={issues.message('toolMode').error} update={update} />
       <div className="ag-numbers">
         <NumberField
           label="Temperature"

@@ -15,6 +15,9 @@ import { EditQueue } from './editQueue';
 import { fileNameOf } from './files';
 import { AGENT_EDITOR_VIEW_TYPE, DOCUMENT_DEBOUNCE_MS, type EditorDocument, type EditorUi } from './host';
 
+const UNTRUSTED_REVIEW = 'Trust this workspace to keep or revert changes.';
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
 /**
  * Host side of one workflow canvas: answers webview messages and keeps the webview in sync with the document,
  * the stores and runs. Free of webview plumbing so it can be unit-tested; see workflowEditor.ts for the wiring.
@@ -29,6 +32,8 @@ export class WorkflowPanel implements vscode.Disposable {
   private historyRunId: string | undefined;
   /** Past run to show once the webview is ready. */
   private requestedRunId: string | undefined;
+  /** Run on the canvas (live or past), whose review the canvas shows. */
+  private shownRunId: string | undefined;
   /** Registration with the approval broker; held while the panel is visible. */
   private attachment: vscode.Disposable | undefined;
   private readonly edits: EditQueue;
@@ -59,6 +64,13 @@ export class WorkflowPanel implements vscode.Disposable {
         if (forThisWorkflow(workflowUri)) this.post({ type: 'approvalResolved', requestId });
       }),
     ];
+    if (runs.reviews) {
+      this.subscriptions.push(
+        runs.reviews.onDidChange(({ workflowUri, runId }) => {
+          if (forThisWorkflow(workflowUri) && runId === this.shownRunId) void this.sendReview();
+        }),
+      );
+    }
   }
 
   async handle(message: WorkflowEditorToHost): Promise<void> {
@@ -89,6 +101,10 @@ export class WorkflowPanel implements vscode.Disposable {
         return;
       case 'copyToClipboard':
         return this.ui.writeClipboard(message.text);
+      case 'reviewFiles':
+        return this.reviewFiles(message.runId, message.decision, message.paths);
+      case 'openReviewDiff':
+        return this.openReviewDiff(message.runId, message.path);
       default: {
         const unknown: never = message;
         throw new Error(`Unknown workflow editor message ${JSON.stringify(unknown)}`);
@@ -180,8 +196,13 @@ export class WorkflowPanel implements vscode.Disposable {
     this.requestedRunId = undefined;
     this.historyRunId = undefined;
     const live = this.liveRun();
-    if (requested !== undefined) void this.selectRun(requested);
-    else if (live) this.post({ type: 'run', run: live.view, live: true });
+    if (requested !== undefined) {
+      void this.selectRun(requested);
+    } else {
+      this.shownRunId = live?.runId;
+      if (live) this.post({ type: 'run', run: live.view, live: true });
+      void this.sendReview();
+    }
     for (const prompt of this.approvals.for(this.uri)) this.post({ type: 'approvalRequest', prompt });
   }
 
@@ -189,21 +210,77 @@ export class WorkflowPanel implements vscode.Disposable {
     const live = this.liveRun();
     if (runId === null || runId === live?.runId) {
       this.historyRunId = undefined;
+      this.shownRunId = live?.runId;
       this.post({ type: 'run', run: live?.view ?? null, live: live !== undefined });
-      return;
+      return this.sendReview();
     }
     this.historyRunId = runId;
+    this.shownRunId = runId;
     const { history } = this.services.runs;
     const cached = history.get(runId);
-    if (cached) return this.post({ type: 'run', run: cached, live: false });
+    if (cached) {
+      this.post({ type: 'run', run: cached, live: false });
+      return this.sendReview();
+    }
     const stored = await history.getAsync(runId).catch(() => undefined);
     // Another run may have been selected, or a new run started, while the saved run was read.
-    if (this.historyRunId === runId) this.post({ type: 'run', run: stored ?? null, live: false });
+    if (this.historyRunId !== runId) return;
+    this.post({ type: 'run', run: stored ?? null, live: false });
+    return this.sendReview();
+  }
+
+  /** Whether a run (live or saved) belongs to this workflow; webview messages may only touch those. */
+  private ownsRun(runId: string): boolean {
+    const { runs } = this.services;
+    return (
+      runs.active(this.uri).some((run) => run.runId === runId) ||
+      runs.history.list(this.uri).some((record) => record.runId === runId && record.workflowUri === this.uri)
+    );
+  }
+
+  /** Posts the review of the run on the canvas (null when it has none). */
+  private async sendReview(): Promise<void> {
+    const { reviews } = this.services.runs;
+    if (!reviews) return;
+    const runId = this.shownRunId;
+    const wanted = runId !== undefined && this.ui.isTrusted() && this.ownsRun(runId);
+    const review = wanted ? await reviews.get(runId).catch(() => undefined) : undefined;
+    // The canvas may have moved on to another run meanwhile.
+    if (runId === this.shownRunId) this.post({ type: 'review', review: review ?? null });
+  }
+
+  private async reviewFiles(runId: unknown, decision: unknown, paths: unknown): Promise<void> {
+    const { reviews } = this.services.runs;
+    if (!reviews || typeof runId !== 'string' || (decision !== 'kept' && decision !== 'reverted')) return;
+    if (paths !== undefined && !(Array.isArray(paths) && paths.every((p) => typeof p === 'string'))) return;
+    if (!this.ownsRun(runId)) return;
+    if (!this.ui.isTrusted()) return this.ui.showError(UNTRUSTED_REVIEW);
+    try {
+      await reviews.decide(runId, decision, paths as string[] | undefined);
+    } catch (error) {
+      this.ui.showError(
+        `Could not ${decision === 'kept' ? 'keep' : 'revert'} the changes: ${errorText(error)}`,
+      );
+    }
+  }
+
+  private async openReviewDiff(runId: unknown, file: unknown): Promise<void> {
+    const { reviews } = this.services.runs;
+    if (!reviews || typeof runId !== 'string' || typeof file !== 'string' || !this.ownsRun(runId)) return;
+    if (!this.ui.isTrusted()) return this.ui.showError(UNTRUSTED_REVIEW);
+    try {
+      await reviews.openDiff(runId, file);
+    } catch (error) {
+      this.ui.showError(`Could not open the diff of ${file}: ${errorText(error)}`);
+    }
   }
 
   /** Live events go to the canvas unless it shows a past run; a new run always takes over the canvas. */
   private onRunEvent(event: RunEvent): void {
-    if (event.type === 'run-start') this.historyRunId = undefined;
+    if (event.type === 'run-start') {
+      this.historyRunId = undefined;
+      this.shownRunId = event.runId;
+    }
     if (this.historyRunId === undefined) this.post({ type: 'runEvent', event });
   }
 

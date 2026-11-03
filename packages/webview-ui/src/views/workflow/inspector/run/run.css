@@ -261,16 +261,52 @@
   overflow: hidden;
 }
 
-/* The blocks of the run on a thin river; each item draws its own segment so unreached ones fade. */
-.wf-run-river {
+/*
+ * Blocks in this run: an ARIA table on CSS grid rows. The status glyphs sit on a thin river at the left; each row
+ * draws its own segment so unreached ones fade. The model takes a second line under the title, so the number
+ * columns keep their width at the inspector's 360 px.
+ */
+.wf-run-table {
+  --wf-run-cols: 26px minmax(0, 1fr) 52px 40px 30px;
   display: flex;
   flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+}
+.wf-run-head {
+  display: grid;
+  grid-template-columns: var(--wf-run-cols);
+  column-gap: 6px;
+  padding: 0 8px 2px 4px;
+  font-size: var(--if-text-xs);
+  font-weight: 600;
+  color: var(--if-muted);
+}
+/* The trends table has no status column. */
+.wf-run-head--plain {
+  grid-template-columns: minmax(0, 1fr) 52px 40px 30px;
+  padding-left: 8px;
+}
+/* Cells fill the columns in DOM order; only the model cell is placed, on the row's second line. */
+.wf-run-cell-num {
+  text-align: right;
+  white-space: nowrap;
+  color: var(--if-muted);
+  font-variant-numeric: tabular-nums;
 }
 .wf-run-river-item {
   position: relative;
+  display: grid;
+  grid-template-columns: var(--wf-run-cols);
+  grid-template-rows: 26px auto;
+  align-items: center;
+  column-gap: 6px;
+  padding: 3px 8px 3px 4px;
+  border-radius: var(--if-radius-m);
+  color: var(--wf-run-row-fg, var(--if-fg));
+  font-size: var(--if-text-s);
+  cursor: pointer;
+}
+.wf-run-river-item:hover {
+  background: var(--if-hover);
 }
 .wf-run-river-item::before {
   content: '';
@@ -281,11 +317,12 @@
   width: 2px;
   background: var(--if-river);
 }
+/* The river starts and ends at the first and last glyph (row padding + half of the 26 px first line). */
 .wf-run-river-item:first-child::before {
-  top: 50%;
+  top: 16px;
 }
 .wf-run-river-item:last-child::before {
-  bottom: 50%;
+  bottom: calc(100% - 16px);
 }
 /* Not reached or skipped: the river segment and the stone fade like the canvas's; the title only turns muted. */
 .wf-run-river-item--quiet {
@@ -295,25 +332,8 @@
 .wf-run-river-item--quiet::before {
   opacity: 0.35;
 }
-.wf-run-river-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-height: 32px;
-  padding: 3px 8px 3px 4px;
-  border: none;
-  border-radius: var(--if-radius-m);
-  background: transparent;
-  color: var(--wf-run-row-fg, var(--if-fg));
-  text-align: left;
-}
-.wf-run-river-row:hover:not(:disabled) {
-  background: var(--if-hover);
-}
 .wf-run-river-glyph {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -323,28 +343,106 @@
   border-radius: 50%;
   background: var(--if-surface-sunken);
 }
-.wf-run-river-body {
+.wf-run-cell-block {
+  min-width: 0;
+}
+.wf-run-block {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--if-radius-s);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
-.wf-run-river-title {
+.wf-run-block:focus-visible {
+  outline-offset: 2px;
+}
+.wf-run-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--if-text-m);
 }
-.wf-run-river-count {
-  flex: none;
+.wf-run-cell-model {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  min-width: 0;
+  display: flex;
+}
+.wf-run-cell-model:empty {
+  display: none;
+}
+/* Under the title, after the stone (20 px + 8 px gap). */
+.wf-run-model {
+  min-width: 0;
+  margin-left: 28px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-xs);
+  line-height: 16px;
+  color: var(--if-muted);
+}
+
+/* Trends: the same columns without status; rows are not interactive. */
+.wf-run-trend {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px 40px 30px;
+  align-items: center;
+  column-gap: 6px;
+  min-height: 30px;
+  padding: 2px 8px;
+  font-size: var(--if-text-s);
+}
+.wf-run-trend-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Totals under the hero: tokens, cost and the models that have no price. */
+.wf-run-unpriced {
+  align-self: center;
   font-size: var(--if-text-xs);
   color: var(--if-muted);
+}
+
+/* ---------- block metrics in the run output ---------- */
+
+.wf-run-metrics {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 16px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--if-border);
+  border-radius: var(--if-radius-l);
+  font-size: var(--if-text-s);
+}
+.wf-run-metric {
+  display: contents;
+}
+.wf-run-metric dt {
+  color: var(--if-muted);
+}
+.wf-run-metric dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  min-width: 0;
+  margin: 0;
   font-variant-numeric: tabular-nums;
 }
-.wf-run-river-time {
-  font-size: var(--if-text-s);
+.wf-run-metric-muted {
   color: var(--if-muted);
-  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- run history ---------- */
@@ -408,4 +506,10 @@
   font-size: var(--if-text-s);
   color: var(--if-muted);
   font-variant-numeric: tabular-nums;
+}
+.wf-run-metric-code {
+  min-width: 0;
+  font-family: var(--if-font-code);
+  font-size: var(--if-text-xs);
+  overflow-wrap: anywhere;
 }

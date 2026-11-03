@@ -16,6 +16,8 @@ export interface AgentRequestDeps {
   toolHost?: ToolHost;
   /** Reads the files matching workspace-relative globs; omitted where files cannot be read. */
   readContextFiles?: (globs: string[], signal: AbortSignal) => Promise<ContextFile[]>;
+  /** Context size for compaction when a model reports no maxInputTokens (`isarFlow.agentContextTokens`). */
+  contextTokens?: number;
 }
 
 /** Model problems that another model may not have. Auth, bad requests and cancels are never retried elsewhere. */
@@ -24,8 +26,9 @@ const FINAL_KINDS: ReadonlySet<ModelErrorKind> = new Set(['auth', 'bad-request',
 
 /**
  * Runs one agent block: attaches context files, then tries the agent's model and its fallback models in order.
- * A fallback model continues the conversation where the failed model stopped, so finished tool calls are not repeated.
- * When the block fails after models used tokens, the error is an AgentRunError with the usage of all models.
+ * A fallback model continues the conversation where the failed model stopped, so finished tool calls are not repeated;
+ * `toolCalls` of the result counts the calls of every model. When the block fails after models used tokens, the
+ * error is an AgentRunError with the usage of all models.
  */
 export async function executeAgentRequest(
   request: AgentRequest,
@@ -37,7 +40,7 @@ export async function executeAgentRequest(
   try {
     return await answerWithFallbacks(request, deps, prompt, conversation);
   } catch (error) {
-    throw withUsage(error, conversation.usage);
+    throw withUsage(error, conversation.usage, conversation.toolCalls);
   }
 }
 
@@ -83,6 +86,8 @@ async function answerWithFallbacks(
           tools: agent.tools ?? [],
           toolHost: deps.toolHost,
           permissions: agent.permissions ?? {},
+          toolMode: agent.toolMode,
+          contextTokens: deps.contextTokens,
           maxTurns: agent.maxTurns,
           temperature: agent.temperature,
           maxTokens: agent.maxTokens,

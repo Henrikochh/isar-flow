@@ -1,5 +1,6 @@
 import {
   type AgentDefinition,
+  type AgentPermissions,
   type AgentScope,
   type AgentSummary,
   applyAgentUpdate,
@@ -8,6 +9,7 @@ import {
   isToolName,
   newAgentText,
   parseAgentText,
+  type PermissionLevel,
   type ToolName,
 } from '@isar-flow/core';
 import type { AgentRecord } from '../contracts';
@@ -17,6 +19,19 @@ export type AgentKind = 'blank' | 'coder' | 'reviewer';
 
 const text = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() !== '' ? value : undefined;
+
+const LEVELS: readonly unknown[] = ['none', 'ask', 'auto'] satisfies PermissionLevel[];
+
+/** The valid permission levels of the file (lenient: invalid values are left out); undefined when none. */
+function permissionsOf(value: unknown): AgentPermissions | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const permissions: AgentPermissions = {};
+  for (const key of ['edits', 'commands'] as const) {
+    if (LEVELS.includes(raw[key])) permissions[key] = raw[key] as PermissionLevel;
+  }
+  return Object.keys(permissions).length ? permissions : undefined;
+}
 
 /** Parses an agent file into its sidebar summary and lenient definition. */
 export function summarizeAgent(source: string, uri: string, scope: AgentScope, id: string): AgentRecord {
@@ -37,6 +52,8 @@ export function summarizeAgent(source: string, uri: string, scope: AgentScope, i
     uri,
     valid: parsed.valid,
   };
+  const permissions = permissionsOf(agent?.permissions);
+  if (permissions) summary.permissions = permissions;
   const description = text(agent?.description);
   if (description !== undefined) summary.description = description;
   return { summary, definition: parsed.agent };

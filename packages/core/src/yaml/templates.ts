@@ -134,7 +134,7 @@ export function newAgentText(name: string, model: string = DEFAULT_AGENT_MODEL):
     'systemPrompt: |',
     '  You are a careful software engineer working in this repository.',
     '  Read the relevant files before you answer. Keep answers short and concrete.',
-    '# Add editFile, writeFile or runCommand to let the agent change files or run commands.',
+    '# Read-only: it can look at files but not change them. Add editFile, applyPatch or writeFile to let it change code.',
     'tools: [readFile, listFiles, searchText, gitDiff]',
     'permissions: { edits: ask, commands: ask } # none | ask | auto',
   );
@@ -151,12 +151,13 @@ export function defaultAgentText(kind: DefaultAgentKind, model: string): string 
       '  You are a pragmatic senior software engineer working in this repository.',
       '  - Explore first: read the relevant files and search for related code before you change anything.',
       '  - Make focused, minimal changes with editFile; create new files with writeFile.',
+      '  - Use applyPatch for changes in several places or files.',
       '  - Follow the existing code style and keep the project building.',
       '  - Use runCommand to run the tests or the build when it helps you verify your work.',
       '  - Finish with a short summary of what you changed and why.',
       'temperature: 0.2',
       'maxTurns: 40',
-      'tools: [readFile, listFiles, searchText, gitDiff, editFile, writeFile, runCommand]',
+      'tools: [readFile, listFiles, searchText, gitDiff, editFile, applyPatch, writeFile, runCommand]',
       'permissions: { edits: auto, commands: ask } # none | ask | auto',
     );
   }

@@ -89,6 +89,34 @@ describe('consoleCommandsOf', () => {
     expect(consoleCommandsOf(wf(''))).toEqual(['npm test']);
   });
 
+  it('lists the setup commands of worktree runs first, so they are part of the approval', () => {
+    const text = (isolation: string) =>
+      `version: 1
+name: x
+${isolation}setup: [npm ci, npm run build]
+env:
+  CI: '1'
+steps:
+  - id: a
+    type: console
+    run: npm test
+`;
+    const worktree = consoleCommandsOf(workflowOf(text('isolation: worktree\n')));
+    expect(worktree).toEqual([
+      'Setup: npm ci',
+      'Setup: npm run build',
+      '(environment of all commands: CI=1)',
+      'npm test',
+    ]);
+    // Setup commands only run in worktrees.
+    expect(consoleCommandsOf(workflowOf(text('')))).toEqual([
+      '(environment of all commands: CI=1)',
+      'npm test',
+    ]);
+    const onlySetup = workflowOf('version: 1\nname: x\nisolation: worktree\nsetup: [npm ci]\nsteps: []\n');
+    expect(consoleCommandsOf(onlySetup)).toEqual(['Setup: npm ci']);
+  });
+
   it('returns nothing for workflows without console blocks', () => {
     const wf = workflowOf('version: 1\nname: x\nsteps:\n  - id: a\n    type: approval\n    message: ok?\n');
     expect(consoleCommandsOf(wf)).toEqual([]);

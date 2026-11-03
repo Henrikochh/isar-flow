@@ -1,9 +1,12 @@
-import { listBlocks, type RunView, type StepStatus, type Workflow } from '@isar-flow/core';
-import { Banner, Button, Chip, Stone, StatusGlyph, statusLabel } from '../../../../components';
-import { formatDuration, formatRelativeTime, formatTokens } from '../../../../hooks';
+import { useMemo } from 'react';
+import type { RunView, Workflow } from '@isar-flow/core';
+import { Banner, Button, Chip, StatusGlyph, statusLabel } from '../../../../components';
+import { formatCost, formatDuration, formatRelativeTime, formatTokens } from '../../../../hooks';
+import { blockTrends, COST_TITLE, runCost } from '../../metrics';
 import { useWorkflowActions, useWorkflowState } from '../../store';
-import { blockTitle, isStepType } from '../model';
 import { useNow } from '../useNow';
+import { BlockTable } from './BlockTable';
+import { TrendTable } from './TrendTable';
 
 function formatInput(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -17,13 +20,15 @@ function formatInput(value: unknown): string {
 /** Shown when a run is on the canvas and no block is selected: how the run went, block by block. */
 export function RunSummary({ run, live, workflow }: { run: RunView; live: boolean; workflow: Workflow }) {
   const actions = useWorkflowActions();
-  const { approvals } = useWorkflowState();
+  const { approvals, catalog, history } = useWorkflowState();
   const running = run.status === 'running';
   const waiting = running && approvals.some((a) => a.runId === run.runId);
   const now = useNow(running);
   const duration = running ? (now >= run.startedAt ? now - run.startedAt : undefined) : run.durationMs;
   const inputs = Object.entries(run.inputs ?? {});
   const totalTokens = run.usage.inputTokens + run.usage.outputTokens;
+  const cost = useMemo(() => runCost(run, catalog.prices), [run, catalog.prices]);
+  const trends = useMemo(() => blockTrends(history), [history]);
 
   return (
     <div className="wf-insp-form">
@@ -54,7 +59,7 @@ export function RunSummary({ run, live, workflow }: { run: RunView; live: boolea
       </div>
 
       {totalTokens > 0 ? (
-        <div className="wf-insp-chips">
+        <div className="wf-insp-chips wf-run-totals">
           <Chip
             tone="outline"
             icon="arrow-up"
@@ -65,6 +70,19 @@ export function RunSummary({ run, live, workflow }: { run: RunView; live: boolea
             icon="arrow-down"
             title="Output tokens"
           >{`${formatTokens(run.usage.outputTokens)} out`}</Chip>
+          {cost.cost !== undefined ? (
+            <Chip tone="outline" title={COST_TITLE}>{`Cost ${formatCost(cost.cost)}`}</Chip>
+          ) : null}
+          {cost.unpriced.length > 0 && Object.keys(catalog.prices ?? {}).length > 0 ? (
+            <span
+              className="wf-run-unpriced"
+              title={`No price for ${cost.unpriced.join(', ')}. Add ${cost.unpriced.length === 1 ? 'it' : 'them'} to isarFlow.modelPrices.`}
+            >
+              {cost.unpriced.length === 1
+                ? '1 model without price'
+                : `${cost.unpriced.length} models without price`}
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -88,58 +106,8 @@ export function RunSummary({ run, live, workflow }: { run: RunView; live: boolea
         </div>
       ) : null}
 
-      <div className="wf-insp-subsection">
-        <div className="wf-insp-subtitle">Blocks</div>
-        <RunRiver run={run} workflow={workflow} />
-      </div>
+      <BlockTable run={run} workflow={workflow} />
+      <TrendTable trends={trends} workflow={workflow} />
     </div>
-  );
-}
-
-/** Blocks in document order on a thin river, each with its status; click selects the block. */
-function RunRiver({ run, workflow }: { run: RunView; workflow: Workflow }) {
-  const actions = useWorkflowActions();
-  const blocks = listBlocks(workflow);
-  return (
-    <ol className="wf-run-river" aria-label="Blocks in this run">
-      {blocks.map((block) => {
-        const id = block.id;
-        const stepRun = id ? run.steps[id] : undefined;
-        const status: StepStatus = stepRun?.status ?? 'pending';
-        const type = isStepType(block.step.type) ? block.step.type : undefined;
-        const reached = status !== 'pending' && status !== 'skipped';
-        return (
-          <li
-            key={block.path.join('.')}
-            className={reached ? 'wf-run-river-item' : 'wf-run-river-item wf-run-river-item--quiet'}
-            data-status={status}
-          >
-            <button
-              type="button"
-              className="wf-run-river-row"
-              disabled={!id}
-              onClick={() => id && actions.select(id)}
-              aria-label={`${blockTitle(block.step) || 'Block without id'}: ${statusLabel(status)}`}
-            >
-              <span className="wf-run-river-glyph">
-                <StatusGlyph status={status} />
-              </span>
-              <span className="wf-run-river-body" style={{ paddingLeft: block.ancestors.length * 14 }}>
-                {type ? <Stone type={type} size="s" /> : null}
-                <span className="wf-run-river-title">{blockTitle(block.step) || 'Block without id'}</span>
-                {stepRun && stepRun.executions > 1 ? (
-                  <span className="wf-run-river-count">{`×${stepRun.executions}`}</span>
-                ) : null}
-              </span>
-              <span className="wf-run-river-time">
-                {stepRun?.durationMs !== undefined && status !== 'skipped'
-                  ? formatDuration(stepRun.durationMs)
-                  : ''}
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ol>
   );
 }

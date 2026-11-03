@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import type { ChatModel, HostToAgentEditor, TryItEvent, WorkflowSummary } from '@isar-flow/core';
+import type {
+  AgentEditorToHost,
+  ChatModel,
+  HostToAgentEditor,
+  TryItEvent,
+  WorkflowSummary,
+} from '@isar-flow/core';
 import { AgentPanel } from '../../../src/editors/agentPanel';
 import { DOCUMENT_CHANGED, WRITE_FAILED } from '../../../src/editors/host';
 import { AsyncDocument, FakeDocument, fakeServices, fakeUi, flush } from './fakes';
@@ -273,6 +279,60 @@ describe('AgentPanel', () => {
       await panel.handle({ type: 'openWorkflow', path: REVIEW });
       expect(ui.commands).toEqual([]);
     });
+  });
+
+  describe('Test model', () => {
+    function withProbe() {
+      const t = setup();
+      const probe = vi.fn(async (ref: string) => ({
+        ref,
+        outcome: 'tools' as const,
+        message: 'Tool calls work',
+        toolCalls: true,
+        json: true,
+        testedAt: 1,
+      }));
+      Object.assign(t.services.models, { probe });
+      return { ...t, probe };
+    }
+
+    it('tests the model; progress and result reach the editor through the catalog', async () => {
+      const { panel, probe, ui } = withProbe();
+      await panel.handle({ type: 'testModel', ref: ' litellm/gpt-4.1 ' });
+      expect(probe).toHaveBeenCalledWith('litellm/gpt-4.1');
+      expect(ui.errors).toEqual([]);
+    });
+
+    it('ignores messages without a model', async () => {
+      const { panel, probe } = withProbe();
+      await panel.handle({ type: 'testModel', ref: '' });
+      await panel.handle({ type: 'testModel', ref: 7 } as unknown as AgentEditorToHost);
+      expect(probe).not.toHaveBeenCalled();
+    });
+
+    it('does not test models in Restricted Mode', async () => {
+      const { panel, probe, ui } = withProbe();
+      ui.trusted = false;
+      await panel.handle({ type: 'testModel', ref: 'litellm/gpt-4.1' });
+      expect(probe).not.toHaveBeenCalled();
+      expect(ui.errors).toEqual(['Trust this workspace to test models.']);
+    });
+  });
+
+  it('gives Try it the context size setting', async () => {
+    vi.useRealTimers();
+    const get = vi.fn((key: string, fallback?: unknown) => (key === 'agentContextTokens' ? 9000 : fallback));
+    vi.spyOn(vscode.workspace, 'getConfiguration').mockReturnValue({
+      get,
+    } as unknown as vscode.WorkspaceConfiguration);
+    try {
+      const { panel, tryEvents } = setup();
+      await panel.handle({ type: 'tryIt', prompt: 'Hello', history: [] });
+      await vi.waitFor(() => expect(tryEvents().at(-1)?.type).toBe('error'));
+      expect(get).toHaveBeenCalledWith('agentContextTokens');
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it('runs the remaining commands', async () => {

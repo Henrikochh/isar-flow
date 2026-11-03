@@ -25,9 +25,17 @@ result, and a loop repeats the fix until the tests pass and the reviewer approve
 - **JSON answers**: describe the expected shape and later blocks read fields such as
   `steps.review.json.approved`. An answer that does not fit gets one repair round.
 - **Live runs**: block status and loop iterations on the canvas, rendered prompts and outputs in the
-  inspector, console output mirrored to a terminal, approvals inline, and a history of recent runs.
-- **Built-in agent tools**: `readFile`, `listFiles`, `searchText`, `gitDiff`, `editFile`, `writeFile` and
-  `runCommand`. Edits go through VS Code, so you can undo them.
+  inspector, console output mirrored to a terminal, approvals inline, and a history of recent runs. Every
+  block shows its time, tokens and (with prices set) cost, with averages over the last 20 runs.
+- **Review every change**: after a run, a review card lists the changed files with diffs; keep or revert
+  each one. In a git repository, snapshots before and after each run cover console commands too, without
+  touching your index or branch. `isolation: worktree` runs a workflow on a separate git worktree.
+- **Built-in agent tools**: `readFile`, `listFiles`, `searchText`, `gitDiff`, `editFile`, `applyPatch`,
+  `writeFile` and `runCommand`. Edits go through VS Code, so you can undo them. Badges show whether an agent
+  is read-only, edits files or runs commands.
+- **Local models**: tolerant edits and patches, tool calls written as text for models without native tool
+  calling, and conversation summaries before the context runs out. **Test model** and **Check setup** show
+  what works and how to fix the rest.
 
 ## Quick start
 
@@ -219,6 +227,8 @@ before you run them.
   with the same id as yours replaces it and receives your stored API key.
 - **Not sandboxed**: commands run with your VS Code environment, including credentials in environment
   variables.
+- **Snapshots**: in a git repository, the before and after snapshots of each run are commits under
+  `refs/isarflow/runs/`, on no branch, removed with the run history. A normal `git push` doesn't send them.
 - **Runs always end**: loops need `maxIterations`, agents have `maxTurns`, blocks can have a `timeout`, and
   `isarFlow.maxTokensPerRun` stops a run that uses too many tokens. **Stop** ends a run and the processes it
   started.
@@ -227,14 +237,16 @@ before you run them.
 
 ## Settings
 
-| Setting                    | Default | Description                                                                                                         |
-| -------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------- |
-| `isarFlow.providers`       | `[]`    | OpenAI-compatible model endpoints.                                                                                  |
-| `isarFlow.vscodeModels`    | `true`  | Offer the language models available in VS Code.                                                                     |
-| `isarFlow.defaultShell`    | `auto`  | Shell for console blocks without `shell` and for agent commands: PowerShell on Windows, your login shell elsewhere. |
-| `isarFlow.maxTokensPerRun` | `0`     | Stop a run after this many tokens. `0` means no limit.                                                              |
-| `isarFlow.confirmCommands` | `true`  | Ask before running console commands or agents that act without asking, until you approve them. User settings only. |
-| `isarFlow.historyLimit`    | `50`    | Runs kept per workflow (1–500).                                                                                     |
+| Setting                       | Default | Description                                                                                                         |
+| ----------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------- |
+| `isarFlow.providers`          | `[]`    | OpenAI-compatible model endpoints.                                                                                  |
+| `isarFlow.vscodeModels`       | `true`  | Offer the language models available in VS Code.                                                                     |
+| `isarFlow.defaultShell`       | `auto`  | Shell for console blocks without `shell` and for agent commands: PowerShell on Windows, your login shell elsewhere. |
+| `isarFlow.maxTokensPerRun`    | `0`     | Stop a run after this many tokens. `0` means no limit.                                                              |
+| `isarFlow.confirmCommands`    | `true`  | Ask before running console commands or agents that act without asking, until you approve them. User settings only.  |
+| `isarFlow.historyLimit`       | `50`    | Runs kept per workflow (1–500). Snapshots and worktrees of older runs are removed too.                              |
+| `isarFlow.agentContextTokens` | `24000` | Context size for models that don't report one. Agent conversations are summarized at 70 % of it.                    |
+| `isarFlow.modelPrices`        | `{}`    | Prices per 1 million input and output tokens by model reference, for cost estimates.                                |
 
 ## Troubleshooting
 
@@ -247,6 +259,12 @@ Run **Isar Flow: Show log** to see what happened during activation, model discov
 - _A command works in your terminal but not in a workflow_: set `shell` on the block, or change
   `isarFlow.defaultShell`.
 - _Run is disabled_: hover it to see why (untrusted workspace, unreadable YAML, problems, or no blocks).
+- _A local model doesn't use its tools_: run **Isar Flow: Test model**. A model that needs text tool mode
+  works with **Tool calls** on **Automatic** after the test, or set **Tool calls** to **Text in the prompt**.
+- _Something doesn't work and you don't know where to start_: run **Isar Flow: Check setup**. It checks
+  every endpoint and model your workflows use and offers a fix for each problem.
+- _"Isolation worktree needs a git repository"_: run `git init` in the folder, or set **Run in** back to
+  **Workspace**.
 
 ## License
 

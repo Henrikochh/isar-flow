@@ -28,11 +28,22 @@ describe('summarizeAgent', () => {
       description: 'Strict senior code reviewer',
       model: 'litellm/claude-sonnet',
       tools: ['readFile', 'gitDiff'],
+      permissions: { edits: 'none', commands: 'none' },
       scope: 'workspace',
       uri: 'file:///ws/.isarflow/agents/reviewer.agent.yaml',
       valid: true,
     });
     expect(record.definition?.model).toBe('litellm/claude-sonnet');
+  });
+
+  it('keeps only valid permission levels for the capability badges', () => {
+    const permissions = (yaml: string) =>
+      summarizeAgent(`name: A\n${yaml}`, 'u', 'user', 'a').summary.permissions;
+    expect(permissions('permissions: { edits: auto, commands: sudo }\n')).toEqual({ edits: 'auto' });
+    expect(permissions('permissions: { commands: ask }\n')).toEqual({ commands: 'ask' });
+    expect(permissions('permissions: { edits: yes }\n')).toBeUndefined();
+    expect(permissions('permissions: auto\n')).toBeUndefined();
+    expect(permissions('model: m/x\n')).toBeUndefined();
   });
 
   it('keeps a lenient summary for schema errors', () => {

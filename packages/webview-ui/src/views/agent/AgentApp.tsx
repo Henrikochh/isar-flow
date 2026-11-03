@@ -59,9 +59,14 @@ export function AgentApp() {
   const refreshModels = useCallback(() => send({ type: 'refreshModels' }), []);
   const addProvider = useCallback(() => send({ type: 'addProvider' }), []);
   const openWorkflow = useCallback((path: string) => send({ type: 'openWorkflow', path }), []);
+  const testModel = useCallback((ref: string) => send({ type: 'testModel', ref }), []);
 
   const form = useMemo(() => readAgentForm(doc?.agent ?? null), [doc]);
   const issues = useMemo(() => fieldIssues(doc?.diagnostics ?? []), [doc]);
+  const capabilities = useMemo(
+    () => ({ tools: form.tools, permissions: { edits: form.edits, commands: form.commands } }),
+    [form],
+  );
 
   if (!doc) {
     return (
@@ -88,6 +93,7 @@ export function AgentApp() {
             description={form.description}
             issues={issues}
             editable={readable}
+            capabilities={readable ? capabilities : null}
             update={update}
             onOpenYaml={openYaml}
           />
@@ -106,6 +112,7 @@ export function AgentApp() {
                 update={update}
                 onRefresh={refreshModels}
                 onAddProvider={addProvider}
+                onTestModel={testModel}
               />
               <InstructionsSection
                 value={form.systemPrompt}

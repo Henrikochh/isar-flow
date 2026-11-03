@@ -1,9 +1,15 @@
 import type { ActiveRunSummary, RunRecordSummary } from '@isar-flow/core';
-import { Section, StatusGlyph } from '../../components';
+import { Chip, Section, StatusGlyph } from '../../components';
 import { formatDuration, formatRelativeTime } from '../../hooks';
 import { formatElapsed, send, uniqueKeys } from './model';
 
 const MAX_RUNS = 10;
+
+/** Changed files of the run that still wait for Keep or Revert. */
+function pendingReviews(run: RunRecordSummary): number {
+  const pending = run.review?.pending;
+  return typeof pending === 'number' && Number.isFinite(pending) ? pending : 0;
+}
 
 function RunName({ name }: { name: string }) {
   const label = name || 'Unnamed workflow';
@@ -69,6 +75,17 @@ export function RecentRuns({
                   {run.durationMs !== undefined ? <span>{formatDuration(run.durationMs)}</span> : null}
                   <span>{formatRelativeTime(run.startedAt, now)}</span>
                 </span>
+                {pendingReviews(run) > 0 ? (
+                  <span className="sb-run__review">
+                    <Chip
+                      tone="warning"
+                      icon="diff"
+                      title="Files this run changed that you have not kept or reverted"
+                    >
+                      {`${pendingReviews(run)} to review`}
+                    </Chip>
+                  </span>
+                ) : null}
                 {run.error ? (
                   <span className="sb-run__error" title={run.error}>
                     {run.error}

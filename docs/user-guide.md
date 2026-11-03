@@ -38,13 +38,15 @@ YAML text are two views of the same file and stay in sync.
 
 Where files live:
 
-| File                           | Location                                                                                                  |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Workspace agents               | `.isarflow/agents/<id>.agent.yaml` in a workspace folder. Shared with everyone who clones the repository. |
-| User agents                    | `agents/` in the extension's global storage. Available in all your workspaces.                            |
-| Workflows                      | Anywhere in the workspace (`node_modules` is skipped). New workflows go to `.isarflow/workflows/`.        |
-| Endpoints                      | The `isarFlow.providers` setting. API keys are kept in VS Code's secret storage.                          |
-| Run history, approved commands | VS Code's storage for the workspace. Nothing is written into your repository.                             |
+| File                           | Location                                                                                                   |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Workspace agents               | `.isarflow/agents/<id>.agent.yaml` in a workspace folder. Shared with everyone who clones the repository.  |
+| User agents                    | `agents/` in the extension's global storage. Available in all your workspaces.                             |
+| Workflows                      | Anywhere in the workspace (`node_modules` is skipped). New workflows go to `.isarflow/workflows/`.         |
+| Endpoints                      | The `isarFlow.providers` setting. API keys are kept in VS Code's secret storage.                           |
+| Run history, approved commands | VS Code's storage for the workspace.                                                                       |
+| Review data, worktrees         | VS Code's storage for the workspace ([Reviewing changes](#reviewing-changes)).                             |
+| Run snapshots                  | In a git repository, commits under `refs/isarflow/runs/`, not on any branch. Removed with the run history. |
 
 When a workspace agent and a user agent have the same id, workflows use the workspace agent. The sidebar
 marks the hidden user agent.
@@ -73,20 +75,24 @@ The `examples/` folder of the repository has ready-made workflows and agents to 
 
 The sidebar has two tabs.
 
-**Agents** lists every agent with its model and chips for its tools: **Edits files** and **Runs commands**
-show at a glance which agents can change things, **User** marks user agents. Select a row to open the agent
-editor. **New** asks for a name, a starter (**Blank**, **Coder** or **Reviewer**) and where to save it
-(**Workspace** or **User**). The trash button deletes an agent after you confirm it in the row; the file
-goes to the trash.
+**Agents** lists every agent with its model, the number of tools and badges that say what it can do:
+**Read-only**, **Edits files** and **Runs commands**, each with its permission level (**asks** or **auto**;
+see [What an agent can do](#what-an-agent-can-do)). **User** marks user agents. Select a row to open the
+agent editor. **New** asks for a name, a starter (**Blank**, **Coder** or **Reviewer**) and where to save it
+(**Workspace** or **User**). The Blank starter is read-only; for an agent that should change code, pick
+**Coder**. The trash button deletes an agent after you confirm it in the row; the file goes to the trash.
 
 Below the agents, **Models** lists the model providers with their status and model count. Select an
-endpoint to edit it, use the key button to set its API key and the trash button to remove it (confirmed in
-the row). The refresh button lists all models again; **+** adds an endpoint.
+endpoint to edit it, use the key button to set its API key, the beaker button to test its models
+([Testing a model](#testing-a-model)) and the trash button to remove it (confirmed in the row). The
+checklist button runs **Check setup** ([Checking the setup](#checking-the-setup)); the refresh button lists
+all models again; **+** adds an endpoint.
 
 **Workflows** lists every workflow in the workspace with its last run. The button at the end of a row runs
 the workflow; while it runs, the button stops it. **New** asks for a name and a template: **Blank**, **Review loop** (implement, test and
 review until approved) or **Test and fix** (run tests and fix failures until they pass). **Recent runs**
-shows running and finished runs; select one to show it on the canvas.
+shows running and finished runs; select one to show it on the canvas. A run whose changes still wait for
+your decision shows **2 to review** ([Reviewing changes](#reviewing-changes)).
 
 In Restricted Mode the sidebar says that running is disabled until you trust the workspace.
 
@@ -100,8 +106,12 @@ Opening a `*.workflow.yaml` (or `.workflow.yml`) file shows the river editor:
 - **Canvas** (middle): the river. Blocks sit on it from top to bottom. An If / else block splits it into a
   **Then** and an **Else** lane, a loop draws a return channel on its left.
 - **Inspector** (right): the settings of the selected block. With nothing selected it shows the workflow:
-  name, description, inputs, environment variables and runs. During and after a run, a selected block has
-  a **Run output** tab next to **Settings**.
+  name, description, where it runs ([Running in a separate worktree](#running-in-a-separate-worktree)),
+  inputs, environment variables and runs. During and after a run, it shows the run summary with time and
+  tokens per block ([Time and tokens](#time-and-tokens)), and a selected block has a **Run output** tab next
+  to **Settings**.
+- **Review card** (above the canvas): after a run that changed files, the changed files with **Keep** and
+  **Revert** ([Reviewing changes](#reviewing-changes)).
 
 ### Adding blocks
 
@@ -182,8 +192,12 @@ inputs: # asked for when the run starts
 env: # environment variables for every console command, readable as env.NAME
   CI: '1'
   API_TOKEN: ${{ secrets.API_TOKEN }}
+isolation: workspace # workspace (default) or worktree: run on a separate git worktree
+setup: [npm ci] # only with isolation: worktree; runs in the worktree before the first block
 steps: [] # the blocks
 ```
+
+**isolation** and **setup**: see [Running in a separate worktree](#running-in-a-separate-worktree).
 
 **Inputs**: names start with a letter or `_` and contain letters, digits, `_` and `-`. Each input can have:
 
@@ -241,24 +255,25 @@ Gives an agent a task and makes its answer available to later blocks.
     files: ['src/**/*.ts', README.md] # attached to the prompt
 ```
 
-| Field           | Meaning                                                                                                                                                   |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `agent`         | Id of an agent file, or inline agent settings: `model`, `fallbackModels`, `systemPrompt`, `temperature`, `maxTokens`, `maxTurns`, `tools`, `permissions`. |
-| `model`         | Overrides the agent's model. Without an `agent`, the block uses this model with no system prompt and no tools.                                            |
-| `prompt`        | The task. Supports templates.                                                                                                                             |
-| `output`        | `format: json` asks for a JSON answer and parses it ([JSON answers](#json-answers)).                                                                      |
-| `session`       | `continue` keeps the conversation of this block between loop iterations; `fresh` starts a new one every time.                                             |
-| `context.files` | Workspace-relative globs. Matching files are appended to the prompt: at most 20 files, 100 KB per file and 400 KB in total.                               |
+| Field           | Meaning                                                                                                                                                               |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agent`         | Id of an agent file, or inline agent settings: `model`, `fallbackModels`, `systemPrompt`, `temperature`, `maxTokens`, `maxTurns`, `tools`, `toolMode`, `permissions`. |
+| `model`         | Overrides the agent's model. Without an `agent`, the block uses this model with no system prompt and no tools.                                                        |
+| `prompt`        | The task. Supports templates.                                                                                                                                         |
+| `output`        | `format: json` asks for a JSON answer and parses it ([JSON answers](#json-answers)).                                                                                  |
+| `session`       | `continue` keeps the conversation of this block between loop iterations; `fresh` starts a new one every time.                                                         |
+| `context.files` | Workspace-relative globs. Matching files are appended to the prompt: at most 20 files, 100 KB per file and 400 KB in total.                                           |
 
 Outputs:
 
-| Output                                    | Meaning                                                              |
-| ----------------------------------------- | -------------------------------------------------------------------- |
-| `text`                                    | The final answer.                                                    |
-| `json`                                    | The parsed answer, only with `output.format: json`.                  |
-| `model`                                   | The model that answered (a fallback model when the main one failed). |
-| `usage.inputTokens`, `usage.outputTokens` | Tokens used, across all model calls of the block.                    |
-| `turns`                                   | Model calls the agent needed, tool rounds included.                  |
+| Output                                    | Meaning                                                                                                          |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `text`                                    | The final answer.                                                                                                |
+| `json`                                    | The parsed answer, only with `output.format: json`.                                                              |
+| `model`                                   | The model that answered (a fallback model when the main one failed).                                             |
+| `usage.inputTokens`, `usage.outputTokens` | Tokens used, across all model calls of the block (every attempt of a retried block, and conversation summaries). |
+| `turns`                                   | Model calls the agent needed, tool rounds included.                                                              |
+| `toolCalls`                               | Tool calls the agent made (every attempt of a retried block).                                                    |
 
 ### Console
 
@@ -563,6 +578,7 @@ temperature: 0.2
 maxTokens: 4000
 maxTurns: 20
 tools: [readFile, listFiles, searchText, gitDiff]
+toolMode: auto # auto (default) | native | text
 permissions: { edits: none, commands: none } # none | ask | auto
 ```
 
@@ -577,10 +593,12 @@ permissions: { edits: none, commands: none } # none | ask | auto
 | `maxTokens`      | Longest reply per model call.                                                              |
 | `maxTurns`       | 1–200 model calls per task (default 20). A tool round counts as one call.                  |
 | `tools`          | Built-in tools the agent may use ([Tools](#tools)). Without tools, the agent only answers. |
+| `toolMode`       | How the model calls tools: `auto`, `native` or `text` ([Tool calls](#tool-calls)).         |
 | `permissions`    | `edits` and `commands`: `none`, `ask` or `auto` ([Permissions](#permissions)).             |
 
-The **agent editor** opens for `*.agent.yaml` files: name and description, **Model** (main model,
-fallback models, temperature, max tokens, max turns), **Instructions** (system prompt), **Tools**,
+The **agent editor** opens for `*.agent.yaml` files: name and description with the agent's badges
+([What an agent can do](#what-an-agent-can-do)), **Model** (main model with **Test model**, fallback models,
+**Tool calls**, temperature, max tokens, max turns), **Instructions** (system prompt), **Tools**,
 **Permissions** and **Used by** (the workflows that use the agent; select one to open it). Every change is
 written to the YAML, comments included; **Open YAML** shows the text.
 
@@ -597,17 +615,33 @@ Tools only work inside the workspace folder of the workflow ([Security](#16-secu
 | `listFiles`  | List files       | `glob?`                          | Lists files matching a glob, at most 500. `node_modules` and `.git` are skipped.                               | —          |
 | `searchText` | Search text      | `query`, `glob?`, `isRegex?`     | Finds lines as `path:line: text`, at most 200 matches.                                                         | —          |
 | `gitDiff`    | View git changes | `staged?`                        | `git diff` (or `git diff --staged`) of the repository, cut at 200 KB.                                          | —          |
-| `editFile`   | Edit files       | `path`, `oldText`, `newText`     | Replaces text that occurs exactly once in an existing file.                                                    | `edits`    |
+| `editFile`   | Edit files       | `path`, `oldText`, `newText`     | Replaces text that occurs exactly once in an existing file (see below).                                        | `edits`    |
+| `applyPatch` | Apply patches    | `patch`                          | Applies a unified diff to one or more files: changes, new files and deleted files, all or nothing (see below). | `edits`    |
 | `writeFile`  | Write files      | `path`, `content`                | Creates a file or replaces all of its content.                                                                 | `edits`    |
 | `runCommand` | Run commands     | `command`, `cwd?`                | Runs a command in the `isarFlow.defaultShell` and returns its exit code and output. Stopped after 120 seconds. | `commands` |
 
 Edits go through VS Code, so they show up in open editors, can be undone, and are saved right away so
-later console blocks see them. Files inside `.git` cannot be changed.
+later console blocks see them. Files inside `.git` cannot be changed. After the run, every changed file is
+listed for review ([Reviewing changes](#reviewing-changes)).
+
+**editFile** matches `oldText` exactly. If it is not found, line-ending differences and then whitespace
+differences per line are ignored, and the indentation comes from the file. The match must be unique: when
+`oldText` occurs in several places, the agent is told to include more surrounding lines. The result says
+when the match needed one of the tolerant steps.
+
+**applyPatch** takes the format of `git diff` and `diff -u`: `--- a/<path>` and `+++ b/<path>` per file,
+`--- /dev/null` to create a file and `+++ /dev/null` to delete one, and `@@` hunks with a few lines of
+context. Prose and code fences around the diff are ignored. Each hunk is searched near the line it names
+(and then in the whole file), ignoring trailing whitespace and line-ending differences, and then whitespace
+within lines; added lines take the indentation of the file. Files keep their line endings and their final
+newline. Either every hunk applies or no file changes: a failing hunk is reported with the line where the
+context differs, so the agent can read the file again and make a new patch. Renames, copies and binary
+patches are refused. The permission question shows the patch (`Patch src/app.ts` or `Patch 3 files`).
 
 ### Permissions
 
-`permissions.edits` gates `editFile` and `writeFile`, `permissions.commands` gates `runCommand`. Reading
-tools never ask.
+`permissions.edits` gates `editFile`, `applyPatch` and `writeFile`, `permissions.commands` gates
+`runCommand`. Reading tools never ask.
 
 | Level  | In the agent editor | Effect                                                                        |
 | ------ | ------------------- | ----------------------------------------------------------------------------- |
@@ -617,6 +651,48 @@ tools never ask.
 
 A level that is not set means `ask`. **Allow for this run** allows that tool for the rest of the run.
 A denied call is reported to the model as a tool error.
+
+### What an agent can do
+
+Agent rows in the sidebar, the agent editor's header and Agent blocks on the canvas show badges:
+
+| Badge                           | Meaning                                                                                                  |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Read-only**                   | The agent can read files but has no tool that changes them or runs commands.                             |
+| **Edits files (asks / auto)**   | It has `editFile`, `applyPatch` or `writeFile`, and `permissions.edits` is `ask` (or not set) or `auto`. |
+| **Runs commands (asks / auto)** | It has `runCommand`, and `permissions.commands` is `ask` (or not set) or `auto`.                         |
+
+A tool whose permission is `none` does not count, because every call of it is refused.
+
+### Tool calls
+
+Models call tools in one of two ways. Most hosted models have native tool calling; many local models (for
+example some Ollama or vLLM models) don't, but can follow tool descriptions in the prompt. **Tool calls** in
+the agent editor (`toolMode` in YAML) chooses how:
+
+- **Automatic** (`auto`, the default) uses the model's native tool calling and also runs tool calls the
+  model writes as text. Models without native tool calling, and models whose [test](#testing-a-model) said
+  **Needs text tool mode**, get the tools described in the prompt instead.
+- **Native** (`native`) sends the tools only natively; text that looks like a tool call stays text.
+- **Text in the prompt** (`text`) always describes the tools in the system prompt. The model calls them as
+  `<tool_call>{"name": "readFile", "arguments": {"path": "src/app.ts"}}</tool_call>`, one or more per
+  answer, and answers without a call when it is done.
+
+Tool calls written as text are recognized in `<tool_call>` tags, in fenced `json` blocks and as plain JSON
+with `name` and `arguments` (or `tool` and `args`). Only the names of the agent's tools count. When a call
+names a tool but its arguments can't be read, the model is asked once to correct it; a second unreadable
+answer in a row fails the block. The run log notes when a tool call written as text is run.
+
+### Long conversations
+
+Agents that read many files can outgrow the model's context. Before each model call, Isar Flow estimates the
+size of the conversation (about 4 characters per token). When it grows above 70 % of the model's context
+(the size the model reports, else `isarFlow.agentContextTokens`, default 24000), older turns are replaced
+by a summary written by the same model. The system prompt, the task and the latest tool results stay in
+full. The run log shows a line for each summary, such as "Compacted the conversation: 24 older messages
+(about 19,800 tokens) replaced by a summary (about 450 tokens)." The summary's tokens count toward the
+block. When even the parts that are always kept are too large, the log says so once: attach fewer or
+smaller context files, or use a model with a larger context.
 
 ### Fallback models
 
@@ -716,7 +792,8 @@ model picker as `<id>/<model>`.
 3. The `model_name`s of your config appear as `litellm/<model_name>`.
 
 **Ollama**: choose **Ollama**; no key is needed. Pulled models appear as `ollama/<model>`, for example
-`ollama/llama3.1:8b`. Pick a model that supports tool calling for agents with tools.
+`ollama/llama3.1:8b`. For agents with tools, pick a model that supports tool calling, or
+[test the model](#testing-a-model): models without native tool calling work in text tool mode.
 
 **OpenRouter**: choose **OpenRouter** and enter your OpenRouter key. Models appear as
 `openrouter/<vendor>/<model>`.
@@ -755,6 +832,51 @@ models, tests or removes the endpoint. **Set provider API key** stores a new key
 model endpoint** lists the models once and reports what went wrong. **Refresh models** lists all models
 again. **Remove model endpoint** deletes the entry and its stored key.
 
+### Testing a model
+
+Run **Isar Flow: Test model**, use the beaker button on an endpoint in the sidebar, or **Test model** next to
+the main model in the agent editor. Isar Flow asks the model for one tool call and one JSON answer and
+measures how long it takes. The result:
+
+| Result                      | What to do                                                                                                                                                                                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tool calls work (0.8 s)** | Nothing: the model can be used as it is.                                                                                                                                                                                                  |
+| **Needs text tool mode**    | The model answered without a native tool call. With **Tool calls** on **Automatic**, agents switch to text tool mode for this model by themselves; you can also set **Tool calls** to **Text in the prompt** ([Tool calls](#tool-calls)). |
+| A failure                   | The message says what to fix and offers **Set API key**, **Edit endpoint** or **Add endpoint**.                                                                                                                                           |
+
+Results are kept for 30 days and shown as chips in the model pickers: **Tool calls OK**, **Needs text mode**
+or **Test failed**. A running test can be cancelled from its notification. An endpoint that refuses tools
+outright (Ollama's "does not support tools", for example) counts as **Needs text tool mode**.
+
+### Checking the setup
+
+![The setup check report in the sidebar](images/sidebar-setup-check-dark.png)
+
+**Isar Flow: Check setup** (Command Palette, the checklist button under **Models** in the sidebar, or the
+sidebar's **…** menu) checks every model endpoint (reachable, API key, models) and then tests, one after the
+other, every model your workflows use: block models, agent models and fallback models. The report appears at
+the top of the sidebar with one row per endpoint and model, the workflows and agents that use each model,
+and a button that fixes each problem, such as **Set API key**, **Edit endpoint**, **Add endpoint**, **Open
+settings** or **Open <agent>**. Models of an endpoint with a problem are not tested until the endpoint
+works. **Run again** checks again; the close button hides the report. Check setup needs a trusted
+workspace.
+
+### Model prices
+
+To see what runs cost, list prices per 1 million tokens in `isarFlow.modelPrices`, by model reference:
+
+```jsonc
+// settings.json
+"isarFlow.modelPrices": {
+  "litellm/gpt-4.1": { "input": 2, "output": 8 },
+  "litellm/claude-sonnet": { "input": 3, "output": 15 }
+}
+```
+
+Costs appear on block cards, in the run summary and in a block's run output, only for the models listed.
+They have no currency: they are in the unit of your prices. A run that also used unlisted models says how
+many had no price.
+
 ## 12. Running workflows
 
 ### Starting a run
@@ -785,9 +907,10 @@ them and asks: **Run** (this time) or **Run and remember**.
 
 - **Console commands**: each block's `run` text plus its shell, folder and environment when set, and the
   workflow `env`. Commands appear as written, with their `${{ }}` templates; the values are filled in when
-  the block runs.
-- **Agents that act without asking**: agents with `permissions.edits: auto` and the tool `editFile` or
-  `writeFile`, or `permissions.commands: auto` and the tool `runCommand`
+  the block runs. A workflow with `isolation: worktree` lists its setup commands first, as
+  `Setup: npm ci`.
+- **Agents that act without asking**: agents with `permissions.edits: auto` and the tool `editFile`,
+  `applyPatch` or `writeFile`, or `permissions.commands: auto` and the tool `runCommand`
   ([permissions](#permissions)). Each appears once, with the blocks that use it and what it does, for
   example `agent 'coder' in block 'implement': edits files and runs commands without asking`. Agent files
   and inline agents both count; a block's model does not matter. Such agents are listed even when the
@@ -795,7 +918,7 @@ them and asks: **Run** (this time) or **Run and remember**.
 
 When there are both, the commands come first, then the agents under **Agents that act without asking**.
 **Run and remember** skips the question for this workflow until anything in the list changes: a command, its
-shell, folder or environment, or an agent's tools or permissions (for example an agent that only edited
+shell, folder or environment, a setup command, or an agent's tools or permissions (for example an agent that only edited
 files now also runs commands, or another block uses it). A workflow without such commands or agents runs
 without asking. The run uses the agent files as they were when you answered.
 
@@ -825,6 +948,24 @@ workspace's `.vscode/settings.json` defines are ignored; only your user endpoint
 **Stop** (top bar, sidebar, or **Isar Flow: Stop run**) cancels the run: running commands are stopped with
 all the processes they started, model requests are aborted, and the run ends as cancelled.
 
+### Time and tokens
+
+After a block finishes, its card on the canvas shows how long it took, the tokens it used and, when the
+model has a price ([Model prices](#model-prices)), the cost. Hover the numbers for the turns, the tool calls
+and how often the block ran; loop headers say how often the loop ran. All numbers add up every time a block
+runs in a loop, and every attempt of a retried block.
+
+![Time, tokens and cost on the cards; the run summary and the trends in the inspector](images/workflow-metrics-light.png)
+
+With no block selected, the inspector shows the run summary: a table **Blocks in this run** with each
+block's status, time, tokens, model and how often it ran (`×4`), and the totals of the run (time, input and
+output tokens, and `Cost 0.04` with "2 models without price" when only some models have prices). Select a
+row to select the block. Below it, **Last 20 runs** shows each block's average time, tokens and iterations
+over the last 20 finished runs in the history; it appears after two runs.
+
+A block's **Run output** lists time (with the average per execution when it ran several times), input and
+output tokens, turns, tool calls, the model and the cost, plus the block's average over the last 20 runs.
+
 ### Token budget
 
 `isarFlow.maxTokensPerRun` limits the tokens (input plus output) all agent blocks of a run may use. After
@@ -835,8 +976,83 @@ N of M tokens". `0` means no limit.
 
 Finished runs are kept per workflow (`isarFlow.historyLimit`, default 50) in VS Code's storage for the
 workspace. Open them from **Runs** in the top bar, the **Runs** list of the workflow panel, or **Recent
-runs** in the sidebar: the canvas then shows that run's statuses and outputs. Very large runs are trimmed
-to 1 MB when they are saved.
+runs** in the sidebar: the canvas then shows that run's statuses, outputs, time and tokens, and its review.
+The lists show what happened to a run's changes: **2 to review** while files wait for a decision, or
+**3 kept, 1 reverted**. Very large runs are trimmed to 1 MB when they are saved. When a run drops out of the
+history, its snapshots, review data and worktree are removed too.
+
+### Reviewing changes
+
+Every run has a safety net. When a run changed files, a notification says so (for example "Review until
+approved changed 3 files." with **Review changes**), and the canvas shows a **Review changes** card above the
+river, also for past runs:
+
+![The review card: changed files with the blocks that changed them and Keep / Revert buttons](images/workflow-review-dark.png)
+
+- Each changed file is listed with its status (added, modified or deleted), the added and removed lines and
+  the block that changed it. **Command** means a console command (or something else outside the agents)
+  changed it. Select a block chip to select the block on the canvas.
+- Select a file to open VS Code's diff editor: the file before the run on the left, the file now on the
+  right. Binary files can't be compared.
+- **Keep** accepts a change. **Revert** puts the file back as it was before the run, byte for byte: an added
+  file is deleted, a deleted file is created again. Text files are reverted through VS Code, so open editors
+  follow.
+- **Keep all** and **Revert all** decide every file that still waits, including files that are not listed
+  (the card lists at most 500). **Revert all** sits on the left, away from **Keep all**, and asks first, for
+  example "Revert 5 files?"; **Cancel** is the default answer.
+- If a file changed again after the run, Isar Flow asks first: "src/app.ts changed after the run. Revert it
+  anyway? Your newer changes to it are lost." **Revert all** asks once for all such files: **Revert all
+  anyway** or **Skip changed files**.
+- When every file is decided, the card folds to a summary such as **3 kept, 1 reverted**.
+- If an agent wrote a file that had unsaved changes in an editor, **Revert** brings back that unsaved text
+  too. When a console command changed a file before an agent wrote it in the same run, **Revert** goes back
+  to the state before the run, not to the state before the agent.
+- Agents only edit UTF-8 text files. **Edit file** and **Apply patch** refuse files in other encodings (such
+  as Latin-1) instead of damaging characters like é.
+
+How the safety net knows what changed:
+
+- **In a git repository**, Isar Flow takes a snapshot of the workflow's folder before and after each run:
+  tracked and untracked files that git does not ignore. It uses a temporary index, so your index, branch,
+  stash and working tree are never touched. The snapshots are commits stored as
+  `refs/isarflow/runs/<run>/before` and `…/after`, on no branch. They cover agents and console commands.
+- **Without git**, only files that agents wrote are listed: the edit journal keeps each file's content from
+  before the agent's first write. The card says that changes made by console commands can't be reviewed or
+  reverted.
+- Originals larger than 2 MB per file or 50 MB per run are kept as git objects when the folder is in a git
+  repository; otherwise such a file can't be reverted. Symbolic links can't be reverted either.
+- When two runs change the same folder at the same time, the card says "Another run changed this folder at
+  the same time, so this list may include its changes."
+- If VS Code closes during a run, the after snapshot is taken the first time the review is opened.
+
+Keeping and reverting need a trusted workspace.
+
+### Running in a separate worktree
+
+A workflow can run on a copy of your git repository instead of your files. In the workflow panel, set **Run
+in** to **Separate worktree**, or in YAML:
+
+```yaml
+isolation: worktree
+setup: # optional: commands that run in the worktree before the first block
+  - npm ci
+```
+
+The run gets its own git worktree in VS Code's storage, checked out at the before snapshot, so uncommitted
+work is included. Console blocks, agent tools and context files all work there. Your files stay untouched
+until you decide in the review card: **Keep** copies a change into your workspace (asking first if the
+workspace file changed during the run), **Revert** drops it. Once every file is decided, the worktree is
+removed.
+
+- Setup commands run one after the other in the worktree, shown in the run's terminal as `▶ setup: npm ci`.
+  When one fails, the run ends: "Setup command "npm ci" failed with exit code 1. See the terminal for its
+  output." Setup commands are part of the command confirmation and run as written: `${{ }}` templates
+  are not filled in.
+- A worktree needs git: "Isolation "worktree" needs a git repository. Run git init in <folder>, or set
+  isolation to workspace."
+- Files that setup commands create and git does not ignore show up in the review. `node_modules` and most
+  build output are usually ignored.
+- Switching **Run in** back to **Workspace** also removes the setup commands, after you confirm it.
 
 ## 13. Secrets
 
@@ -863,14 +1079,16 @@ Pass secrets to commands through `env` rather than in the command line:
 
 ## 14. Settings
 
-| Setting                    | Default | Description                                                                                                                                       |
-| -------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `isarFlow.providers`       | `[]`    | OpenAI-compatible model endpoints ([Models](#11-models)). Ignored from workspace settings in Restricted Mode.                                     |
-| `isarFlow.vscodeModels`    | `true`  | Offer the language models available in VS Code (for example GitHub Copilot).                                                                      |
-| `isarFlow.defaultShell`    | `auto`  | Shell for console blocks without `shell` and for the agent tools `runCommand` and `gitDiff`: `auto`, `pwsh`, `powershell`, `cmd`, `bash` or `sh`. |
-| `isarFlow.maxTokensPerRun` | `0`     | Stop a run when its agents used more tokens than this. `0` means no limit.                                                                        |
-| `isarFlow.confirmCommands` | `true`  | Ask before running a workflow whose console commands, or agents that act without asking, you have not approved yet. Only your user settings can turn this off. |
-| `isarFlow.historyLimit`    | `50`    | Runs kept per workflow (1–500).                                                                                                                   |
+| Setting                       | Default | Description                                                                                                                                                                                                |
+| ----------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `isarFlow.providers`          | `[]`    | OpenAI-compatible model endpoints ([Models](#11-models)). Ignored from workspace settings in Restricted Mode.                                                                                              |
+| `isarFlow.vscodeModels`       | `true`  | Offer the language models available in VS Code (for example GitHub Copilot).                                                                                                                               |
+| `isarFlow.defaultShell`       | `auto`  | Shell for console blocks without `shell` and for the agent tools `runCommand` and `gitDiff`: `auto`, `pwsh`, `powershell`, `cmd`, `bash` or `sh`.                                                          |
+| `isarFlow.maxTokensPerRun`    | `0`     | Stop a run when its agents used more tokens than this. `0` means no limit.                                                                                                                                 |
+| `isarFlow.confirmCommands`    | `true`  | Ask before running a workflow whose console commands, or agents that act without asking, you have not approved yet. Only your user settings can turn this off.                                             |
+| `isarFlow.historyLimit`       | `50`    | Runs kept per workflow (1–500). The snapshots, review data and worktrees of runs dropped from the history are removed too.                                                                                 |
+| `isarFlow.agentContextTokens` | `24000` | Context size in tokens for models that don't report one (at least 2000). Agent conversations are summarized at 70 % of it ([Long conversations](#long-conversations)).                                     |
+| `isarFlow.modelPrices`        | `{}`    | Prices per 1 million input and output tokens by model reference, for example `{ "litellm/gpt-4.1": { "input": 2, "output": 8 } }`. Costs are shown only for listed models ([Model prices](#model-prices)). |
 
 ## 15. Commands
 
@@ -890,6 +1108,8 @@ All commands are in the Command Palette under **Isar Flow**.
 | Set provider API key     | Stores or removes the API key of an endpoint.                              |
 | Test model endpoint      | Lists an endpoint's models once and reports the result.                    |
 | Refresh models           | Lists the models of all providers again.                                   |
+| Test model               | Asks a model for a tool call and a JSON answer and reports the result.     |
+| Check setup              | Checks every endpoint and tests the models your workflows use.             |
 | Set workflow secret      | Stores or deletes a secret for `${{ secrets.NAME }}`.                      |
 | Show log                 | Opens the **Isar Flow** output channel.                                    |
 
@@ -942,6 +1162,13 @@ agents written by others.
   run, but a compromised webview could still start runs whose commands you already approved and answer
   approval blocks of the workflow it shows. In the sidebar it could delete agent files (to the trash) and
   remove endpoints, which are confirmed only inside the webview.
+- **Snapshots stay local.** In a git repository, run snapshots are commits under `refs/isarflow/runs/`, on no
+  branch. A normal `git push` does not send them, but `git push --mirror` or a push of all refs would. They
+  contain the files of the folder as they were before and after each run (only files git does not ignore),
+  and are removed with the run history. Snapshot commands run without your git hooks and never sign.
+- **Review is not a sandbox.** Reverting restores files after the run; it does not undo what commands did
+  elsewhere (network calls, other folders, databases). A worktree run keeps your files untouched, but its
+  commands still run with your permissions.
 - **Runs always end.** Loops need `maxIterations`, agents have `maxTurns`, blocks can have a `timeout`, and
   the token budget stops expensive runs.
 - **Model output is shown as text** and is never rendered as HTML.
@@ -950,21 +1177,29 @@ agents written by others.
 
 Start with **Isar Flow: Show log**: activation, model discovery, runs and failed blocks are logged there.
 
-| Problem                                                       | What to do                                                                                                                                                                                   |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Run** is disabled                                           | Hover it to see why: the workspace is not trusted, the YAML cannot be read, there are problems, or the workflow has no blocks.                                                               |
-| "Fix N problems … before running"                             | Select **Show problems**. Errors block the run, warnings do not.                                                                                                                             |
-| A model is missing from the pickers                           | Run **Refresh models** or **Test model endpoint**. Check the base URL (with or without `/v1`) and the API key. Servers that cannot list models need `models` in the setting.                 |
-| "Model '…' is not available" warning                          | The model is not in the current model list. Refresh the models or pick another one.                                                                                                          |
-| "Isar Flow may not use the VS Code model …"                   | Allow Isar Flow when VS Code asks, or under **Accounts → Manage Language Model Access**.                                                                                                     |
-| "Agent '…' not found"                                         | Create `.isarflow/agents/<id>.agent.yaml` (or a user agent) with that id, or pick another agent. Agent files must be saved.                                                                  |
-| A command works in your terminal but not in a workflow        | Set `shell` on the block or change `isarFlow.defaultShell`. With `bash` on Windows, install Git for Windows.                                                                                 |
-| Wrong characters in console output                            | Output is read as UTF-8, and PowerShell and cmd are switched to UTF-8 for each command. A program that still writes another encoding shows wrong characters; check its own encoding options. |
-| The agent's answer "is not valid JSON for the expected shape" | Describe the JSON in the prompt or system prompt, simplify `output.schema`, or use a stronger model.                                                                                         |
-| "The agent used all N turns …"                                | Raise `maxTurns` or split the task into several blocks.                                                                                                                                      |
-| A loop fails with "reached its limit of N iterations"         | Raise `maxIterations`, check the condition, or set `onMaxIterations: continue`.                                                                                                              |
-| `steps.x.json` is empty                                       | Set `output.format: json` on block `x`, or read `steps.x.text`.                                                                                                                              |
-| A value in a condition or prompt is empty                     | The block has not run yet at that point, or it is in the other branch of an If. The inspector and the Problems view warn about such references.                                              |
-| "The YAML can't be read"                                      | Select **Show in YAML** and fix the line the banner names. Quote values with `: `, ` #` or a leading `${{` inside `{ }`.                                                                     |
-| Nothing runs, "Workflows don't run in Restricted Mode"        | Trust the workspace (**Manage Workspace Trust**) if you trust its content.                                                                                                                   |
-| Agent tools say "Agent tools need an open folder"             | Open a folder; agent tools work inside a workspace folder only.                                                                                                                              |
+| Problem                                                                 | What to do                                                                                                                                                                                    |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Run** is disabled                                                     | Hover it to see why: the workspace is not trusted, the YAML cannot be read, there are problems, or the workflow has no blocks.                                                                |
+| "Fix N problems … before running"                                       | Select **Show problems**. Errors block the run, warnings do not.                                                                                                                              |
+| A model is missing from the pickers                                     | Run **Refresh models** or **Test model endpoint**. Check the base URL (with or without `/v1`) and the API key. Servers that cannot list models need `models` in the setting.                  |
+| "Model '…' is not available" warning                                    | The model is not in the current model list. Refresh the models or pick another one.                                                                                                           |
+| "Isar Flow may not use the VS Code model …"                             | Allow Isar Flow when VS Code asks, or under **Accounts → Manage Language Model Access**.                                                                                                      |
+| "Agent '…' not found"                                                   | Create `.isarflow/agents/<id>.agent.yaml` (or a user agent) with that id, or pick another agent. Agent files must be saved.                                                                   |
+| A command works in your terminal but not in a workflow                  | Set `shell` on the block or change `isarFlow.defaultShell`. With `bash` on Windows, install Git for Windows.                                                                                  |
+| Wrong characters in console output                                      | Output is read as UTF-8, and PowerShell and cmd are switched to UTF-8 for each command. A program that still writes another encoding shows wrong characters; check its own encoding options.  |
+| The agent's answer "is not valid JSON for the expected shape"           | Describe the JSON in the prompt or system prompt, simplify `output.schema`, or use a stronger model.                                                                                          |
+| "The agent used all N turns …"                                          | Raise `maxTurns` or split the task into several blocks.                                                                                                                                       |
+| A loop fails with "reached its limit of N iterations"                   | Raise `maxIterations`, check the condition, or set `onMaxIterations: continue`.                                                                                                               |
+| `steps.x.json` is empty                                                 | Set `output.format: json` on block `x`, or read `steps.x.text`.                                                                                                                               |
+| A value in a condition or prompt is empty                               | The block has not run yet at that point, or it is in the other branch of an If. The inspector and the Problems view warn about such references.                                               |
+| "The YAML can't be read"                                                | Select **Show in YAML** and fix the line the banner names. Quote values with `: `, ` #` or a leading `${{` inside `{ }`.                                                                      |
+| Nothing runs, "Workflows don't run in Restricted Mode"                  | Trust the workspace (**Manage Workspace Trust**) if you trust its content.                                                                                                                    |
+| Agent tools say "Agent tools need an open folder"                       | Open a folder; agent tools work inside a workspace folder only.                                                                                                                               |
+| An agent writes tool calls as text, or never calls a tool               | Run **Test model**. A model that needs text tool mode works with **Tool calls** on **Automatic** after the test, or set **Tool calls** to **Text in the prompt** ([Tool calls](#tool-calls)). |
+| "The model wrote tool calls that could not be read twice"               | Set **Tool calls** to **Text in the prompt** in the agent, or use a model with native tool calling.                                                                                           |
+| The log warns that the conversation needs more than 70 % of the context | Attach fewer or smaller context files, or use a model with a larger context. If the model supports more, raise `isarFlow.agentContextTokens`.                                                 |
+| "Isolation "worktree" needs a git repository"                           | Run `git init` in the folder (and commit), or set **Run in** back to **Workspace**.                                                                                                           |
+| "Setup command … failed"                                                | The terminal of the run shows the command's output. Fix the command, or run it once in your own terminal inside the repository to check it.                                                   |
+| The review card doesn't list a file a command changed                   | Without git, only files that agents wrote are listed. Run `git init` in the folder to cover console commands too.                                                                             |
+| A file can't be reverted                                                | Its state before the run wasn't saved: it was larger than 2 MB without git, or it is a symbolic link. Restore it from version control.                                                        |
+| Check setup reports an endpoint as unreachable                          | The endpoint didn't answer within 30 s. Check that the server runs and the base URL is right, then select **Run again**.                                                                      |

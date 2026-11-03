@@ -49,9 +49,9 @@ function clickTarget(spec: string): HTMLElement | null {
   if (spec.startsWith('text:')) {
     const text = spec.slice(5);
     return (
-      Array.from(document.querySelectorAll<HTMLElement>('button, [role="option"], [role="tab"], [role="radio"]')).find(
-        (el) => el.textContent?.trim() === text,
-      ) ?? null
+      Array.from(
+        document.querySelectorAll<HTMLElement>('button, [role="option"], [role="tab"], [role="radio"]'),
+      ).find((el) => el.textContent?.trim() === text) ?? null
     );
   }
   return document.querySelector<HTMLElement>(spec);

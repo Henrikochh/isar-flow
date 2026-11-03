@@ -42,6 +42,7 @@ describe('runAgentLoop: plain answers', () => {
       text: 'Looks good.',
       usage: { inputTokens: 10, outputTokens: 3 },
       turns: 1,
+      toolCalls: 0,
       model: 'fake/model',
       messages: [
         { role: 'user', content: 'Review the change.' },

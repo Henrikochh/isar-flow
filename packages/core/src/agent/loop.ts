@@ -1,54 +1,36 @@
 import { AgentRunError } from '../engine/errors';
 import type { StepIO, Usage } from '../engine/types';
 import type { ChatMessage, ChatModel, ChatOptions, ToolCall } from '../models/types';
-import type { OutputShape } from '../schema/types';
+import type { ToolMode } from '../schema/types';
 import { abortError, throwIfAborted } from './abort';
-import {
-  checkJsonShape,
-  describeOutputShape,
-  extractJson,
-  extractJsonMatching,
-  isJsonSchema,
-  shapeToJsonSchema,
-  validateOutputShape,
-} from './json';
-import { BUILTIN_TOOLS, describeToolCall, isToolName, summarizeToolResult, toolSpecsFor } from './tools';
-import type { AgentLoopOptions, AgentLoopResult, ToolResult } from './types';
+import { compactIfNeeded } from './compaction';
+import { type Conversation, logOnce, startConversation } from './conversation';
+import { errorMessage, sentence } from './format';
+import { shapeToJsonSchema } from './json';
+import { parseAnswer, repairPrompt } from './jsonAnswer';
+import { correctivePrompt, toTextModeMessages, withToolSection } from './textTools';
+import { parseTextToolCalls, type TextToolCall } from './toolCallText';
+import { runToolCall } from './toolRun';
+import { isToolName, toolSpecsFor } from './tools';
+import type { AgentLoopOptions, AgentLoopResult } from './types';
+
+export { type Conversation, startConversation } from './conversation';
 
 const DEFAULT_MAX_TURNS = 20;
+const REPAIRED_CALL = 'The model wrote a tool call as text; running it.';
+const UNREADABLE_CALL = 'The model wrote a tool call that could not be read; asking it to correct it.';
+const UNREADABLE_TWICE =
+  'The model wrote tool calls that could not be read twice. In the agent, set Tool calls to Text in the prompt, ' +
+  'or use a model with native tool calling.';
 
-/** Progress of one agent conversation. Kept outside the loop so a fallback model can pick it up. */
-export interface Conversation {
-  /** Messages without the system prompt. */
-  messages: ChatMessage[];
-  usage: Usage;
-  /** Completed model round-trips. */
-  turns: number;
-  repairRequested: boolean;
-}
-
-/** Builds the opening conversation: history (minus system messages) and the prompt, plus JSON instructions. */
-export function startConversation(
-  options: Pick<AgentLoopOptions, 'history' | 'prompt' | 'output'>,
-): Conversation {
-  const json = options.output?.format === 'json';
-  const shape = json ? options.output?.schema : undefined;
-  if (shape) {
-    const problems = validateOutputShape(shape);
-    if (problems.length > 0) {
-      throw new Error(
-        `The output schema is invalid: ${problems.join(' ')} Fix output.schema of the agent block.`,
-      );
-    }
-  }
-  const history = (options.history ?? []).filter((message) => message.role !== 'system');
-  const prompt = json ? `${options.prompt}\n\n${jsonInstruction(shape)}` : options.prompt;
-  return {
-    messages: [...history, { role: 'user', content: prompt }],
-    usage: { inputTokens: 0, outputTokens: 0 },
-    turns: 0,
-    repairRequested: false,
-  };
+/**
+ * How tools reach the model. `native`: tool specs in the request. `text`: described in the system prompt, calls
+ * written as `<tool_call>` text. `repair`: calls written as text in the reply are run too.
+ */
+interface ToolChannel {
+  native: boolean;
+  text: boolean;
+  repair: boolean;
 }
 
 /**
@@ -60,14 +42,21 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   try {
     return await continueConversation(options, conversation);
   } catch (error) {
-    throw withUsage(error, conversation.usage);
+    throw withUsage(error, conversation.usage, conversation.toolCalls);
   }
 }
 
-/** The error to throw for a failed run: wrapped in an AgentRunError when tokens were used, so they still count. */
-export function withUsage(error: unknown, usage: Usage): unknown {
+/**
+ * The error to throw for a failed run: wrapped in an AgentRunError when tokens were used, so they (and the tool
+ * calls made so far) still count.
+ */
+export function withUsage(error: unknown, usage: Usage, toolCalls = 0): unknown {
   if (usage.inputTokens + usage.outputTokens <= 0) return error;
-  return new AgentRunError(errorMessage(error), { ...usage }, { cause: error });
+  return new AgentRunError(
+    errorMessage(error),
+    { ...usage },
+    { cause: error, ...(toolCalls > 0 && { toolCalls }) },
+  );
 }
 
 /**
@@ -82,43 +71,81 @@ export async function continueConversation(
   const maxTurns = Math.max(1, options.maxTurns ?? DEFAULT_MAX_TURNS);
   const json = options.output?.format === 'json';
   const shape = json ? options.output?.schema : undefined;
-  const toolSpecs = toolSpecsFor(options.tools);
+  const enabled = [...new Set(options.tools.filter(isToolName))];
+  const channel = toolChannel(options.toolMode, model, enabled.length > 0);
+  if (channel.text && options.toolMode !== 'text') {
+    logOnce(
+      conversation,
+      io,
+      `${model.ref} has no native tool calling, so the tools are described in the prompt (text tool mode).`,
+    );
+  }
+  const specs = channel.native ? toolSpecsFor(enabled) : [];
+  const systemPrompt = channel.text
+    ? withToolSection(options.systemPrompt, toolSpecsFor(enabled))
+    : options.systemPrompt;
   const chatOptions: ChatOptions = {
-    tools: toolSpecs.length > 0 ? toolSpecs : undefined,
+    tools: specs.length > 0 ? specs : undefined,
     temperature: options.temperature,
     maxTokens: options.maxTokens,
+    // A schema-constrained answer could not contain the <tool_call> text that text mode needs.
     jsonSchema:
-      shape && model.capabilities.jsonSchema
+      shape && model.capabilities.jsonSchema && !channel.text
         ? { name: 'answer', schema: shapeToJsonSchema(shape) }
         : undefined,
     signal: io.signal,
   };
-  const system: ChatMessage[] = options.systemPrompt
-    ? [{ role: 'system', content: options.systemPrompt }]
-    : [];
+  const system: ChatMessage[] = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
 
   for (;;) {
     throwIfAborted(io.signal);
-    const reply = await streamTurn(
+    await compactIfNeeded({
       model,
-      [...system, ...conversation.messages],
-      chatOptions,
-      io,
       conversation,
-    );
+      system: systemPrompt,
+      tools: specs,
+      contextTokens: options.contextTokens,
+      io,
+    });
+    const sent = channel.text ? toTextModeMessages(conversation.messages) : conversation.messages;
+    const reply = await streamTurn(model, [...system, ...sent], chatOptions, io, conversation);
     conversation.turns++;
 
-    if (reply.toolCalls.length > 0) {
-      // The single JSON repair round does not count against maxTurns.
-      if (conversation.turns >= maxTurns + (conversation.repairRequested ? 1 : 0)) {
+    let { text, toolCalls } = reply;
+    if (toolCalls.length === 0 && channel.repair) {
+      const found = parseTextToolCalls(reply.text, enabled, { jsonAnswer: json });
+      if (found.malformed) {
+        if (conversation.unreadableReplies > 0) throw new Error(UNREADABLE_TWICE);
+        conversation.unreadableReplies++;
+        conversation.correctiveRounds++;
+        io.log('info', `${UNREADABLE_CALL}\n`);
+        conversation.messages.push(
+          { role: 'assistant', content: reply.text },
+          { role: 'user', content: correctivePrompt(found.malformed.name, found.malformed.problem) },
+        );
+        continue;
+      }
+      if (found.calls.length > 0) {
+        if (channel.native) logOnce(conversation, io, REPAIRED_CALL);
+        toolCalls = withCallIds(found.calls, conversation.messages);
+        text = found.text;
+      }
+    }
+    conversation.unreadableReplies = 0;
+
+    if (toolCalls.length > 0) {
+      // The JSON repair round and corrective rounds do not count against maxTurns.
+      const freeTurns = (conversation.repairRequested ? 1 : 0) + conversation.correctiveRounds;
+      if (conversation.turns >= maxTurns + freeTurns) {
         throw new Error(
           `The agent used all ${maxTurns} turns without giving a final answer. Increase maxTurns or simplify the task.`,
         );
       }
-      conversation.messages.push({ role: 'assistant', content: reply.text, toolCalls: reply.toolCalls });
-      for (const call of reply.toolCalls) {
+      conversation.messages.push({ role: 'assistant', content: text, toolCalls });
+      for (const call of toolCalls) {
         throwIfAborted(io.signal);
         const result = await runToolCall(call, options);
+        conversation.toolCalls++;
         conversation.messages.push({
           role: 'tool',
           toolCallId: call.id,
@@ -135,6 +162,7 @@ export async function continueConversation(
       text: reply.text,
       usage: { ...conversation.usage },
       turns: conversation.turns,
+      toolCalls: conversation.toolCalls,
       messages: [...conversation.messages],
       model: model.ref,
     };
@@ -152,6 +180,29 @@ export async function continueConversation(
     io.log('info', 'The answer is not valid JSON for the expected shape; asking the agent to correct it.\n');
     conversation.messages.push({ role: 'user', content: repairPrompt(answer.problems, shape) });
   }
+}
+
+/** Native specs plus repair for models with tool calling; text mode for the others (or when chosen). */
+function toolChannel(mode: ToolMode | undefined, model: ChatModel, hasTools: boolean): ToolChannel {
+  if (!hasTools) return { native: false, text: false, repair: false };
+  if (mode === 'native') return { native: true, text: false, repair: false };
+  if (mode === 'text' || !model.capabilities.tools) return { native: false, text: true, repair: true };
+  return { native: true, text: false, repair: true };
+}
+
+/** Calls found in text get ids `call_<n>` that are unique in the conversation. */
+function withCallIds(calls: TextToolCall[], messages: ChatMessage[]): ToolCall[] {
+  const used = new Set<string>();
+  for (const message of messages) {
+    if (message.role === 'assistant') for (const call of message.toolCalls ?? []) used.add(call.id);
+  }
+  let n = used.size;
+  return calls.map((call) => {
+    let id = `call_${++n}`;
+    while (used.has(id)) id = `call_${++n}`;
+    used.add(id);
+    return { id, name: call.name, arguments: JSON.stringify(call.args) };
+  });
 }
 
 async function streamTurn(
@@ -204,106 +255,4 @@ async function streamTurn(
       call.id ? call : { ...call, id: `call_${base}_${index + 1}` },
     ),
   };
-}
-
-async function runToolCall(call: ToolCall, options: AgentLoopOptions): Promise<ToolResult> {
-  const { io } = options;
-  const parsed = parseArguments(call.arguments);
-  const args = parsed.ok ? parsed.args : {};
-  const problem =
-    refusal(call.name, options.tools) ?? (parsed.ok ? invalidArguments(call.name, args) : parsed.error);
-
-  let result: ToolResult;
-  if (problem) {
-    result = { content: problem, isError: true };
-  } else if (!options.toolHost) {
-    const content = `The tool "${call.name}" cannot run here because no tool host is available. Answer without tools.`;
-    result = { content, isError: true };
-  } else {
-    try {
-      result = await options.toolHost.execute({ name: call.name, args }, io, options.permissions);
-    } catch (error) {
-      if (io.signal.aborted) throw abortError(io.signal);
-      result = { content: `The tool failed: ${errorMessage(error)}`, isError: true };
-    }
-  }
-  io.log('tool', `${describeToolCall(call.name, args)} → ${summarizeToolResult(result)}\n`);
-  return result;
-}
-
-/** Why the agent may not call this tool (unknown or not enabled), or undefined. */
-function refusal(name: string, tools: AgentLoopOptions['tools']): string | undefined {
-  const enabled = tools.filter(isToolName);
-  const available =
-    enabled.length > 0 ? `Available tools: ${enabled.join(', ')}.` : 'This agent has no tools.';
-  if (!isToolName(name)) return `Unknown tool "${name}". ${available}`;
-  if (!enabled.includes(name)) return `The tool "${name}" is not enabled for this agent. ${available}`;
-  return undefined;
-}
-
-function parseArguments(
-  raw: string,
-): { ok: true; args: Record<string, unknown> } | { ok: false; error: string } {
-  if (raw.trim() === '') return { ok: true, args: {} };
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch (error) {
-    return {
-      ok: false,
-      error: `Invalid JSON arguments: ${errorMessage(error)}. Send the arguments as one JSON object.`,
-    };
-  }
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    const kind = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
-    return { ok: false, error: `Invalid JSON arguments: expected a JSON object, got ${kind}.` };
-  }
-  // Models often send null for optional parameters they do not use; treat that as "not given".
-  const args = Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null));
-  return { ok: true, args };
-}
-
-function invalidArguments(name: string, args: Record<string, unknown>): string | undefined {
-  if (!isToolName(name)) return undefined;
-  const problems = checkJsonShape(args, BUILTIN_TOOLS[name].parameters);
-  return problems.length > 0 ? `Invalid arguments for ${name}: ${problems.join('; ')}.` : undefined;
-}
-
-function parseAnswer(text: string, shape: OutputShape | undefined): { value?: unknown; problems: string[] } {
-  try {
-    return shape ? extractJsonMatching(text, shape) : { value: extractJson(text), problems: [] };
-  } catch (error) {
-    return { problems: [errorMessage(error)] };
-  }
-}
-
-function shapeText(shape: OutputShape): string {
-  const intro = isJsonSchema(shape)
-    ? 'It must match this JSON Schema:'
-    : 'It must match this shape (keys marked with ? are optional):';
-  return `${intro}\n${describeOutputShape(shape)}`;
-}
-
-function jsonInstruction(shape: OutputShape | undefined): string {
-  const base = 'Your final answer must be JSON only, with no explanations and no code fences.';
-  return shape ? `${base} ${shapeText(shape)}` : base;
-}
-
-function repairPrompt(problems: string[], shape: OutputShape | undefined): string {
-  const lines = [
-    'Your answer is not valid JSON for the expected shape:',
-    ...problems.map((problem) => `- ${problem}`),
-    '',
-    'Reply again with the corrected JSON only, with no explanations and no code fences.',
-  ];
-  if (shape) lines.push(shapeText(shape));
-  return lines.join('\n');
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function sentence(text: string): string {
-  return `${text.replace(/[.\s]+$/, '')}.`;
 }

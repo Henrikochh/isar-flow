@@ -98,7 +98,8 @@ describe('Run output tab', () => {
     expect(screen.getByText(/"approved": false/)).toBeInTheDocument();
     expect(screen.getByText('5.2k in')).toBeInTheDocument();
     expect(screen.getByText('310 out')).toBeInTheDocument();
-    expect(screen.getByText('2 turns')).toBeInTheDocument();
+    const metrics = screen.getByRole('group', { name: 'Time and tokens' });
+    expect(within(metrics).getByText('Turns', { selector: 'dt' }).nextElementSibling).toHaveTextContent('2');
   });
 
   it('lists tool calls and the text answer of an agent', () => {
@@ -146,7 +147,7 @@ describe('Run summary', () => {
     expect(screen.getByRole('tab', { name: 'Run summary' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('heading', { name: 'Running' })).toBeInTheDocument();
     expect(screen.getByText('Add voucher codes')).toBeInTheDocument();
-    const blocks = screen.getByRole('list', { name: 'Blocks in this run' });
+    const blocks = screen.getByRole('table', { name: 'Blocks in this run' });
     expect(within(blocks).getAllByRole('button')).toHaveLength(6);
     fireEvent.click(within(blocks).getByRole('button', { name: 'tests: Failed' }));
     expect(screen.getByRole('log', { name: 'Output' })).toBeInTheDocument();

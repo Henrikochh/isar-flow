@@ -51,6 +51,7 @@ describe('executeAgentRequest', () => {
       model: 'main/model',
       usage: { inputTokens: 9, outputTokens: 2 },
       turns: 1,
+      toolCalls: 0,
       messages: [
         { role: 'user', content: 'Review the change.' },
         { role: 'assistant', content: 'Approved.' },
@@ -80,6 +81,39 @@ describe('executeAgentRequest', () => {
     ).rejects.toThrow(/all 2 turns/);
     expect(host.calls[0].permissions).toEqual({ edits: 'auto' });
     expect(main.calls[0].options.tools?.map((t) => t.name)).toEqual(['readFile']);
+  });
+
+  it('uses the tool mode of the agent', async () => {
+    const main = new FakeModel([say('ok')], { ref: 'main/model' });
+    await executeAgentRequest(request({}, { tools: ['readFile'], toolMode: 'text' }), {
+      resolver: new MapResolver({ 'main/model': main }),
+      io: recordingIO(),
+    });
+    expect(main.calls[0].options.tools).toBeUndefined();
+    expect(main.calls[0].messages[0].content).toMatch(/^Be strict\.\n\n.*<tool_call>/s);
+  });
+
+  it('compacts with the configured context size', async () => {
+    const host = new FakeToolHost({ readFile: () => ({ content: 'x'.repeat(3000) }) });
+    const main = new FakeModel(
+      [
+        callTools({ name: 'readFile', args: { path: 'a.ts' } }),
+        callTools({ name: 'readFile', args: { path: 'b.ts' } }),
+        say('Summary.'),
+        say('Done.'),
+      ],
+      { ref: 'main/model' },
+    );
+    const io = recordingIO();
+    const result = await executeAgentRequest(request({}, { tools: ['readFile'] }), {
+      resolver: new MapResolver({ 'main/model': main }),
+      io,
+      toolHost: host,
+      contextTokens: 2000,
+    });
+    expect(result.text).toBe('Done.');
+    expect(main.calls[2].options.maxTokens).toBe(1024);
+    expect(io.textOf('info')).toMatch(/^Compacted the conversation: 2 older messages/);
   });
 
   it('returns parsed JSON and continues a session from history', async () => {
@@ -354,6 +388,75 @@ describe('executeAgentRequest', () => {
         usage: { inputTokens: 8, outputTokens: 6 },
       });
       expect(result.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'tool', 'assistant']);
+    });
+
+    it('counts the tool calls of every model that worked on the block', async () => {
+      const host = new FakeToolHost({ readFile: () => ({ content: 'x' }) });
+      const main = new FakeModel(
+        [
+          callTools({ name: 'readFile', args: { path: 'a.ts' } }),
+          { error: new ModelError('Server error 500.', 'server', 500) },
+        ],
+        { ref: 'main/model' },
+      );
+      const fallback = new FakeModel(
+        [
+          callTools(
+            { name: 'readFile', args: { path: 'b.ts' } },
+            { name: 'readFile', args: { path: 'c.ts' } },
+          ),
+          say('Done.'),
+        ],
+        { ref: 'backup/model' },
+      );
+      const result = await executeAgentRequest(
+        request({}, { tools: ['readFile'], fallbackModels: ['backup/model'] }),
+        {
+          resolver: new MapResolver({ 'main/model': main, 'backup/model': fallback }),
+          io: recordingIO(),
+          toolHost: host,
+        },
+      );
+      expect(result.toolCalls).toBe(3);
+      expect(host.calls).toHaveLength(3);
+    });
+
+    it('continues a text-mode conversation on a fallback model with native tool calling', async () => {
+      const host = new FakeToolHost({ readFile: () => ({ content: 'const a = 1;' }) });
+      const main = new FakeModel(
+        [
+          say('Reading.\n<tool_call>{"name": "readFile", "arguments": {"path": "a.ts"}}</tool_call>'),
+          { error: new ModelError('Too many requests.', 'rate-limit', 429) },
+        ],
+        { ref: 'main/llama', capabilities: { tools: false } },
+      );
+      const fallback = new FakeModel([say('Done.')], { ref: 'backup/model' });
+      const io = recordingIO();
+
+      const result = await executeAgentRequest(
+        request({}, { model: 'main/llama', tools: ['readFile'], fallbackModels: ['backup/model'] }),
+        { resolver: new MapResolver({ 'main/llama': main, 'backup/model': fallback }), io, toolHost: host },
+      );
+
+      expect(result).toMatchObject({ text: 'Done.', model: 'backup/model', toolCalls: 1, turns: 2 });
+      expect(main.calls[1].messages[3]).toEqual({
+        role: 'user',
+        content: 'Result of readFile (call_1):\nconst a = 1;',
+      });
+      expect(fallback.calls[0].options.tools?.map((t) => t.name)).toEqual(['readFile']);
+      expect(fallback.calls[0].messages).toEqual([
+        { role: 'system', content: 'Be strict.' },
+        { role: 'user', content: 'Review the change.' },
+        {
+          role: 'assistant',
+          content: 'Reading.',
+          toolCalls: [{ id: 'call_1', name: 'readFile', arguments: '{"path":"a.ts"}' }],
+        },
+        { role: 'tool', toolCallId: 'call_1', name: 'readFile', content: 'const a = 1;' },
+      ]);
+      expect(io.textOf('info')).toMatch(
+        /^main\/llama has no native tool calling, so the tools are described in the prompt \(text tool mode\)\.\n/,
+      );
     });
 
     it('rethrows the error unchanged when there is no fallback', async () => {

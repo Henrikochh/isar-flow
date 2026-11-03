@@ -47,10 +47,20 @@
           "searchText",
           "gitDiff",
           "editFile",
+          "applyPatch",
           "writeFile",
           "runCommand"
         ]
       }
+    },
+    "toolMode": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "native",
+        "text"
+      ],
+      "description": "How the agent calls tools: auto (native tool calls when the model supports them, otherwise text), native (native tool calls only) or text (tools described in the prompt, for models without tool calling)."
     },
     "permissions": {
       "description": "none = never, ask = confirm each time, auto = allow.",

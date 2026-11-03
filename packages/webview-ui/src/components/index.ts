@@ -18,6 +18,7 @@ export {
   type ChipTone,
   type BannerTone,
 } from './Display';
+export { CapabilityChips, ProbeChip } from './Capabilities';
 export { Dialog } from './Dialog';
 export { ModelPicker, type ModelPickerProps } from './ModelPicker';
 export { Popover, type PopoverProps, type PopoverPlacement } from './Popover';

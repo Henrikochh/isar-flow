@@ -4,6 +4,9 @@ export {
   readModelSettings,
   type ModelRegistryDeps,
   type ModelSettings,
+  type ProbingModelRegistry,
 } from './registry';
-export { apiKeySecret, readProviderConfigs, VSCODE_PROVIDER_ID } from './settings';
+export { createSetupCheck, type SetupCheckDeps } from './setupCheck';
+export { registerSetupCommands } from './setupCommands';
+export { apiKeySecret, contextTokensSetting, readProviderConfigs, VSCODE_PROVIDER_ID } from './settings';
 export { listVsCodeModels, wrapVsCodeModel } from './vscodeLm';

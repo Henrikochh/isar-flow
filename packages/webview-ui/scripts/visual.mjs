@@ -9,10 +9,11 @@
  * Output: packages/webview-ui/visual-output/<view>-<name or scenario>-<theme>.png
  * A shot with `act` interacts with the page (e.g. opens a menu) before the screenshot; `name` tells it apart.
  * Locale and time zone are pinned (en-US, Europe/Zurich) so dates and times read the same on every machine.
+ * Every scripts/shots/*.mjs adds shots: its default export is an array shaped like the entries of SHOTS.
  */
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 
@@ -87,6 +88,21 @@ const SHOTS = [
   },
 ];
 
+/** Default exports of scripts/shots/*.mjs in alphabetical order; a missing folder adds nothing. */
+async function loadShotFiles() {
+  const dir = resolve(here, 'shots');
+  const files = await readdir(dir).catch(() => []);
+  const extra = [];
+  for (const file of files.filter((f) => f.endsWith('.mjs')).sort()) {
+    const shots = (await import(pathToFileURL(resolve(dir, file)).href)).default;
+    if (!Array.isArray(shots)) throw new Error(`scripts/shots/${file} must export an array of shots`);
+    extra.push(...shots);
+  }
+  return extra;
+}
+
+SHOTS.push(...(await loadShotFiles()));
+
 const shotName = (shot) => `${shot.view}-${shot.name ?? shot.scenario}`;
 const shots = SHOTS.filter((s) => !only || shotName(s).includes(only));
 
@@ -113,13 +129,18 @@ try {
         timezoneId: 'Europe/Zurich',
       });
       page.on('pageerror', (e) => errors.push(`${shot.view}/${shot.scenario}/${theme}: ${e.message}`));
-      page.on('console', (m) => m.type() === 'error' && errors.push(`${shot.view}/${shot.scenario}/${theme}: ${m.text()}`));
+      page.on(
+        'console',
+        (m) => m.type() === 'error' && errors.push(`${shot.view}/${shot.scenario}/${theme}: ${m.text()}`),
+      );
       // The sidebar shows relative times; pin the clock just after the fixtures' "now" so they read the same every run.
       if (shot.view === 'sidebar') await page.clock.setFixedTime(new Date(Date.UTC(2026, 9, 26, 9, 30, 20)));
       const url = `${base}harness/index.html?view=${shot.view}&scenario=${shot.scenario}&theme=${theme}&bare=1`;
       await page.goto(url, { waitUntil: 'networkidle' });
       await page.waitForSelector('body[data-harness-ready="true"]', { timeout: 15000 }).catch(() => {});
-      await page.evaluate(() => Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5000))]));
+      await page.evaluate(() =>
+        Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5000))]),
+      );
       await page.waitForTimeout(400);
       if (shot.act) {
         await shot.act(page);

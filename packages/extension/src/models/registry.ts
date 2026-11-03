@@ -3,13 +3,20 @@ import {
   type ChatModelInfo,
   type ModelCatalog,
   ModelError,
+  type ModelErrorKind,
+  type ModelPrices,
+  type ModelProbeResult,
   OpenAICompatClient,
   type OpenAICompatConfig,
   parseModelRef,
+  type ProbeOptions,
+  probeModel,
   type ProviderSummary,
 } from '@isar-flow/core';
 import * as vscode from 'vscode';
 import type { ModelRegistry, ProviderConfig } from '../contracts';
+import { readModelPrices } from './prices';
+import { ProbeResults, withoutNativeTools } from './probeCache';
 import { apiKeySecret, providerIdFromSecret, readProviderConfigs, VSCODE_PROVIDER_ID } from './settings';
 import {
   compareModelNames,
@@ -23,6 +30,8 @@ export interface ModelSettings {
   /** Raw value of `isarFlow.providers`. */
   providers: unknown;
   vscodeModels: boolean;
+  /** Raw value of `isarFlow.modelPrices`. */
+  prices?: unknown;
 }
 
 export type CompatClient = Pick<OpenAICompatClient, 'listModels' | 'model'>;
@@ -33,6 +42,10 @@ export interface ModelRegistryDeps {
   getConfig?: () => ModelSettings;
   lm?: Pick<typeof vscode.lm, 'selectChatModels' | 'onDidChangeChatModels'>;
   createClient?: (cfg: OpenAICompatConfig) => CompatClient;
+  /** Where "Test model" results are kept; default: context.globalState. */
+  probeStore?: Pick<vscode.Memento, 'get' | 'update'>;
+  probeModel?: (model: ChatModel, options: ProbeOptions) => Promise<ModelProbeResult>;
+  now?: () => number;
 }
 
 /** VS Code announces model changes in bursts (e.g. while Copilot starts); listing waits until they settle. */
@@ -43,6 +56,7 @@ type Status = ProviderSummary['status'];
 interface Listing {
   status: Status;
   error?: string;
+  errorKind?: ModelErrorKind;
   models: ChatModelInfo[];
 }
 
@@ -52,7 +66,10 @@ interface EndpointState extends Listing {
   hasApiKey: boolean;
 }
 
-export function createModelRegistry(deps: ModelRegistryDeps): ModelRegistry {
+/** The registry of this extension always supports "Test model". */
+export type ProbingModelRegistry = ModelRegistry & Required<Pick<ModelRegistry, 'probe'>>;
+
+export function createModelRegistry(deps: ModelRegistryDeps): ProbingModelRegistry {
   return new Registry(deps);
 }
 
@@ -73,16 +90,23 @@ export function readModelSettings(
     const inspected = config.inspect<unknown>('providers');
     providers = inspected?.globalValue ?? inspected?.defaultValue ?? [];
   }
-  return { providers, vscodeModels: config.get<boolean>('vscodeModels', true) !== false };
+  return {
+    providers,
+    vscodeModels: config.get<boolean>('vscodeModels', true) !== false,
+    // Prices only change what is shown, so the workspace value counts in Restricted Mode too.
+    prices: config.get<unknown>('modelPrices', {}),
+  };
 }
 
-class Registry implements ModelRegistry {
+class Registry implements ProbingModelRegistry {
   private readonly emitter = new vscode.EventEmitter<void>();
   readonly onDidChange = this.emitter.event;
 
   private readonly getConfig: () => ModelSettings;
   private readonly lm: NonNullable<ModelRegistryDeps['lm']>;
   private readonly createClient: (cfg: OpenAICompatConfig) => CompatClient;
+  private readonly probeModel: NonNullable<ModelRegistryDeps['probeModel']>;
+  private readonly now: () => number;
   private readonly disposables: vscode.Disposable[] = [];
 
   private started = false;
@@ -98,11 +122,18 @@ class Registry implements ModelRegistry {
   private vscodeListing = 0;
   private lmTimer: ReturnType<typeof setTimeout> | undefined;
   private lastProblems = new Set<string>();
+  private prices: ModelPrices = {};
+  private lastPriceProblems = new Set<string>();
+  private readonly probes: ProbeResults;
+  private readonly probing = new Map<string, Promise<ModelProbeResult>>();
 
   constructor(private readonly deps: ModelRegistryDeps) {
     this.getConfig = deps.getConfig ?? readModelSettings;
     this.lm = deps.lm ?? vscode.lm;
     this.createClient = deps.createClient ?? ((cfg) => new OpenAICompatClient(cfg));
+    this.probeModel = deps.probeModel ?? probeModel;
+    this.now = deps.now ?? Date.now;
+    this.probes = new ProbeResults(deps.probeStore ?? deps.context.globalState, this.now, deps.log);
     this.disposables.push(
       vscode.workspace.onDidChangeConfiguration((event) => {
         if (
@@ -110,6 +141,9 @@ class Registry implements ModelRegistry {
           event.affectsConfiguration('isarFlow.vscodeModels')
         ) {
           this.refreshIfStarted();
+        } else if (event.affectsConfiguration('isarFlow.modelPrices') && this.started && !this.disposed) {
+          this.applyPrices(this.readSettings().prices);
+          this.fire();
         }
       }),
       deps.context.secrets.onDidChange((event) => {
@@ -133,29 +167,22 @@ class Registry implements ModelRegistry {
   }
 
   async resolve(ref: string): Promise<ChatModel> {
-    this.ensureStarted();
-    const { provider, model } = parseModelRef(ref);
-    if (provider === VSCODE_PROVIDER_ID) return this.resolveVsCode(ref, model);
+    const model = await this.resolveModel(ref);
+    const needsText = this.probes.all()[ref]?.outcome === 'text';
+    return needsText && model.capabilities.tools ? withoutNativeTools(model) : model;
+  }
 
-    // Wait for the clients of the newest settings, also when they change meanwhile.
-    for (let ready = this.ready; ; ready = this.ready) {
-      await ready;
-      if (ready === this.ready) break;
-    }
-    const endpoint = this.endpoints.find((e) => e.config.id === provider);
-    if (!endpoint) {
-      throw new ModelError(
-        `Unknown model provider '${provider}' in '${ref}'. Add it with 'Isar Flow: Add model endpoint'.`,
-        'not-found',
-      );
-    }
-    if (!endpoint.client) {
-      throw new ModelError(
-        endpoint.error ?? `The model provider '${endpoint.config.label}' could not be set up.`,
-        'other',
-      );
-    }
-    return endpoint.client.model(model);
+  /** One test per model at a time: a second caller gets the running test. */
+  probe(ref: string, signal?: AbortSignal): Promise<ModelProbeResult> {
+    const running = this.probing.get(ref);
+    if (running) return running;
+    const task = this.runProbe(ref, signal).finally(() => {
+      this.probing.delete(ref);
+      this.fire();
+    });
+    this.probing.set(ref, task);
+    this.fire();
+    return task;
   }
 
   dispose(): void {
@@ -193,6 +220,7 @@ class Registry implements ModelRegistry {
     const settings = this.readSettings();
     const { configs, problems } = readProviderConfigs(settings.providers);
     this.reportProblems(problems);
+    this.applyPrices(settings.prices);
 
     // Keep the previous models while loading so model pickers do not flicker.
     const previous = new Map(this.endpoints.map((e) => [e.config.id, e]));
@@ -255,6 +283,7 @@ class Registry implements ModelRegistry {
         } catch (error) {
           endpoint.status = 'error';
           endpoint.error = messageOf(error);
+          endpoint.errorKind = kindOf(error);
           endpoint.models = [];
         }
       }),
@@ -287,12 +316,14 @@ class Registry implements ModelRegistry {
       endpoint.models = [...models].sort(compareModelNames);
       endpoint.status = 'ok';
       endpoint.error = undefined;
+      endpoint.errorKind = undefined;
       this.deps.log.info(`Found ${count(models.length)} at '${label}'.`);
     } catch (error) {
       if (!isCurrent()) return;
       endpoint.models = [];
       endpoint.status = 'error';
       endpoint.error = messageOf(error);
+      endpoint.errorKind = kindOf(error);
       this.deps.log.warn(`Listing the models of '${label}' failed: ${endpoint.error}`);
     }
     this.fire();
@@ -308,7 +339,7 @@ class Registry implements ModelRegistry {
       this.deps.log.info(`VS Code offers ${count(models.length)}.`);
     } catch (error) {
       if (!isCurrent()) return;
-      this.vscodeModels = { status: 'error', error: messageOf(error), models: [] };
+      this.vscodeModels = { status: 'error', error: messageOf(error), errorKind: kindOf(error), models: [] };
       this.deps.log.warn(`Listing the VS Code language models failed: ${messageOf(error)}`);
     }
     this.fire();
@@ -320,6 +351,34 @@ class Registry implements ModelRegistry {
       this.lmTimer = undefined;
       if (this.started && this.vscodeEnabled && !this.disposed) void this.listVsCode();
     }, LM_CHANGE_DELAY_MS);
+  }
+
+  /* ---------- resolving ---------- */
+
+  private async resolveModel(ref: string): Promise<ChatModel> {
+    this.ensureStarted();
+    const { provider, model } = parseModelRef(ref);
+    if (provider === VSCODE_PROVIDER_ID) return this.resolveVsCode(ref, model);
+
+    // Wait for the clients of the newest settings, also when they change meanwhile.
+    for (let ready = this.ready; ; ready = this.ready) {
+      await ready;
+      if (ready === this.ready) break;
+    }
+    const endpoint = this.endpoints.find((e) => e.config.id === provider);
+    if (!endpoint) {
+      throw new ModelError(
+        `Unknown model provider '${provider}' in '${ref}'. Add it with 'Isar Flow: Add model endpoint'.`,
+        'not-found',
+      );
+    }
+    if (!endpoint.client) {
+      throw new ModelError(
+        endpoint.error ?? `The model provider '${endpoint.config.label}' could not be set up.`,
+        'other',
+      );
+    }
+    return endpoint.client.model(model);
   }
 
   private async resolveVsCode(ref: string, rest: string): Promise<ChatModel> {
@@ -356,26 +415,61 @@ class Registry implements ModelRegistry {
     );
   }
 
+  /* ---------- Test model ---------- */
+
+  private async runProbe(ref: string, signal: AbortSignal | undefined): Promise<ModelProbeResult> {
+    const started = this.now();
+    const failed = (message: string): ModelProbeResult => {
+      const testedAt = this.now();
+      return {
+        ref,
+        outcome: 'failed',
+        message,
+        toolCalls: false,
+        json: false,
+        latencyMs: testedAt - started,
+        testedAt,
+      };
+    };
+    let result: ModelProbeResult;
+    try {
+      result = await this.probeModel(await this.resolveModel(ref), { signal, now: this.now });
+    } catch (error) {
+      // A cancelled test says nothing about the model, so the previous result stays.
+      if (signal?.aborted) return failed('The test was cancelled.');
+      result = failed(messageOf(error));
+    }
+    await this.probes.remember(result);
+    return result;
+  }
+
   /* ---------- state ---------- */
+
+  private applyPrices(raw: unknown): void {
+    const { prices, problems } = readModelPrices(raw);
+    this.prices = prices;
+    for (const problem of problems) if (!this.lastPriceProblems.has(problem)) this.deps.log.warn(problem);
+    this.lastPriceProblems = new Set(problems);
+  }
 
   private snapshot(): ModelCatalog {
     const providers: ProviderSummary[] = [];
     const models: ChatModelInfo[] = [];
     if (this.vscodeEnabled) {
-      const { status, error, models: vscodeModels } = this.vscodeModels;
+      const { status, models: vscodeModels } = this.vscodeModels;
       providers.push({
         id: VSCODE_PROVIDER_ID,
         label: VSCODE_PROVIDER_LABEL,
         kind: 'vscode',
         hasApiKey: false,
         status,
-        ...(error ? { error } : {}),
+        ...errorFields(this.vscodeModels),
         modelCount: vscodeModels.length,
       });
       models.push(...vscodeModels);
     }
     for (const endpoint of this.endpoints) {
-      const { config, status, error } = endpoint;
+      const { config, status } = endpoint;
       providers.push({
         id: config.id,
         label: config.label ?? config.id,
@@ -383,12 +477,21 @@ class Registry implements ModelRegistry {
         baseUrl: config.baseUrl,
         hasApiKey: endpoint.hasApiKey,
         status,
-        ...(error ? { error } : {}),
+        ...errorFields(endpoint),
         modelCount: endpoint.models.length,
       });
       models.push(...endpoint.models);
     }
-    return { models, providers, loading: !this.started || providers.some((p) => p.status === 'loading') };
+    const catalog: ModelCatalog = {
+      models,
+      providers,
+      loading: !this.started || providers.some((p) => p.status === 'loading'),
+    };
+    const probes = this.probes.all();
+    if (Object.keys(probes).length) catalog.probes = { ...probes };
+    if (this.probing.size) catalog.probing = [...this.probing.keys()];
+    if (Object.keys(this.prices).length) catalog.prices = { ...this.prices };
+    return catalog;
   }
 
   private fire(): void {
@@ -409,6 +512,17 @@ class Registry implements ModelRegistry {
       if (choice) void vscode.commands.executeCommand('workbench.action.openSettings', 'isarFlow.providers');
     });
   }
+}
+
+function errorFields(listing: Listing): Pick<ProviderSummary, 'error' | 'errorKind'> {
+  const fields: Pick<ProviderSummary, 'error' | 'errorKind'> = {};
+  if (listing.error) fields.error = listing.error;
+  if (listing.status === 'error' && listing.errorKind) fields.errorKind = listing.errorKind;
+  return fields;
+}
+
+function kindOf(error: unknown): ModelErrorKind {
+  return error instanceof ModelError ? error.kind : 'other';
 }
 
 function messageOf(error: unknown): string {

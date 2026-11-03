@@ -9,7 +9,12 @@ import type {
   ToolHost,
   ToolResult,
 } from '@isar-flow/core';
-import type { ConsoleRunOptions, PermissionAnswer, PermissionRequest } from '../../../src/contracts';
+import type {
+  ConsoleRunOptions,
+  EditJournalWriter,
+  PermissionAnswer,
+  PermissionRequest,
+} from '../../../src/contracts';
 import { createToolHost } from '../../../src/tools/toolHost';
 import type { ToolWorkspace } from '../../../src/tools/types';
 import { removeTempDir } from '../runner/fixtures';
@@ -33,6 +38,7 @@ export function createFsWorkspace(root: string): ToolWorkspace {
       }
       return found;
     },
+    deleteFile: (absPath) => fs.promises.unlink(absPath),
     realPath: (absPath) => fs.promises.realpath(absPath),
     exists: (absPath) =>
       fs.promises.stat(absPath).then(
@@ -74,7 +80,14 @@ export function consoleResult(partial: Partial<ConsoleResult> = {}): ConsoleResu
   return { exitCode: 0, stdout, stderr, output: stdout + stderr, timedOut: false, ...partial };
 }
 
-export function createHarness(): Harness {
+export interface HarnessOptions {
+  /** Passed to the tool host, which tells it about every write. */
+  journal?: EditJournalWriter;
+  /** Changes the file system workspace, e.g. to remove deleteFile or make writes fail. */
+  wrap?: (workspace: ToolWorkspace) => ToolWorkspace;
+}
+
+export function createHarness(options: HarnessOptions = {}): Harness {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'isar-tools-')));
   const harness: Harness = {
     root,
@@ -105,8 +118,9 @@ export function createHarness(): Harness {
   harness.host = createToolHost({
     runId: 'run-1',
     workspaceRoot: root,
-    workspace: createFsWorkspace(root),
+    workspace: (options.wrap ?? ((workspace) => workspace))(createFsWorkspace(root)),
     defaultShell: 'auto',
+    ...(options.journal && { journal: options.journal }),
     runCommand: (options) => {
       harness.commands.push(options);
       return harness.runCommand(options);

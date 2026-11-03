@@ -9,6 +9,7 @@ const SETTING_KEYS = [
   'maxTokens',
   'maxTurns',
   'tools',
+  'toolMode',
   'permissions',
 ] as const satisfies readonly (keyof AgentSettings)[];
 

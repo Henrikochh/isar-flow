@@ -11,10 +11,16 @@ const ToolNameSchema = z.enum([
   'searchText',
   'gitDiff',
   'editFile',
+  'applyPatch',
   'writeFile',
   'runCommand',
 ]);
 const PermissionSchema = z.enum(['none', 'ask', 'auto']);
+const ToolModeSchema = z.enum(['auto', 'native', 'text']).meta({
+  description:
+    'How the agent calls tools: auto (native tool calls when the model supports them, otherwise text), ' +
+    'native (native tool calls only) or text (tools described in the prompt, for models without tool calling).',
+});
 const ModelRefSchema = z
   .string()
   .regex(/^[^/\s]+\/\S+$/, 'Model must look like "<provider>/<model>", e.g. "litellm/gpt-4.1"')
@@ -42,6 +48,7 @@ const AgentSettingsShape = {
     .optional()
     .meta({ description: 'Maximum tool-calling rounds (default 20).' }),
   tools: z.array(ToolNameSchema).optional().meta({ description: 'Built-in tools the agent may use.' }),
+  toolMode: ToolModeSchema.optional(),
   permissions: z
     .strictObject({ edits: PermissionSchema.optional(), commands: PermissionSchema.optional() })
     .optional()
@@ -185,5 +192,17 @@ export const WorkflowSchema: z.ZodType<Workflow> = z.strictObject({
     .optional()
     .meta({ description: 'Values asked for when the run starts; referenced as inputs.<name>.' }),
   env: z.record(z.string(), z.string()).optional(),
+  isolation: z
+    .enum(['workspace', 'worktree'])
+    .optional()
+    .meta({
+      description:
+        'Where the run changes files: workspace (default) or worktree (git only: a separate git worktree; ' +
+        'you choose which changes to keep).',
+    }),
+  setup: z
+    .array(z.string().min(1, 'Setup commands cannot be empty'))
+    .optional()
+    .meta({ description: 'Commands run in the worktree before the first block, e.g. "npm ci".' }),
   steps: StepList,
 });

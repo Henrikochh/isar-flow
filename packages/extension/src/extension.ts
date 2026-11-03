@@ -2,11 +2,16 @@ import * as vscode from 'vscode';
 import { registerCodeLens } from './codelens';
 import { registerCreateCommands } from './commands/create';
 import { registerWorkflowCommands } from './commands/workflowCommands';
-import type { RunManagerDeps, RunTerminal, Services } from './contracts';
+import type { RunManagerDeps, RunTerminal, Services, SetupCheck } from './contracts';
 import { registerDiagnostics } from './diagnostics';
 import { registerAgentEditor } from './editors/agentEditor';
 import { registerWorkflowEditor } from './editors/workflowEditor';
-import { createModelRegistry, registerModelCommands } from './models';
+import {
+  createModelRegistry,
+  createSetupCheck,
+  registerModelCommands,
+  registerSetupCommands,
+} from './models';
 import { createWorkspaceContextReader } from './run/contextFiles';
 import { createRunManager, type WorkflowRunManager } from './run/runManager';
 import { registerSecretCommands, WorkflowSecrets } from './run/secrets';
@@ -24,6 +29,7 @@ export interface IsarFlowApi extends Services {
   agents: IndexedAgentStore;
   workflows: IndexedWorkflowStore;
   runs: WorkflowRunManager;
+  setupCheck: SetupCheck;
 }
 
 /** Default folder for agent tools and context files; runs use the workflow's own folder. */
@@ -103,7 +109,10 @@ export function activate(context: vscode.ExtensionContext): IsarFlowApi {
   const workflows = createWorkflowStore({ context, log: output, agents, history: runs.history });
   context.subscriptions.push(workflows);
 
-  const services: IsarFlowApi = { context, agents, workflows, models, runs, tools, output };
+  const setupCheck = createSetupCheck({ models, workflows, agents, log: output });
+  context.subscriptions.push(setupCheck, registerSetupCommands({ registry: models, setupCheck, agents }));
+
+  const services: IsarFlowApi = { context, agents, workflows, models, runs, tools, output, setupCheck };
   context.subscriptions.push(
     registerSidebar(services),
     registerCreateCommands(services),

@@ -40,6 +40,8 @@ export interface AgentScript extends ScriptBase {
   model?: string;
   usage?: Partial<Usage>;
   turns?: number;
+  /** Tool calls the host reports; left out of the result when undefined (like hosts before Package A). */
+  toolCalls?: number;
   messages?: ChatMessage[];
 }
 
@@ -185,6 +187,7 @@ export class FakeHost implements EngineHost {
       model: s.model ?? request.agent.model,
       usage: { inputTokens: s.usage?.inputTokens ?? 0, outputTokens: s.usage?.outputTokens ?? 0 },
       turns: s.turns ?? 1,
+      ...(s.toolCalls !== undefined && { toolCalls: s.toolCalls }),
       messages: s.messages ?? [
         ...request.history,
         { role: 'user', content: request.prompt },

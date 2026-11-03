@@ -6,6 +6,7 @@ import { FieldIssues } from '../Issues';
 import { asString, asStringEntries, workflowIssues } from '../model';
 import { KeyValueEditor } from '../RowEditors';
 import { InputsEditor } from './InputsEditor';
+import { IsolationSettings } from './IsolationSettings';
 import { RunHistory } from './RunHistory';
 
 /** Inspector content when no block is selected: workflow settings and run history. */
@@ -60,6 +61,7 @@ export function WorkflowPanel({ withHeader = true }: { withHeader?: boolean }) {
           placeholder="What this workflow does"
           onCommit={(description) => updateWorkflow('description', description.trim())}
         />
+        <IsolationSettings workflow={workflow} issues={issues} />
         <hr className="if-divider" />
         <Section title="Inputs">
           <p className="wf-insp-section-hint">

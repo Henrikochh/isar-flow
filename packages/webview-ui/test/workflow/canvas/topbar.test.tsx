@@ -78,6 +78,23 @@ describe('top bar', () => {
     expect(posted()).toEqual([{ type: 'selectRun', runId: 'run-7' }]);
   });
 
+  it('says which past runs have files to review and what was decided', () => {
+    renderEditor();
+    const decided = {
+      ...RECENT_RUNS[2],
+      runId: 'run-4',
+      review: { total: 4, kept: 3, reverted: 1, pending: 0 },
+    };
+    host({ type: 'history', runs: [RECENT_RUNS[0], decided, RECENT_RUNS[2]] });
+    fireEvent.click(screen.getByRole('button', { name: /Runs/ }));
+    const [toReview, done, plain] = within(screen.getByRole('menu', { name: 'Runs' })).getAllByRole(
+      'menuitem',
+    );
+    expect(within(toReview).getByText('2 to review')).toHaveClass('if-chip--warning');
+    expect(within(done).getByText('3 kept, 1 reverted')).toBeInTheDocument();
+    expect(plain).not.toHaveTextContent(/to review|kept|reverted/);
+  });
+
   it('shows Stop and the elapsed time during a live run', () => {
     renderEditor();
     const events: RunEvent[] = [

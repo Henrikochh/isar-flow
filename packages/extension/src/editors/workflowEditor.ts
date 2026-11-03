@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { HostToWorkflowEditor, WorkflowEditorToHost } from '@isar-flow/core';
 import type { Services } from '../contracts';
+import { SNAPSHOT_SCHEME } from '../safety/snapshotUri';
 import { renderWebviewHtml, webviewOptions } from '../webview/html';
 import { Messenger } from '../webview/messenger';
 import { PendingApprovals } from './approvals';
@@ -12,7 +13,10 @@ import { WorkflowPanel } from './workflowPanel';
 /** Internal command (workflowUri: string, runId: string): opens the canvas and shows that past run. */
 export const SHOW_RUN_COMMAND = 'isarFlow.internal.showRun';
 
-/** Registers the workflow canvas (custom text editor for *.workflow.y(a)ml) and the showRun command. */
+/**
+ * Registers the workflow canvas (custom text editor for *.workflow.y(a)ml), the showRun command and the read-only
+ * isarflow-snapshot: documents of run reviews (shown in diff editors).
+ */
 export function registerWorkflowEditor(services: Services): vscode.Disposable {
   const approvals = new PendingApprovals(services.runs);
   const panels = new Map<string, WorkflowPanel>();
@@ -83,6 +87,7 @@ export function registerWorkflowEditor(services: Services): vscode.Disposable {
       supportsMultipleEditorsPerDocument: false,
     }),
     showRun,
+    registerSnapshotDocuments(services),
     approvals,
     {
       dispose: () => {
@@ -92,4 +97,14 @@ export function registerWorkflowEditor(services: Services): vscode.Disposable {
       },
     },
   );
+}
+
+/** Serves the state of files before and after a run; nothing in Restricted Mode, where git must not run. */
+function registerSnapshotDocuments(services: Services): vscode.Disposable {
+  const { reviews } = services.runs;
+  if (!reviews) return new vscode.Disposable(() => undefined);
+  return vscode.workspace.registerTextDocumentContentProvider(SNAPSHOT_SCHEME, {
+    provideTextDocumentContent: (uri, token) =>
+      vscode.workspace.isTrusted ? reviews.contentProvider.provideTextDocumentContent(uri, token) : '',
+  });
 }

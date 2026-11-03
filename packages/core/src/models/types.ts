@@ -21,6 +21,28 @@ export interface ChatModelInfo {
   maxInputTokens?: number;
 }
 
+/**
+ * Result of "Test model": one tool call and one JSON answer. `tools`: native tool calls work. `text`: the model
+ * answered without a native tool call, so agents should use toolMode text. `failed`: the model could not be used.
+ */
+export type ModelProbeOutcome = 'tools' | 'text' | 'failed';
+
+export interface ModelProbeResult {
+  /** Model reference `<provider>/<model id>`. */
+  ref: string;
+  outcome: ModelProbeOutcome;
+  /** One sentence for people: "Tool calls work", "Needs text tool mode", or what failed and how to fix it. */
+  message: string;
+  /** The model made the probe's tool call natively. */
+  toolCalls: boolean;
+  /** The model's JSON answer could be parsed. */
+  json: boolean;
+  /** Duration of the whole probe. */
+  latencyMs?: number;
+  /** Epoch milliseconds. */
+  testedAt: number;
+}
+
 export interface ToolCall {
   id: string;
   name: string;

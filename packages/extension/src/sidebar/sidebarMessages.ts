@@ -7,18 +7,23 @@ import type {
   WorkflowTemplateId,
 } from '@isar-flow/core';
 import { AGENT_FOLDER_PROMPT, type FolderChoice, WORKFLOW_FOLDER_PROMPT } from '../commands/folders';
-import type { AgentStore, RunManager, WorkflowStore } from '../contracts';
+import type { AgentStore, RunManager, SetupCheck, WorkflowStore } from '../contracts';
 
 export const AGENT_EDITOR = 'isarFlow.agentEditor';
 export const WORKFLOW_EDITOR = 'isarFlow.workflowEditor';
 
 const TEMPLATES: readonly WorkflowTemplateId[] = ['blank', 'review-loop', 'test-fix'];
 const STARTERS: readonly AgentStarter[] = ['blank', 'coder', 'reviewer'];
+const MAX_QUERY_LENGTH = 200;
+
+const nonEmpty = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
 
 export interface SidebarHandlerDeps {
   agents: Pick<AgentStore, 'create' | 'delete'>;
   workflows: Pick<WorkflowStore, 'create'>;
   runs: Pick<RunManager, 'start' | 'cancel'>;
+  setupCheck?: Pick<SetupCheck, 'dismiss'>;
   executeCommand(command: string, ...args: unknown[]): Thenable<unknown>;
   setTab(tab: SidebarTab): Thenable<void>;
   /** Sends the full state now. */
@@ -104,6 +109,28 @@ export function createSidebarHandler(deps: SidebarHandlerDeps): (message: Sideba
       case 'refreshModels':
         await deps.executeCommand('isarFlow.refreshModels');
         return;
+      case 'testModel': {
+        const ref = nonEmpty(message.ref);
+        const providerId = nonEmpty(message.providerId);
+        if (ref) await deps.executeCommand('isarFlow.testModel', ref);
+        else if (providerId) await deps.executeCommand('isarFlow.testModel', { providerId });
+        else await deps.executeCommand('isarFlow.testModel');
+        return;
+      }
+      case 'checkSetup':
+        // The sidebar shows the report, so the command neither reveals it nor notifies.
+        await deps.executeCommand('isarFlow.checkSetup', { quiet: true });
+        return;
+      case 'dismissSetupCheck':
+        deps.setupCheck?.dismiss();
+        return;
+      case 'openSettings': {
+        const query = nonEmpty(message.query);
+        if (query && query.length <= MAX_QUERY_LENGTH) {
+          await deps.executeCommand('workbench.action.openSettings', query);
+        }
+        return;
+      }
     }
   };
 }

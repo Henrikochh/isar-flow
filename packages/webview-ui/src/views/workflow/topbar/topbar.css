@@ -209,3 +209,17 @@ body.vscode-high-contrast-light .wf-validity {
     display: none;
   }
 }
+
+/* ---- Runs menu: review state and error of a past run ---- */
+.wf-runs__desc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wf-runs__error {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -3,7 +3,14 @@ import type { Condition } from '../conditions';
 export type StepType = 'agent' | 'console' | 'loop' | 'if' | 'break' | 'stop' | 'approval';
 
 export type ToolName =
-  'readFile' | 'listFiles' | 'searchText' | 'gitDiff' | 'editFile' | 'writeFile' | 'runCommand';
+  | 'readFile'
+  | 'listFiles'
+  | 'searchText'
+  | 'gitDiff'
+  | 'editFile'
+  | 'applyPatch'
+  | 'writeFile'
+  | 'runCommand';
 
 export type PermissionLevel = 'none' | 'ask' | 'auto';
 
@@ -14,6 +21,13 @@ export interface AgentPermissions {
   commands?: PermissionLevel;
 }
 
+/**
+ * How an agent calls tools. `auto` (default): native tool calls when the model supports them, otherwise `text`;
+ * tool calls the model writes as text are repaired. `native`: native tool calls only. `text`: the tools are
+ * described in the prompt and the model writes its calls as text (for models without native tool calling).
+ */
+export type ToolMode = 'auto' | 'native' | 'text';
+
 /** Agent settings shared by agent files and inline agents in workflow steps. */
 export interface AgentSettings {
   model?: string;
@@ -23,6 +37,7 @@ export interface AgentSettings {
   maxTokens?: number;
   maxTurns?: number;
   tools?: ToolName[];
+  toolMode?: ToolMode;
   permissions?: AgentPermissions;
 }
 
@@ -113,12 +128,21 @@ export interface WorkflowInput {
   multiline?: boolean;
 }
 
+/**
+ * Where a run changes files. `workspace` (default): in the workspace folder itself. `worktree` (git only): in a
+ * git worktree checked out at the run's before snapshot; the review card applies kept files to the workspace.
+ */
+export type WorkflowIsolation = 'workspace' | 'worktree';
+
 export interface Workflow {
   version: 1;
   name: string;
   description?: string;
   inputs?: Record<string, WorkflowInput>;
   env?: Record<string, string>;
+  isolation?: WorkflowIsolation;
+  /** Commands run in the worktree before the first block (only with `isolation: worktree`), e.g. `npm ci`. */
+  setup?: string[];
   steps: Step[];
 }
 

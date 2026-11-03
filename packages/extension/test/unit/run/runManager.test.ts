@@ -10,10 +10,18 @@ import type {
   RunManagerDeps,
 } from '../../../src/contracts';
 import { createApprovalBroker } from '../../../src/run/approvals';
+import { createEngineHost } from '../../../src/run/engineHost';
 import { createRunHistory } from '../../../src/run/history';
 import { createRunManager, type RunManagerUi, type RunStatusItem } from '../../../src/run/runManager';
 import { WorkflowSecrets } from '../../../src/run/secrets';
 import { FakeMemento, FakeSecretStorage, FakeTerminal, flush, memoryStore } from './fakes';
+import { fakeSafety, type FakeSafetyOptions } from './safetyFakes';
+
+// The real engine host, recorded so tests can check what the manager configures it with.
+vi.mock('../../../src/run/engineHost', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../src/run/engineHost')>();
+  return { ...real, createEngineHost: vi.fn(real.createEngineHost) };
+});
 
 const CONSOLE_WORKFLOW = `version: 1
 name: Build
@@ -68,6 +76,7 @@ interface Setup {
   folder?: string | null;
   /** Folder console commands run in. */
   root?: string;
+  safety?: FakeSafetyOptions;
 }
 
 function setup(options: Setup = {}) {
@@ -140,7 +149,9 @@ function setup(options: Setup = {}) {
   const history = createRunHistory(memoryStore(), new FakeMemento(), () => 50);
   const secrets = new WorkflowSecrets(context);
   const approvals = createApprovalBroker({ modal: async () => options.modal ?? true });
+  const safety = fakeSafety(options.safety);
   const manager = createRunManager(deps, {
+    safety: safety.safety,
     ui,
     history,
     secrets,
@@ -174,6 +185,8 @@ function setup(options: Setup = {}) {
     runsChanged,
     secrets,
     approvals,
+    safety,
+    history,
   };
 }
 
@@ -475,6 +488,21 @@ steps:
     expect(t.commands[0]).toMatchObject({ command: 'echo hi s3cret', shell: 'bash' });
   });
 
+  it.each([
+    [undefined, 24_000],
+    [32_000, 32_000],
+    [500, 2000],
+    ['lots', 24_000],
+  ])('gives agents the context size from isarFlow.agentContextTokens (%s)', async (value, expected) => {
+    const host = vi.mocked(createEngineHost);
+    host.mockClear();
+    const t = setup(value === undefined ? {} : { settings: { agentContextTokens: value } });
+    const runId = (await t.manager.start(t.uri)) as string;
+    await t.manager.whenFinished(runId);
+    expect(host).toHaveBeenCalledTimes(1);
+    expect(host.mock.calls[0][0].contextTokens).toBe(expected);
+  });
+
   it("works in the workflow's own workspace folder", async () => {
     const text = `version: 1
 name: Folder
@@ -496,7 +524,7 @@ steps:
     await t.manager.whenFinished(runId);
     expect(t.ui.workspaceFolder).toHaveBeenCalledWith(t.uri);
     expect(t.commands[0].cwd).toBe(path.resolve('/second', 'app'));
-    expect(t.deps.tools).toHaveBeenCalledWith(runId, '/second');
+    expect(t.deps.tools).toHaveBeenCalledWith(runId, '/second', { journal: t.safety.journal });
     expect(t.contextReads).toEqual([{ root: '/second', globs: ['README.md'] }]);
   });
 
@@ -524,7 +552,7 @@ steps:
     await t.manager.whenFinished(runId);
     // Console commands run beside the file; tools and context files use the default (first) folder.
     expect(t.commands[0].cwd).toBe(path.resolve('/loose'));
-    expect(t.deps.tools).toHaveBeenCalledWith(runId, undefined);
+    expect(t.deps.tools).toHaveBeenCalledWith(runId, undefined, { journal: t.safety.journal });
     expect(t.contextReads).toEqual([{ root: undefined, globs: ['README.md'] }]);
   });
 
@@ -575,5 +603,165 @@ steps:
     const finished = t.manager.whenFinished(runId);
     t.manager.dispose();
     expect((await finished)?.status).toBe('cancelled');
+  });
+});
+
+const WORKTREE_WORKFLOW = `version: 1
+name: Fix
+isolation: worktree
+setup: [npm ci]
+steps:
+  - id: build
+    type: console
+    run: npm run build
+  - id: ask
+    type: agent
+    agent: coder
+    prompt: Hi
+    context:
+      files: [README.md]
+`;
+
+describe('createRunManager safety net', () => {
+  it('snapshots the folder, journals agent writes and publishes the review after saving the run', async () => {
+    const t = setup();
+    expect(t.manager.reviews).toBe(t.safety.safety.reviews);
+    expect(t.safety.safety.cleanup).toHaveBeenCalledTimes(1);
+    const runId = (await t.manager.start(t.uri)) as string;
+    await t.manager.whenFinished(runId);
+    const [session] = t.safety.sessions;
+    expect(session.options).toEqual({
+      runId,
+      workflowUri: t.uri.toString(),
+      folder: '/ws',
+      isolation: 'workspace',
+    });
+    expect(session.finish).toHaveBeenCalledWith({ skipSnapshot: false });
+    expect(t.safety.order).toEqual(['begin', 'finish', 'publish']);
+    expect(t.deps.tools).toHaveBeenCalledWith(runId, '/ws', { journal: t.safety.journal });
+    expect(t.notifications.filter((n) => n.message.includes('changed'))).toEqual([]);
+  });
+
+  it('says how many files a run changed and opens the review', async () => {
+    const t = setup({ safety: { changed: 3 }, click: 'Review changes' });
+    const runId = (await t.manager.start(t.uri)) as string;
+    await t.manager.whenFinished(runId);
+    await flush();
+    expect(t.notifications).toContainEqual({
+      kind: 'info',
+      message: 'Build changed 3 files.',
+      buttons: ['Review changes'],
+    });
+    expect(t.ui.executeCommand).toHaveBeenCalledWith('isarFlow.internal.showRun', t.uri.toString(), runId);
+    expect(t.history.list()[0].runId).toBe(runId);
+
+    const one = setup({ safety: { changed: 1 } });
+    await one.manager.whenFinished((await one.manager.start(one.uri)) as string);
+    await flush();
+    expect(one.notifications.map((n) => n.message)).toContain('Build changed 1 file.');
+  });
+
+  it('skips the after snapshot when VS Code closes during the run', async () => {
+    const t = setup({ runCommand: untilAborted });
+    const runId = (await t.manager.start(t.uri)) as string;
+    await flush();
+    await t.manager.shutdown();
+    expect(t.safety.sessions[0].finish).toHaveBeenCalledWith({ skipSnapshot: true });
+    expect(t.history.list()[0]).toMatchObject({ runId, status: 'cancelled' });
+  });
+
+  it('keeps running without the safety net when the snapshot fails unexpectedly', async () => {
+    const t = setup({ safety: { beginError: 'disk full' } });
+    const view = await t.manager.whenFinished((await t.manager.start(t.uri)) as string);
+    expect(view?.status).toBe('success');
+    expect(t.logLines.some((l) => l.startsWith('warn:') && l.includes('disk full'))).toBe(true);
+  });
+
+  it('runs worktree workflows in the worktree: setup, commands, agent tools and context files', async () => {
+    const t = setup({ text: WORKTREE_WORKFLOW, agents: { coder: { name: 'Coder', model: 'x/y' } } });
+    const runId = (await t.manager.start(t.uri)) as string;
+    await t.manager.whenFinished(runId);
+    const root = `/storage/worktrees/${runId}`;
+    expect(t.safety.sessions[0].options.isolation).toBe('worktree');
+    expect(t.commands.map((c) => [c.command, c.cwd])).toEqual([
+      ['npm ci', root],
+      ['npm run build', path.resolve(root)],
+    ]);
+    expect(t.terminal.text).toContain('▶ setup:');
+    expect(t.deps.tools).toHaveBeenCalledWith(runId, root, { journal: t.safety.journal });
+    expect(t.contextReads).toEqual([{ root, globs: ['README.md'] }]);
+    const [, detail] = (t.ui.confirmCommands as ReturnType<typeof vi.fn>).mock.calls[0] as [string, string];
+    expect(detail).toContain('Setup: npm ci');
+  });
+
+  it('refuses worktree runs outside git repositories', async () => {
+    const t = setup({
+      text: WORKTREE_WORKFLOW,
+      safety: { canIsolate: false },
+      agents: { coder: { name: 'C', model: 'x/y' } },
+    });
+    expect(await t.manager.start(t.uri)).toBeUndefined();
+    await flush();
+    expect(t.notifications).toContainEqual({
+      kind: 'error',
+      message:
+        'Isolation "worktree" needs a git repository. Run git init in /ws, or set isolation to workspace.',
+      buttons: [],
+    });
+    expect(t.safety.safety.begin).not.toHaveBeenCalled();
+    expect(t.commands).toEqual([]);
+  });
+
+  it('ends the run when the worktree cannot be created', async () => {
+    const t = setup({
+      text: WORKTREE_WORKFLOW,
+      safety: { beginError: 'Could not create a git worktree for this run: no space.' },
+      agents: { coder: { name: 'C', model: 'x/y' } },
+    });
+    const view = await t.manager.whenFinished((await t.manager.start(t.uri)) as string);
+    expect(view).toMatchObject({
+      status: 'failure',
+      error: 'Could not create a git worktree for this run: no space.',
+    });
+    expect(t.events.map((e) => e.type)).toEqual(['run-start', 'run-end']);
+    expect(t.commands).toEqual([]);
+  });
+
+  it('ends the run and drops the worktree when a setup command fails', async () => {
+    const t = setup({
+      text: WORKTREE_WORKFLOW,
+      agents: { coder: { name: 'C', model: 'x/y' } },
+      runCommand: async (o) => ({
+        exitCode: o.command === 'npm ci' ? 1 : 0,
+        stdout: '',
+        stderr: '',
+        output: '',
+        timedOut: false,
+      }),
+    });
+    const runId = (await t.manager.start(t.uri)) as string;
+    const view = await t.manager.whenFinished(runId);
+    expect(view).toMatchObject({
+      status: 'failure',
+      error: 'Setup command "npm ci" failed with exit code 1. See the terminal for its output.',
+    });
+    expect(t.events.map((e) => e.type)).toEqual(['run-start', 'run-end']);
+    expect(t.commands.map((c) => c.command)).toEqual(['npm ci']);
+    expect(t.safety.order).toEqual(['begin', 'discard']);
+    expect(t.history.list()[0]).toMatchObject({ runId, status: 'failure' });
+  });
+
+  it('ends a run cancelled during setup as cancelled', async () => {
+    const t = setup({
+      text: WORKTREE_WORKFLOW,
+      agents: { coder: { name: 'C', model: 'x/y' } },
+      runCommand: untilAborted,
+    });
+    const runId = (await t.manager.start(t.uri)) as string;
+    await flush();
+    t.manager.cancel(runId);
+    const view = await t.manager.whenFinished(runId);
+    expect(view?.status).toBe('cancelled');
+    expect(t.safety.order).toEqual(['begin', 'discard']);
   });
 });

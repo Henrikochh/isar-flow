@@ -10,11 +10,12 @@ import type {
   Range,
   RunEvent,
   RunRecordSummary,
+  RunReview,
   RunView,
   ToolHost,
   WorkflowSummary,
 } from '@isar-flow/core';
-import type { ActiveRun, AgentRecord, Services } from '../../../src/contracts';
+import type { ActiveRun, AgentRecord, ReviewService, Services } from '../../../src/contracts';
 import type { EditorDocument, EditorUi } from '../../../src/editors/host';
 import { computeReplaceRange } from '../../../src/editors/textEdit';
 
@@ -234,3 +235,17 @@ export function fakeUi(overrides: Partial<EditorUi> = {}) {
 
 /** Lets pending promise callbacks run. */
 export const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** A review service with reviews by run id; attach it with Object.assign(services.runs, { reviews: service }). */
+export function fakeReviews() {
+  const emitter = new vscode.EventEmitter<{ runId: string; workflowUri: string }>();
+  const reviews: Record<string, RunReview> = {};
+  const service = {
+    onDidChange: emitter.event,
+    get: vi.fn(async (runId: string) => reviews[runId]),
+    decide: vi.fn(async (_runId: string, _decision: 'kept' | 'reverted', _paths?: string[]) => undefined),
+    openDiff: vi.fn(async (_runId: string, _path: string) => undefined),
+    contentProvider: { provideTextDocumentContent: () => '' },
+  } satisfies ReviewService;
+  return { service, emitter, reviews };
+}

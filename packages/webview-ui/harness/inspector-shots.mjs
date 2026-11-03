@@ -28,12 +28,36 @@ const SHOTS = [
   { name: 'agent-advanced', scenario: 'default', select: 'review', clicks: ['text:Advanced'], height: 1400 },
   { name: 'console', scenario: 'default', select: 'tests', height: 900 },
   { name: 'loop', scenario: 'default', select: 'review_loop', height: 900 },
-  { name: 'loop-add-rule', scenario: 'default', select: 'review_loop', clicks: ['text:Add rule'], height: 980 },
-  { name: 'loop-fixed', scenario: 'default', select: 'review_loop', clicks: ['text:Fixed times'], height: 640 },
+  {
+    name: 'loop-add-rule',
+    scenario: 'default',
+    select: 'review_loop',
+    clicks: ['text:Add rule'],
+    height: 980,
+  },
+  {
+    name: 'loop-fixed',
+    scenario: 'default',
+    select: 'review_loop',
+    clicks: ['text:Fixed times'],
+    height: 640,
+  },
   { name: 'if', scenario: 'default', select: 'needs_fix', height: 700 },
   { name: 'if-rules', scenario: 'default', select: 'needs_fix', clicks: ['text:Rules'], height: 820 },
-  { name: 'value-select', scenario: 'default', select: 'review_loop', clicks: ['[aria-label="Rule 1 value"]'], height: 900 },
-  { name: 'variables', scenario: 'default', select: 'review', clicks: ['[aria-label="Insert variable"]'], height: 900 },
+  {
+    name: 'value-select',
+    scenario: 'default',
+    select: 'review_loop',
+    clicks: ['[aria-label="Rule 1 value"]'],
+    height: 900,
+  },
+  {
+    name: 'variables',
+    scenario: 'default',
+    select: 'review',
+    clicks: ['[aria-label="Insert variable"]'],
+    height: 900,
+  },
   { name: 'invalid', scenario: 'invalid', select: 'implement', height: 900 },
   { name: 'running', scenario: 'running', height: 900 },
   { name: 'running-agent', scenario: 'running', select: 'review', height: 900 },
@@ -61,7 +85,10 @@ const errors = [];
 try {
   for (const shot of shots) {
     for (const theme of themes) {
-      const page = await browser.newPage({ viewport: { width: 440, height: shot.height }, deviceScaleFactor: 1 });
+      const page = await browser.newPage({
+        viewport: { width: 440, height: shot.height },
+        deviceScaleFactor: 1,
+      });
       page.on('pageerror', (e) => errors.push(`${shot.name}/${theme}: ${e.message}`));
       page.on('console', (m) => m.type() === 'error' && errors.push(`${shot.name}/${theme}: ${m.text()}`));
       const query = new URLSearchParams({ scenario: shot.scenario, theme });

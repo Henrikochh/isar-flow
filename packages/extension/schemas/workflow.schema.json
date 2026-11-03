@@ -61,6 +61,22 @@
         "type": "string"
       }
     },
+    "isolation": {
+      "description": "Where the run changes files: workspace (default) or worktree (git only: a separate git worktree; you choose which changes to keep).",
+      "type": "string",
+      "enum": [
+        "workspace",
+        "worktree"
+      ]
+    },
+    "setup": {
+      "description": "Commands run in the worktree before the first block, e.g. \"npm ci\".",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "steps": {
       "$ref": "#/definitions/__schema0"
     }
@@ -174,10 +190,20 @@
                             "searchText",
                             "gitDiff",
                             "editFile",
+                            "applyPatch",
                             "writeFile",
                             "runCommand"
                           ]
                         }
+                      },
+                      "toolMode": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "native",
+                          "text"
+                        ],
+                        "description": "How the agent calls tools: auto (native tool calls when the model supports them, otherwise text), native (native tool calls only) or text (tools described in the prompt, for models without tool calling)."
                       },
                       "permissions": {
                         "description": "none = never, ask = confirm each time, auto = allow.",

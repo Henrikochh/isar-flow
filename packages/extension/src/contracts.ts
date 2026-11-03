@@ -12,10 +12,15 @@ import type {
   ChatModel,
   ConsoleResult,
   ModelCatalog,
+  ModelProbeResult,
   ModelResolver,
+  ReviewCounts,
+  ReviewFileStatus,
   RunEvent,
   RunRecordSummary,
+  RunReview,
   RunView,
+  SetupReport,
   ShellName,
   ToolHost,
   ToolName,
@@ -66,6 +71,27 @@ export interface WorkspaceAdapter {
   /** Resolves symlinks; rejects when the path does not exist. */
   realPath(absPath: string): Promise<string>;
   exists(absPath: string): Promise<boolean>;
+  /** Deletes a file as an undoable workspace edit; used by applyPatch for "+++ /dev/null". */
+  deleteFile?(absPath: string): Promise<void>;
+}
+
+/**
+ * Receives agent writes from the tool host for the run's edit journal (review card: which block changed which
+ * file; the original content when the folder has no git).
+ */
+export interface EditJournalWriter {
+  /**
+   * Called before an agent tool creates, changes or deletes `absPath`. The journal reads the file as it is on disk
+   * now, but only the first time per file and run. `unsaved` is the text of an editor with unsaved changes to the
+   * file: the write saves it, so it is kept instead. Never rejects: storage problems are logged.
+   */
+  beforeWrite(absPath: string, stepId: string, unsaved?: string): Promise<void>;
+}
+
+/** Per-run extras of a tool host. */
+export interface ToolHostRunOptions {
+  /** Records agent writes; omitted for Try it. */
+  journal?: EditJournalWriter;
 }
 
 export interface PermissionRequest {
@@ -88,13 +114,20 @@ export interface ToolHostOptions {
   runCommand: RunConsoleCommand;
   prompt: PermissionPrompt;
   defaultShell: ShellName;
+  /** Told about every agent write before it happens (runs only). */
+  journal?: EditJournalWriter;
 }
 
 /**
  * Creates a tool host whose "allow for this run" answers are scoped to `runId`. `workspaceRoot` is the
- * folder of the workflow being run (multi-root workspaces); defaults to the first workspace folder.
+ * folder of the workflow being run (multi-root workspaces) or the run's git worktree; defaults to the first
+ * workspace folder. Roots outside the workspace folders (worktrees in extension storage) must work too.
  */
-export type ToolHostFactory = (runId: string, workspaceRoot?: string) => ToolHost;
+export type ToolHostFactory = (
+  runId: string,
+  workspaceRoot?: string,
+  options?: ToolHostRunOptions,
+) => ToolHost;
 
 /* ---------- models (src/models) ---------- */
 
@@ -114,8 +147,27 @@ export interface ModelRegistry extends ModelResolver {
   catalog(): ModelCatalog;
   /** Re-reads settings, re-discovers models. */
   refresh(): Promise<ModelCatalog>;
+  /**
+   * Resolves a model. When the cached probe of `ref` says 'text', the model reports `capabilities.tools: false`,
+   * so agents with toolMode auto use text tool calls.
+   */
   resolve(ref: string): Promise<ChatModel>;
+  /**
+   * "Test model": one tool call, one JSON answer, latency. Caches the result (catalog().probes) and fires
+   * onDidChange when it starts and ends. Never rejects; failures come back as outcome 'failed'.
+   */
+  probe?(ref: string, signal?: AbortSignal): Promise<ModelProbeResult>;
   dispose(): void;
+}
+
+/** "Check setup": endpoints (reachable, key, models) and the models workflows use (probe). */
+export interface SetupCheck {
+  readonly onDidChange: vscode.Event<void>;
+  /** The latest report until dismissed; it is running while finishedAt is undefined. */
+  current(): SetupReport | undefined;
+  /** Starts a check (or returns the running one) and resolves with the finished report. */
+  run(): Promise<SetupReport>;
+  dismiss(): void;
 }
 
 /* ---------- stores (src/store) ---------- */
@@ -181,6 +233,86 @@ export interface RunHistory {
   /** Reads a saved run from storage when it is not cached. */
   getAsync(runId: string): Promise<RunView | undefined>;
   save(view: RunView, workflowUri: string): Promise<void>;
+  /** Stores the review counts of a saved run in its summary ("3 kept, 1 reverted"). */
+  setReview?(runId: string, counts: ReviewCounts): Promise<void>;
+  /** Fired with the ids of runs removed by the history limit, so their snapshots and worktrees go too. */
+  readonly onDidRemove?: vscode.Event<{ workflowUri: string; runIds: string[] }>;
+}
+
+/* ---------- run safety: snapshots, edit journal, review (src/safety) ---------- */
+
+/** A changed file between the before and after snapshot of a run. */
+export interface SnapshotChange {
+  /** Relative to the snapshot root, forward slashes. */
+  path: string;
+  status: ReviewFileStatus;
+  additions?: number;
+  deletions?: number;
+  binary?: boolean;
+}
+
+/** Snapshots of one run's folder. */
+export interface RunSnapshot {
+  runId: string;
+  /** Absolute folder the snapshot covers (the workspace folder, or the worktree for worktree runs). */
+  root: string;
+  coverage: 'git' | 'journal';
+  /** Commit stored as refs/isarflow/runs/<runId>/before (git coverage). */
+  before?: string;
+  /** Commit stored as refs/isarflow/runs/<runId>/after, once the run ended. */
+  after?: string;
+}
+
+/**
+ * Git snapshots with a temporary index (GIT_INDEX_FILE): the user's index, branch, stash and working tree are
+ * never touched. Every method logs and degrades instead of throwing where the spec allows it.
+ */
+export interface SnapshotService {
+  /** Snapshots `root` at run start; journal coverage when it is not in a git repository or git fails. */
+  begin(runId: string, root: string): Promise<RunSnapshot>;
+  /** Snapshots again at run end and lists the changed files (empty for journal coverage). */
+  finish(snapshot: RunSnapshot): Promise<{ snapshot: RunSnapshot; changes: SnapshotChange[] }>;
+  /** Working-tree bytes (filters and line endings applied) of a file; undefined when it did not exist. */
+  read(snapshot: RunSnapshot, side: 'before' | 'after', path: string): Promise<Uint8Array | undefined>;
+  /** `git worktree add --detach <path> <before>`; rejects with a user-facing message (e.g. no git). */
+  createWorktree(snapshot: RunSnapshot, worktreePath: string): Promise<void>;
+  removeWorktree(repoRoot: string, worktreePath: string): Promise<void>;
+  /** Deletes refs/isarflow/runs/<runId>/* of runs removed from the history. */
+  prune(root: string, runIds: string[]): Promise<void>;
+}
+
+export interface EditJournalEntry {
+  /** Relative to the run's root, forward slashes. */
+  path: string;
+  /** Blocks that wrote the file, in order of their first write. */
+  stepIds: string[];
+  /** False when the first write created the file. */
+  existed: boolean;
+  /** Whether the content before the first write is stored (size cap; large originals go to git when possible). */
+  originalStored: boolean;
+  at: number;
+}
+
+/** The edit journal of one run. */
+export interface EditJournal extends EditJournalWriter {
+  readonly runId: string;
+  entries(): EditJournalEntry[];
+  /** Bytes before the run's first write; null = the file did not exist; undefined = not stored. */
+  original(path: string): Promise<Uint8Array | null | undefined>;
+}
+
+/** Review state of runs that changed files; implemented in src/safety, owned by the run manager. */
+export interface ReviewService {
+  /** Fired when a run's review appears or changes (after the run, keep, revert, pruning). */
+  readonly onDidChange: vscode.Event<{ runId: string; workflowUri: string }>;
+  /** The review of a run; undefined when it changed no files or its data was pruned. */
+  get(runId: string): Promise<RunReview | undefined>;
+  /** Keeps or reverts files (every pending file when `paths` is omitted); asks before overwriting newer edits. */
+  decide(runId: string, decision: 'kept' | 'reverted', paths?: string[]): Promise<void>;
+  /** Opens the VS Code diff editor for one file: before the run on the left, after it on the right. */
+  openDiff(runId: string, path: string): Promise<void>;
+  /** Serves `isarflow-snapshot:` URIs (read-only) for the diff editor. */
+  readonly contentProvider: vscode.TextDocumentContentProvider;
 }
 
 export interface ApprovalBroker {
@@ -205,6 +337,8 @@ export interface RunManager {
   readonly onDidChangeRuns: vscode.Event<void>;
   readonly history: RunHistory;
   readonly approvals: ApprovalBroker;
+  /** Review of runs that changed files; always set by createRunManager. */
+  readonly reviews?: ReviewService;
   /**
    * Validates, asks for missing inputs (input boxes) when `inputs` is undefined, confirms console commands
    * when needed, then runs. Returns the run id, or undefined when the user cancelled or validation failed.
@@ -226,6 +360,8 @@ export interface Services {
   /** Tool hosts for agents (workspace-bounded, permission-gated). */
   tools: ToolHostFactory;
   output: vscode.LogOutputChannel;
+  /** "Check setup"; set by extension.ts. */
+  setupCheck?: SetupCheck;
 }
 
 /**

@@ -1,5 +1,11 @@
 import * as vscode from 'vscode';
-import { runRecordSummary, type RunRecordSummary, type RunView, type StepRunView } from '@isar-flow/core';
+import {
+  runRecordSummary,
+  type ReviewCounts,
+  type RunRecordSummary,
+  type RunView,
+  type StepRunView,
+} from '@isar-flow/core';
 import type { RunHistory } from '../contracts';
 
 /** Upper bound for one saved run (JSON, UTF-8). */
@@ -27,6 +33,8 @@ export interface HistoryStore {
 }
 
 export interface FileRunHistory extends RunHistory, vscode.Disposable {
+  setReview(runId: string, counts: ReviewCounts): Promise<void>;
+  readonly onDidRemove: vscode.Event<{ workflowUri: string; runIds: string[] }>;
   /** Loads the newest saved runs into the cache so `get` can answer synchronously. */
   loadAll(workflowUri?: string): Promise<void>;
 }
@@ -84,6 +92,7 @@ function skeleton(view: RunView): RunView {
       executions: step.executions,
       ...(step.durationMs !== undefined && { durationMs: step.durationMs }),
       ...(step.error !== undefined && { error: truncate(step.error, 200) }),
+      ...(step.metrics !== undefined && { metrics: step.metrics }),
       logs: [],
       ...(step.logs.length > 0 && { logsTruncated: true }),
     };
@@ -136,6 +145,7 @@ export function createRunHistory(
   limit: () => number,
 ): FileRunHistory {
   const onDidChange = new vscode.EventEmitter<void>();
+  const onDidRemove = new vscode.EventEmitter<{ workflowUri: string; runIds: string[] }>();
   const stored = index.get<unknown[]>(INDEX_KEY, []);
   let records: RunRecordSummary[] = (Array.isArray(stored) ? stored : []).filter(isSummary).sort(newestFirst);
   const cache = new Map<string, RunView>();
@@ -160,7 +170,11 @@ export function createRunHistory(
     await store.write(view.runId, JSON.stringify(trimmed));
     remember(trimmed);
 
-    const summary = runRecordSummary(trimmed, workflowUri);
+    const previous = records.find((r) => r.runId === view.runId);
+    const summary: RunRecordSummary = {
+      ...runRecordSummary(trimmed, workflowUri),
+      ...(previous?.review && { review: previous.review }),
+    };
     const sorted = [summary, ...records.filter((r) => r.runId !== view.runId)].sort(newestFirst);
     const max = maxPerWorkflow();
     const removed: string[] = [];
@@ -176,6 +190,21 @@ export function createRunHistory(
       await store.delete(runId).catch(() => undefined);
     }
     onDidChange.fire();
+    if (removed.length > 0) onDidRemove.fire({ workflowUri, runIds: removed });
+  }
+
+  async function storeReview(runId: string, counts: ReviewCounts): Promise<void> {
+    if (!records.some((r) => r.runId === runId)) return;
+    records = records.map((r) => (r.runId === runId ? { ...r, review: { ...counts } } : r));
+    await index.update(INDEX_KEY, records);
+    onDidChange.fire();
+  }
+
+  /** Index changes run one after the other, so concurrent saves and reviews never lose an entry. */
+  function enqueue(task: () => Promise<void>): Promise<void> {
+    const done = queue.then(task);
+    queue = done.catch(() => undefined);
+    return done;
   }
 
   const getAsync = async (runId: string): Promise<RunView | undefined> => {
@@ -189,6 +218,7 @@ export function createRunHistory(
 
   return {
     onDidChange: onDidChange.event,
+    onDidRemove: onDidRemove.event,
     list: (workflowUri) => records.filter((r) => workflowUri === undefined || r.workflowUri === workflowUri),
     get: (runId) => cache.get(runId),
     getAsync,
@@ -196,12 +226,12 @@ export function createRunHistory(
       const wanted = records.filter((r) => workflowUri === undefined || r.workflowUri === workflowUri);
       for (const record of wanted.slice(0, CACHE_SIZE)) await getAsync(record.runId);
     },
-    save(view, workflowUri) {
-      const saved = queue.then(() => persist(view, workflowUri));
-      queue = saved.catch(() => undefined);
-      return saved;
+    save: (view, workflowUri) => enqueue(() => persist(view, workflowUri)),
+    setReview: (runId, counts) => enqueue(() => storeReview(runId, counts)),
+    dispose: () => {
+      onDidChange.dispose();
+      onDidRemove.dispose();
     },
-    dispose: () => onDidChange.dispose(),
   };
 }
 

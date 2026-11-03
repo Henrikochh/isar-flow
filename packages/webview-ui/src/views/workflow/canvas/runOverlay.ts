@@ -3,6 +3,7 @@
  * whose latest execution belongs to an earlier iteration of a still-running loop counts as not reached yet.
  */
 import type { RunView, StepRunView, StepSlot, StepStatus } from '@isar-flow/core';
+import { blockNumbers } from '../metrics';
 import { type BlockEntry, type ListModel, nearestAncestor } from './model';
 
 /** idle = no run shown; passed = the current flowed here; pending = not reached; current = flowing right now. */
@@ -107,10 +108,21 @@ export function loopProgress(
 ): { running: boolean; iteration: number; maxIterations: number } | null {
   if (!run || !loop.id) return null;
   const view = run.steps[loop.id];
-  if (!view?.loop || isStale(run, loop)) return null;
+  if (!view || isStale(run, loop)) return null;
+  if (view.loop) {
+    return {
+      running: view.status === 'running',
+      iteration: view.loop.iteration,
+      maxIterations: view.loop.maxIterations,
+    };
+  }
+  // Runs that kept only their metrics still know how often a finished loop went round.
+  const iterations = view.status === 'running' ? undefined : blockNumbers(view)?.iterations;
+  if (iterations === undefined) return null;
+  const max = (loop.step as { maxIterations?: unknown }).maxIterations;
   return {
-    running: view.status === 'running',
-    iteration: view.loop.iteration,
-    maxIterations: view.loop.maxIterations,
+    running: false,
+    iteration: iterations,
+    maxIterations: typeof max === 'number' ? max : iterations,
   };
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentSummary, ModelCatalog, RunRecordSummary, WorkflowSummary } from '@isar-flow/core';
+import type {
+  AgentSummary,
+  ModelCatalog,
+  RunRecordSummary,
+  SetupReport,
+  WorkflowSummary,
+} from '@isar-flow/core';
 import { buildSidebarState, parseTab, RECENT_RUN_LIMIT } from '../../../src/sidebar/sidebarState';
 
 const agent: AgentSummary = {
@@ -65,6 +71,7 @@ describe('buildSidebarState', () => {
       recentRuns: [11, 10, 9, 8, 7, 6, 5, 4].map((n) => run(n)),
       activeRuns: [],
       tab: 'workflows',
+      setupCheck: null,
     });
     expect(RECENT_RUN_LIMIT).toBe(8);
   });
@@ -95,6 +102,12 @@ describe('buildSidebarState', () => {
     const state = buildSidebarState({ ...base, history, activeRuns: [live(1)] });
     expect(state.recentRuns.map((r) => r.runId)).toEqual(['r4', 'r3']);
     expect(state.activeRuns.map((r) => r.runId)).toEqual(['live1']);
+  });
+
+  it('passes the setup report through, null when there is none', () => {
+    const report: SetupReport = { startedAt: 1, items: [] };
+    expect(buildSidebarState({ ...base, setupCheck: report }).setupCheck).toBe(report);
+    expect(buildSidebarState(base).setupCheck).toBeNull();
   });
 });
 

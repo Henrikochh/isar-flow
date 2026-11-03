@@ -116,6 +116,30 @@ describe('usage of failed agent blocks', () => {
     expect(r.events.at(-1)).toMatchObject({ type: 'run-end', usage: usage(31, 6) });
   });
 
+  it('shows the tool calls a failed agent block made', async () => {
+    const host = new FakeHost().agent('a', {
+      error: new AgentRunError('The agent used all 2 turns', usage(30, 5), { toolCalls: 2 }),
+    });
+    const r = await run(
+      workflow([{ id: 'a', type: 'agent', model: 'p/m', prompt: 'x', continueOnError: true }]),
+      { host },
+    );
+    expect(r.output('a')).toMatchObject({ status: 'failure', usage: usage(30, 5), toolCalls: 2 });
+  });
+
+  it('counts the tool calls of failed attempts that are retried', async () => {
+    const host = new FakeHost().agent(
+      'a',
+      { error: new AgentRunError('bad JSON', usage(10, 2), { toolCalls: 3 }) },
+      { usage: usage(5, 1), toolCalls: 1 },
+    );
+    const r = await run(
+      workflow([{ id: 'a', type: 'agent', model: 'p/m', prompt: 'x', retry: { max: 1 } }]),
+      { host },
+    );
+    expect(r.output('a')).toMatchObject({ status: 'success', usage: usage(15, 3), toolCalls: 4 });
+  });
+
   it('counts usage of failed attempts that are retried', async () => {
     const host = new FakeHost().agent(
       'a',
@@ -126,8 +150,38 @@ describe('usage of failed agent blocks', () => {
       workflow([{ id: 'a', type: 'agent', model: 'p/m', prompt: 'x', retry: { max: 1 } }]),
       { host },
     );
-    expect(r.output('a')).toMatchObject({ status: 'success', usage: usage(5, 1) });
+    // The block's usage covers every attempt, so the blocks' tokens add up to the run total.
+    expect(r.output('a')).toMatchObject({ status: 'success', usage: usage(15, 3) });
     expect(r.summary.usage).toEqual(usage(15, 3));
+  });
+
+  it('sums the usage of every attempt of a block that keeps failing', async () => {
+    const host = new FakeHost().agent(
+      'a',
+      { error: new AgentRunError('bad JSON', usage(10, 2)) },
+      { error: 'model is down' },
+      { error: new AgentRunError('bad JSON again', usage(4, 1)) },
+    );
+    const r = await run(
+      workflow([{ id: 'a', type: 'agent', model: 'p/m', prompt: 'x', retry: { max: 2 } }]),
+      { host },
+    );
+    expect(host.agentCalls).toHaveLength(3);
+    expect(r.output('a')).toMatchObject({ status: 'failure', usage: usage(14, 3), error: 'bad JSON again' });
+    expect(r.summary.usage).toEqual(usage(14, 3));
+  });
+
+  it('keeps the usage of earlier attempts when the last attempt reports none', async () => {
+    const host = new FakeHost().agent(
+      'a',
+      { error: new AgentRunError('bad JSON', usage(10, 2)) },
+      { error: 'model is down' },
+    );
+    const r = await run(
+      workflow([{ id: 'a', type: 'agent', model: 'p/m', prompt: 'x', retry: { max: 1 } }]),
+      { host },
+    );
+    expect(r.output('a')).toMatchObject({ status: 'failure', usage: usage(10, 2), error: 'model is down' });
   });
 
   it('applies the token budget to failed blocks, even with continueOnError', async () => {

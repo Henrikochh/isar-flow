@@ -1,6 +1,6 @@
 /** Per-render data every canvas block needs, computed once per state change. */
 import { createContext, type ReactNode, useContext, useMemo } from 'react';
-import type { AgentSummary, Diagnostic, RunView } from '@isar-flow/core';
+import type { AgentSummary, Diagnostic, ModelPrices, RunView } from '@isar-flow/core';
 import { useEditor } from '../editorContext';
 import { useWorkflowActions, useWorkflowState } from '../store';
 
@@ -12,6 +12,8 @@ export interface CanvasData {
   run: RunView | null;
   problems: Map<string, Diagnostic[]>;
   agents: Map<string, AgentSummary>;
+  /** `isarFlow.modelPrices`, for cost estimates on the cards. */
+  prices: ModelPrices | undefined;
   /** Blocks waiting for an approval decision. */
   awaitingApproval: Set<string>;
   /** Opens the block menu, at the pointer when `at` is given, else below the block's card. */
@@ -45,9 +47,20 @@ export function CanvasDataProvider({
   const selection = state.selection;
   const tabStop = selection && model.byId.has(selection) ? selection : (model.order[0] ?? null);
 
+  const prices = state.catalog.prices;
   const value = useMemo<CanvasData>(
-    () => ({ selection, tabStop, select, run: state.run, problems, agents, awaitingApproval, openMenu }),
-    [selection, tabStop, select, state.run, problems, agents, awaitingApproval, openMenu],
+    () => ({
+      selection,
+      tabStop,
+      select,
+      run: state.run,
+      problems,
+      agents,
+      prices,
+      awaitingApproval,
+      openMenu,
+    }),
+    [selection, tabStop, select, state.run, problems, agents, prices, awaitingApproval, openMenu],
   );
   return <CanvasContext.Provider value={value}>{children}</CanvasContext.Provider>;
 }

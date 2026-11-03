@@ -19,6 +19,8 @@ const state = vi.hoisted(() => ({
   applyResult: true,
   found: [] as string[],
   findCalls: [] as unknown[][],
+  findError: undefined as Error | undefined,
+  insideWorkspace: true,
 }));
 
 vi.mock('vscode', async (importOriginal) => {
@@ -79,8 +81,11 @@ vi.mock('vscode', async (importOriginal) => {
       },
       findFiles: async (...args: unknown[]) => {
         state.findCalls.push(args);
+        if (state.findError) throw state.findError;
         return state.found.map((file) => actual.Uri.file(file));
       },
+      getWorkspaceFolder: (uri: Stub.Uri) =>
+        state.insideWorkspace ? { uri, name: 'ws', index: 0 } : undefined,
     },
   };
 });
@@ -94,6 +99,8 @@ beforeEach(() => {
   state.applyResult = true;
   state.found = [];
   state.findCalls = [];
+  state.findError = undefined;
+  state.insideWorkspace = true;
 });
 
 const { Uri } = await import('vscode');
@@ -106,6 +113,16 @@ describe('createVscodeWorkspaceAdapter', () => {
     fs.writeFileSync(file, 'on disk');
     state.documents.push({ uri: Uri.file(file) as Stub.Uri, text: 'in the editor', isDirty: true, saved: 0 });
     expect(await adapter.readFile(file)).toBe('in the editor');
+  });
+
+  it('reports the text of an open document only while it has unsaved changes', () => {
+    const file = path.join(root, 'dirty.ts');
+    fs.writeFileSync(file, 'on disk');
+    state.documents.push({ uri: Uri.file(file) as Stub.Uri, text: 'typed', isDirty: true, saved: 0 });
+    expect(adapter.unsavedText?.(file)).toBe('typed');
+    state.documents[0].isDirty = false;
+    expect(adapter.unsavedText?.(file)).toBeUndefined();
+    expect(adapter.unsavedText?.(path.join(root, 'closed.ts'))).toBeUndefined();
   });
 
   it('reads closed files from disk as UTF-8 without BOM', async () => {
@@ -146,6 +163,44 @@ describe('createVscodeWorkspaceAdapter', () => {
     expect(exclude).toContain('**/node_modules/**');
     expect(exclude).toContain('**/.git/**');
     expect(max).toBe(50);
+  });
+
+  it('deletes files through an undoable workspace edit', async () => {
+    const file = path.join(root, 'gone.ts');
+    fs.writeFileSync(file, 'x');
+    await adapter.deleteFile?.(file);
+    const edit = state.applied[0] as { edits: { kind: string; uri: Stub.Uri }[] };
+    expect(edit.edits).toEqual([expect.objectContaining({ kind: 'delete' })]);
+    expect(path.normalize(edit.edits[0].uri.fsPath)).toBe(path.normalize(file));
+  });
+
+  it('fails when VS Code refuses the delete', async () => {
+    state.applyResult = false;
+    await expect(adapter.deleteFile?.(path.join(root, 'kept.ts'))).rejects.toThrow(
+      /VS Code could not delete .*kept\.ts/,
+    );
+  });
+
+  it('walks the folder itself when it is outside the workspace folders, e.g. a git worktree', async () => {
+    const worktree = path.join(root, 'worktree');
+    for (const rel of ['src/a.ts', 'src/b.js', 'node_modules/x/c.ts', 'README.md']) {
+      fs.mkdirSync(path.dirname(path.join(worktree, rel)), { recursive: true });
+      fs.writeFileSync(path.join(worktree, rel), 'x');
+    }
+    state.insideWorkspace = false;
+    const outside = createVscodeWorkspaceAdapter(worktree);
+    expect(await outside.findFiles('**/*.ts', 10)).toEqual(['src/a.ts']);
+    expect(await outside.findFiles('**/*', 2)).toEqual(['README.md', 'src/a.ts']);
+    expect(state.findCalls).toEqual([]);
+  });
+
+  it('walks the folder when VS Code cannot search it', async () => {
+    const folder = path.join(root, 'unsearchable');
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, 'one.txt'), 'x');
+    state.findError = new Error('search provider failed');
+    expect(await createVscodeWorkspaceAdapter(folder).findFiles('*.txt', 10)).toEqual(['one.txt']);
+    expect(state.findCalls).toHaveLength(1);
   });
 
   it('checks existence and real paths on disk', async () => {

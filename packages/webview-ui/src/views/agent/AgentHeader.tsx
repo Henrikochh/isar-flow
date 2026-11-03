@@ -1,6 +1,6 @@
 import { useId } from 'react';
-import type { AgentScope } from '@isar-flow/core';
-import { AgentStone, Button, Chip } from '../../components';
+import type { AgentScope, CapabilitySource } from '@isar-flow/core';
+import { AgentStone, Button, CapabilityChips, Chip } from '../../components';
 import { InlineText } from './InlineText';
 import type { FieldIssues, UpdateAgent } from './agentForm';
 
@@ -21,6 +21,7 @@ export function AgentHeader({
   description,
   issues,
   editable,
+  capabilities,
   update,
   onOpenYaml,
 }: {
@@ -32,6 +33,8 @@ export function AgentHeader({
   issues: FieldIssues;
   /** False while the YAML cannot be read at all. */
   editable: boolean;
+  /** Tools and permissions of the form (unsaved edits included), for the capability badges. */
+  capabilities: CapabilitySource | null;
   update: UpdateAgent;
   onOpenYaml: () => void;
 }) {
@@ -60,11 +63,12 @@ export function AgentHeader({
           ) : (
             <h1 className="ag-header__name-static">{name || id}</h1>
           )}
-          {/* The name gives way to the scope chip, never the other way round. */}
+          {/* The name gives way to the chips, never the other way round; they wrap below a long name. */}
           <span className="ag-header__scope">
             <Chip tone="outline" icon={scopeInfo.icon} title={scopeInfo.title}>
               {scopeInfo.label}
             </Chip>
+            {capabilities ? <CapabilityChips source={capabilities} /> : null}
           </span>
         </div>
         {editable ? (

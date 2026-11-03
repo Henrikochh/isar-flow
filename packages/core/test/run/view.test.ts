@@ -108,6 +108,7 @@ describe('reduceRunEvent', () => {
       logs: [{ stream: 'stdout', text: 'hello\n' }],
       output: { exitCode: 0, status: 'success', durationMs: 5 },
       durationMs: 5,
+      metrics: { durationMs: 5, executions: 1 },
     });
   });
 

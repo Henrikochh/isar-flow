@@ -1,7 +1,7 @@
 /** Second and following rows of a block card: the real prompt, command or message of each block type. */
 import type { ReactNode } from 'react';
-import { AgentStone, Chip } from '../../../components';
-import type { Step } from '@isar-flow/core';
+import { AgentStone, CapabilityChips, Chip } from '../../../components';
+import type { CapabilitySource, Step } from '@isar-flow/core';
 import { useCanvas } from './canvasContext';
 import { type BlockEntry, textOf } from './model';
 import { TemplateText } from './TemplateText';
@@ -35,9 +35,12 @@ function AgentBody({ step }: { step: Raw }) {
   const override = textOf(step.model);
   let who: ReactNode;
   let model = override;
+  // What the agent may do; unknown agents get no badges rather than a guess.
+  let capabilities: CapabilitySource | undefined;
   if (typeof ref === 'string' && ref.trim()) {
     const agent = agents.get(ref);
     model ||= agent?.model ?? '';
+    capabilities = agent;
     who = (
       <>
         <AgentStone id={ref} name={agent?.name ?? ref} size="s" />
@@ -46,6 +49,7 @@ function AgentBody({ step }: { step: Raw }) {
     );
   } else if (typeof ref === 'object' && ref !== null) {
     model ||= textOf((ref as Raw).model);
+    capabilities = ref as CapabilitySource;
     who = <span className="wf-card__agent">Inline agent</span>;
   } else {
     who = <span className="wf-card__agent wf-card__agent--none">No agent</span>;
@@ -60,6 +64,7 @@ function AgentBody({ step }: { step: Raw }) {
       <Clamped text={textOf(step.prompt)} placeholder="No task yet" />
       <Chips>
         {[
+          capabilities ? <CapabilityChips key="can" source={capabilities} /> : null,
           output?.format === 'json' ? (
             <Chip key="json" icon="json">
               JSON answer

@@ -4,6 +4,8 @@ import type { RunConsoleCommand, WorkspaceAdapter } from '../contracts';
 /** A WorkspaceAdapter that may also report file sizes, so big files are skipped before they are read. */
 export interface ToolWorkspace extends WorkspaceAdapter {
   fileSize?(absPath: string): Promise<number | undefined>;
+  /** The text of an open editor with unsaved changes to the file (writes save it); undefined otherwise. */
+  unsavedText?(absPath: string): string | undefined;
 }
 
 /** A failure the model should read as the tool result (wrong arguments, missing file, refused permission). */

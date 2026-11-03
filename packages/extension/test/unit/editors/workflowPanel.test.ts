@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import type { HostToWorkflowEditor, RunEvent, RunView } from '@isar-flow/core';
+import type { HostToWorkflowEditor, RunEvent, RunReview, RunView } from '@isar-flow/core';
 import { PendingApprovals } from '../../../src/editors/approvals';
 import { DOCUMENT_CHANGED, WRITE_FAILED } from '../../../src/editors/host';
 import { WorkflowPanel } from '../../../src/editors/workflowPanel';
-import { agentSummary, AsyncDocument, FakeDocument, fakeServices, fakeUi } from './fakes';
+import { agentSummary, AsyncDocument, FakeDocument, fakeReviews, fakeServices, fakeUi } from './fakes';
 
 const TEXT = [
   '# Review workflow',
@@ -45,8 +45,12 @@ function setup(text = TEXT) {
   return setupWith(new FakeDocument(text));
 }
 
-function setupWith<D extends FakeDocument>(doc: D) {
+function setupWith<D extends FakeDocument>(
+  doc: D,
+  prepare?: (fake: ReturnType<typeof fakeServices>) => void,
+) {
   const fake = fakeServices();
+  prepare?.(fake);
   const { ui, api } = fakeUi();
   const approvals = new PendingApprovals(fake.services.runs);
   const posted: HostToWorkflowEditor[] = [];
@@ -496,5 +500,183 @@ describe('WorkflowPanel', () => {
     emitters.agents.fire();
     emitters.history.fire();
     expect(posted).toEqual([]);
+  });
+});
+
+const REVIEW: RunReview = {
+  runId: 'old',
+  coverage: 'git',
+  isolation: 'workspace',
+  files: [
+    {
+      path: 'src/app.ts',
+      status: 'modified',
+      additions: 2,
+      deletions: 1,
+      stepIds: ['implement'],
+      decision: 'pending',
+      revertible: true,
+    },
+  ],
+};
+
+const record = (runId: string, workflowUri = URI) => ({
+  runId,
+  workflowUri,
+  workflowName: 'Review',
+  status: 'success' as const,
+  startedAt: 1,
+});
+
+/** Lets pending promise callbacks run (setTimeout is faked in these tests). */
+const settle = async () => {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+};
+
+function setupWithReviews() {
+  const reviews = fakeReviews();
+  const t = setupWith(new FakeDocument(TEXT), (fake) =>
+    Object.assign(fake.services.runs, { reviews: reviews.service }),
+  );
+  return { ...t, reviews };
+}
+
+describe('WorkflowPanel reviews', () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }));
+  afterEach(() => vi.useRealTimers());
+
+  it('posts the review of the shown run after every run message', async () => {
+    const t = setupWithReviews();
+    t.state.views.old = view('old');
+    t.state.history = [record('old')];
+    t.reviews.reviews.old = REVIEW;
+    await t.panel.handle({ type: 'selectRun', runId: 'old' });
+    expect(t.posted).toEqual([
+      { type: 'run', run: view('old'), live: false },
+      { type: 'review', review: REVIEW },
+    ]);
+
+    t.posted.length = 0;
+    await t.panel.handle({ type: 'selectRun', runId: null });
+    expect(t.posted).toEqual([
+      { type: 'run', run: null, live: false },
+      { type: 'review', review: null },
+    ]);
+  });
+
+  it('posts no review on ready without a shown run, and the review of a requested run', async () => {
+    const t = setupWithReviews();
+    await t.panel.handle({ type: 'ready' });
+    await settle();
+    expect(t.last('review')).toEqual({ type: 'review', review: null });
+
+    t.state.views.old = view('old');
+    t.state.history = [record('old')];
+    t.reviews.reviews.old = REVIEW;
+    t.panel.showRun('old');
+    await settle();
+    expect(t.posted.slice(-2)).toEqual([
+      { type: 'run', run: view('old'), live: false },
+      { type: 'review', review: REVIEW },
+    ]);
+  });
+
+  it('does not show reviews of runs of other workflows', async () => {
+    const t = setupWithReviews();
+    t.state.views.other = view('other');
+    t.state.history = [record('other', 'file:///w/other.workflow.yaml')];
+    t.reviews.reviews.other = { ...REVIEW, runId: 'other' };
+    await t.panel.handle({ type: 'selectRun', runId: 'other' });
+    expect(t.last('review')).toEqual({ type: 'review', review: null });
+  });
+
+  it('follows changes of the review of the shown run, live runs included', async () => {
+    const t = setupWithReviews();
+    t.state.views.old = view('old');
+    t.state.history = [record('old')];
+    await t.panel.handle({ type: 'selectRun', runId: 'old' });
+    t.posted.length = 0;
+
+    t.reviews.reviews.old = REVIEW;
+    t.reviews.emitter.fire({ runId: 'old', workflowUri: URI });
+    t.reviews.emitter.fire({ runId: 'other', workflowUri: URI });
+    t.reviews.emitter.fire({ runId: 'old', workflowUri: 'file:///w/other.workflow.yaml' });
+    await settle();
+    expect(t.posted).toEqual([{ type: 'review', review: REVIEW }]);
+
+    // A new run takes over the canvas; its review arrives when the run has ended.
+    const start: RunEvent = {
+      type: 'run-start',
+      runId: 'r2',
+      workflowName: 'Review',
+      startedAt: 5,
+      inputs: {},
+    };
+    t.emitters.runEvents.fire({ workflowUri: URI, event: start });
+    t.state.history = [record('r2'), record('old')];
+    t.reviews.reviews.r2 = { ...REVIEW, runId: 'r2' };
+    t.posted.length = 0;
+    t.reviews.emitter.fire({ runId: 'old', workflowUri: URI });
+    t.reviews.emitter.fire({ runId: 'r2', workflowUri: URI });
+    await settle();
+    expect(t.posted).toEqual([{ type: 'review', review: { ...REVIEW, runId: 'r2' } }]);
+  });
+
+  it('keeps or reverts files of its own runs, after checking the message', async () => {
+    const t = setupWithReviews();
+    t.state.history = [record('old'), record('other', 'file:///w/other.workflow.yaml')];
+    const send = (message: unknown) => t.panel.handle(message as Parameters<typeof t.panel.handle>[0]);
+    await send({ type: 'reviewFiles', runId: 'old', decision: 'kept', paths: ['src/app.ts'] });
+    await send({ type: 'reviewFiles', runId: 'old', decision: 'reverted' });
+    await send({ type: 'reviewFiles', runId: 'old', decision: 'deleted' });
+    await send({ type: 'reviewFiles', runId: 'old', decision: 'kept', paths: 'src/app.ts' });
+    await send({ type: 'reviewFiles', runId: 'old', decision: 'kept', paths: [42] });
+    await send({ type: 'reviewFiles', runId: 7, decision: 'kept' });
+    await send({ type: 'reviewFiles', runId: 'other', decision: 'kept' });
+    expect(t.reviews.service.decide.mock.calls).toEqual([
+      ['old', 'kept', ['src/app.ts']],
+      ['old', 'reverted', undefined],
+    ]);
+  });
+
+  it('opens review diffs of its own runs only', async () => {
+    const t = setupWithReviews();
+    t.state.history = [record('old'), record('other', 'file:///w/other.workflow.yaml')];
+    t.state.active = [{ runId: 'live', workflowUri: URI, view: view('live', 'running') }];
+    const send = (message: unknown) => t.panel.handle(message as Parameters<typeof t.panel.handle>[0]);
+    await send({ type: 'openReviewDiff', runId: 'old', path: 'src/app.ts' });
+    await send({ type: 'openReviewDiff', runId: 'live', path: 'a.txt' });
+    await send({ type: 'openReviewDiff', runId: 'other', path: 'src/app.ts' });
+    await send({ type: 'openReviewDiff', runId: 'old', path: 3 });
+    expect(t.reviews.service.openDiff.mock.calls).toEqual([
+      ['old', 'src/app.ts'],
+      ['live', 'a.txt'],
+    ]);
+  });
+
+  it('asks for trust before changing files and reports failures', async () => {
+    const t = setup();
+    const reviews = fakeReviews();
+    Object.assign(t.services.runs, { reviews: reviews.service });
+    t.state.history = [record('old')];
+    t.ui.trusted = false;
+    await t.panel.handle({ type: 'reviewFiles', runId: 'old', decision: 'reverted' });
+    await t.panel.handle({ type: 'openReviewDiff', runId: 'old', path: 'a.txt' });
+    expect(reviews.service.decide).not.toHaveBeenCalled();
+    expect(reviews.service.openDiff).not.toHaveBeenCalled();
+    expect(t.ui.errors).toEqual([
+      'Trust this workspace to keep or revert changes.',
+      'Trust this workspace to keep or revert changes.',
+    ]);
+
+    t.ui.trusted = true;
+    reviews.service.decide.mockRejectedValueOnce(new Error('git is gone'));
+    reviews.service.openDiff.mockRejectedValueOnce(new Error('no editor'));
+    await t.panel.handle({ type: 'reviewFiles', runId: 'old', decision: 'reverted' });
+    await t.panel.handle({ type: 'openReviewDiff', runId: 'old', path: 'a.txt' });
+    expect(t.ui.errors.slice(2)).toEqual([
+      'Could not revert the changes: git is gone',
+      'Could not open the diff of a.txt: no editor',
+    ]);
   });
 });

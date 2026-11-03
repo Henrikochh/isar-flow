@@ -5,6 +5,40 @@ export interface LogLine {
   text: string;
 }
 
+/**
+ * Time and tokens of one block over all its executions in a run (loops run their blocks several times).
+ * Summed when a step-end arrives; skipped blocks get none.
+ */
+export interface StepMetrics {
+  /** Sum of the durations of all finished executions. */
+  durationMs: number;
+  /** Finished executions counted so far. */
+  executions: number;
+  /** Agent blocks: tokens of all executions (failed attempts that used tokens included). */
+  usage?: Usage;
+  /** Agent blocks: model that answered the latest execution (may be a fallback model). */
+  model?: string;
+  /** Agent blocks: model round-trips of all executions. */
+  turns?: number;
+  /** Agent blocks: tool calls of all executions. */
+  toolCalls?: number;
+  /** Loop blocks: iterations of the latest execution. */
+  iterations?: number;
+}
+
+/** Compact numbers of one block in a finished run, kept in the history index (RunRecordSummary.blocks) for trends. */
+export interface BlockRunMetrics {
+  status: StepStatus;
+  /** Sum over all executions (StepMetrics.durationMs). */
+  durationMs: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  /** Loop blocks: iterations; other blocks: executions, only when more than one. */
+  iterations?: number;
+  /** Agent blocks: model of the latest execution, for cost estimates. */
+  model?: string;
+}
+
 /** Live/recorded state of one block during a run, derived from RunEvents. */
 export interface StepRunView {
   status: StepStatus;
@@ -24,6 +58,8 @@ export interface StepRunView {
   logs: LogLine[];
   /** True when logs were dropped because of the cap. */
   logsTruncated?: boolean;
+  /** Totals over all executions of the block in this run; set from the first step-end on. */
+  metrics?: StepMetrics;
 }
 
 /** Snapshot of a run for the canvas, inspector and history. */

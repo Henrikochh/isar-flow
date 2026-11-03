@@ -4,6 +4,7 @@ import type {
   ModelCatalog,
   RunRecordSummary,
   RunView,
+  SetupReport,
   SidebarState,
   SidebarTab,
   WorkflowSummary,
@@ -29,6 +30,8 @@ export interface SidebarStateInput {
   activeRuns: LiveRunInput[];
   /** Stored tab; unknown values fall back to the agents tab. */
   tab: unknown;
+  /** The current "Check setup" report, if any. */
+  setupCheck?: SetupReport;
 }
 
 export function parseTab(value: unknown): SidebarTab {
@@ -60,5 +63,6 @@ export function buildSidebarState(input: SidebarStateInput): SidebarState {
     recentRuns,
     activeRuns,
     tab: parseTab(input.tab),
+    setupCheck: input.setupCheck ?? null,
   };
 }

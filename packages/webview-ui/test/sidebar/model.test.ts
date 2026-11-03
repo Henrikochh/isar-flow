@@ -4,11 +4,11 @@ import { WORKFLOWS } from '../../harness/fixtures';
 import {
   activeRunOf,
   agentLabel,
-  agentReach,
   fileBaseName,
   fitPath,
   slugOf,
   templateOutline,
+  toolCount,
   uniqueKeys,
 } from '../../src/views/sidebar/model';
 import { parseViewState } from '../../src/views/sidebar/viewState';
@@ -33,16 +33,12 @@ describe('sidebar model helpers', () => {
     expect(fileBaseName('file:///c%3A/x/%E0%A4%A.yaml')).toBe('%E0%A4%A.yaml');
   });
 
-  it('derives what an agent may do from its tools', () => {
+  it('counts the distinct tools of an agent', () => {
     const agent = {
       tools: ['readFile', 'editFile', 'writeFile', 'readFile', 'bogus'],
     } as unknown as AgentSummary;
-    expect(agentReach(agent)).toEqual({ tools: 4, edits: true, commands: false });
-    expect(agentReach({ tools: undefined } as unknown as AgentSummary)).toEqual({
-      tools: 0,
-      edits: false,
-      commands: false,
-    });
+    expect(toolCount(agent)).toBe(4);
+    expect(toolCount({ tools: undefined } as unknown as AgentSummary)).toBe(0);
   });
 
   it('fits paths by dropping whole leading folders, never half a folder name', () => {

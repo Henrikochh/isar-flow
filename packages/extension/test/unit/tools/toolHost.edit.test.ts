@@ -26,14 +26,70 @@ describe('editFile', () => {
   it('explains when oldText is missing', async () => {
     const result = await h.call('editFile', { path: 'src/app.ts', oldText: 'const z', newText: 'x' });
     expect(result.isError).toBe(true);
-    expect(result.content).toMatch(/^oldText was not found in src\/app\.ts/);
+    expect(result.content).toBe(
+      'oldText was not found in src/app.ts, also not when ignoring whitespace and line endings. ' +
+        'Read the file again and copy the text to replace exactly.',
+    );
   });
 
   it('explains when oldText occurs more than once', async () => {
     const result = await h.call('editFile', { path: 'src/app.ts', oldText: 'const', newText: 'let' });
     expect(result.isError).toBe(true);
-    expect(result.content).toMatch(/^oldText occurs 3 times in src\/app\.ts; include more surrounding lines/);
+    expect(result.content).toBe(
+      'oldText matches 3 places in src/app.ts. Include more surrounding lines so it matches exactly once.',
+    );
     expect(h.read('src/app.ts')).toContain('const a');
+  });
+
+  it('matches ignoring whitespace, takes the indentation from the file and says so', async () => {
+    h.write('src/fn.ts', 'function f() {\n\tif (x) {\n\t\treturn 1;\n\t}\n}\n');
+    const result = await h.call('editFile', {
+      path: 'src/fn.ts',
+      oldText: '  if (x) {\n    return 1;\n  }',
+      newText: '  if (x) {\n    return 2;\n  }',
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.content).toBe(
+      'Edited src/fn.ts: replaced 3 lines with 3 lines ' +
+        '(matched ignoring whitespace; indentation taken from the file).',
+    );
+    expect(h.read('src/fn.ts')).toBe('function f() {\n\tif (x) {\n\t\treturn 2;\n\t}\n}\n');
+  });
+
+  it('matches after normalizing line endings and says so', async () => {
+    const result = await h.call('editFile', {
+      path: 'src/app.ts',
+      oldText: 'const b = 2;\r\nconst c = 3;\r\n',
+      newText: 'const b = 4;\r\n',
+    });
+    expect(result.content).toBe(
+      'Edited src/app.ts: replaced 2 lines with 1 line (matched after normalizing line endings).',
+    );
+    expect(h.read('src/app.ts')).toBe('const a = 1;\nconst b = 4;\n');
+  });
+
+  it('names the mode when a looser match is ambiguous', async () => {
+    h.write('src/dup.ts', 'if (a) {\n  go();\n}\nif (a) {\n    go();\n}\n');
+    const result = await h.call('editFile', { path: 'src/dup.ts', oldText: 'go();  ', newText: 'stop();' });
+    expect(result.content).toBe(
+      'oldText matches 2 places in src/dup.ts (ignoring whitespace). ' +
+        'Include more surrounding lines so it matches exactly once.',
+    );
+  });
+
+  it('plans again after asking, so a change made meanwhile is not overwritten', async () => {
+    h.prompt = async () => {
+      h.write('src/app.ts', 'const a = 1;\nconst b = 99;\nconst c = 3;\n');
+      return 'allow';
+    };
+    const result = await h.call(
+      'editFile',
+      { path: 'src/app.ts', oldText: 'const b = 2;', newText: 'const b = 20;' },
+      { edits: 'ask' },
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content).toMatch(/^oldText was not found in src\/app\.ts/);
+    expect(h.read('src/app.ts')).toBe('const a = 1;\nconst b = 99;\nconst c = 3;\n');
   });
 
   it('matches LF text against a CRLF file and keeps CRLF', async () => {
@@ -41,6 +97,30 @@ describe('editFile', () => {
     const result = await h.call('editFile', { path: 'win.txt', oldText: 'one\ntwo', newText: 'uno\ndos' });
     expect(result.isError).toBeFalsy();
     expect(h.read('win.txt')).toBe('uno\r\ndos\r\nthree\r\n');
+  });
+
+  it('refuses to change a file that is not UTF-8, so characters it shows as � are not lost', async () => {
+    const latin1 = Buffer.from('café = 1\nx = 2\n', 'latin1');
+    h.write('legacy.txt', latin1);
+    const notUtf8 =
+      'legacy.txt is not UTF-8 text, so it was not changed: characters that can\'t be read (shown as "�") ' +
+      'would be lost. Leave it as it is, or ask the user to convert it to UTF-8.';
+    const edit = await h.call('editFile', { path: 'legacy.txt', oldText: 'x = 2', newText: 'x = 3' });
+    expect(edit).toEqual({ isError: true, content: notUtf8 });
+    const patch = await h.call('applyPatch', {
+      patch: '--- a/legacy.txt\n+++ b/legacy.txt\n@@ -2 +2 @@\n-x = 2\n+x = 3\n',
+    });
+    expect(patch).toEqual({
+      isError: true,
+      content: `${notUtf8} No file was changed. Read the file again and make a new patch.`,
+    });
+    expect(fs.readFileSync(path.join(h.root, 'legacy.txt'))).toEqual(latin1);
+
+    // A UTF-8 file may contain the replacement character itself.
+    h.write('utf8.txt', 'bad byte: �\nx = 2\n');
+    const ok = await h.call('editFile', { path: 'utf8.txt', oldText: 'x = 2', newText: 'x = 3' });
+    expect(ok.isError).toBeFalsy();
+    expect(h.read('utf8.txt')).toBe('bad byte: �\nx = 3\n');
   });
 
   it('refuses an empty oldText and missing files', async () => {

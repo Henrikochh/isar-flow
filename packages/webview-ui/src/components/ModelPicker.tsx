@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { ModelCatalog } from '@isar-flow/core';
 import { Button } from './Button';
+import { ProbeChip } from './Capabilities';
 import { Chip } from './Display';
 import { Select, type SelectOption } from './Select';
 
@@ -37,6 +38,8 @@ export function ModelPicker({
     const list: SelectOption[] = [];
     if (emptyOption) list.push({ value: EMPTY, label: emptyOption });
     const failing = new Map(catalog.providers.filter((p) => p.status === 'error').map((p) => [p.id, p]));
+    const probes = typeof catalog.probes === 'object' && catalog.probes !== null ? catalog.probes : {};
+    const probeOf = (ref: string) => (Object.hasOwn(probes, ref) ? probes[ref] : undefined);
     for (const model of catalog.models) {
       list.push({
         value: model.ref,
@@ -44,9 +47,10 @@ export function ModelPicker({
         description: model.ref,
         group: model.providerLabel,
         meta: (
-          <span style={{ display: 'inline-flex', gap: 4 }}>
+          <span className="if-model-chips">
             {model.capabilities.tools ? <Chip tone="outline">Tools</Chip> : null}
             {model.capabilities.jsonSchema ? <Chip tone="outline">JSON</Chip> : null}
+            <ProbeChip probe={probeOf(model.ref)} />
           </span>
         ),
       });
@@ -60,7 +64,14 @@ export function ModelPicker({
       });
     }
     if (value && !list.some((o) => o.value === value)) {
-      list.push({ value, label: value, description: 'Not in the model list', group: 'Current value' });
+      const probe = probeOf(value);
+      list.push({
+        value,
+        label: value,
+        description: 'Not in the model list',
+        group: 'Current value',
+        meta: probe ? <ProbeChip probe={probe} /> : undefined,
+      });
     }
     return list;
   }, [catalog, emptyOption, value]);

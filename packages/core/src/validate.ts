@@ -509,6 +509,25 @@ export function validateWorkflow(workflow: Workflow, options: ValidateOptions = 
       checkTemplate(value, { path: ['env', key], block: null });
   }
 
+  const setup: unknown = workflow.setup;
+  if (Array.isArray(setup) && setup.length > 0) {
+    if (workflow.isolation !== 'worktree') {
+      report(
+        'setup-without-worktree',
+        'warning',
+        'Setup commands only run with isolation: worktree. Set isolation to worktree or remove setup.',
+        ['setup'],
+        null,
+      );
+    }
+    setup.forEach((command: unknown, i) => {
+      if (typeof command === 'string' && command.includes('${{')) {
+        const message = 'Setup commands run as written; ${{ }} templates are not filled in.';
+        report('setup-template', 'warning', message, ['setup', i], null);
+      }
+    });
+  }
+
   const seenIds = new Set<string>();
   for (const block of blocks) {
     if (block.id && seenIds.has(block.id)) {

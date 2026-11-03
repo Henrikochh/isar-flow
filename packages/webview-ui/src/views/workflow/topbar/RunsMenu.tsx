@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Menu, MenuItem, MenuLabel, Popover, StatusGlyph, statusLabel } from '../../../components';
 import { formatDuration, formatRelativeTime } from '../../../hooks';
+import { ReviewCounts } from '../review/ReviewCounts';
 import { useWorkflowActions, useWorkflowState } from '../store';
 
 /** Shows which run is on the canvas and lets the user switch between the live run and past runs. */
@@ -67,7 +68,14 @@ export function RunsMenu({ elapsed }: { elapsed: number | undefined }) {
             <MenuItem
               key={record.runId}
               leading={<StatusGlyph status={record.status} />}
-              description={record.error}
+              description={
+                record.error || record.review?.total ? (
+                  <span className="wf-runs__desc">
+                    <ReviewCounts counts={record.review} />
+                    {record.error ? <span className="wf-runs__error">{record.error}</span> : null}
+                  </span>
+                ) : undefined
+              }
               meta={formatDuration(record.durationMs)}
               current={run?.runId === record.runId}
               title={`${statusLabel(record.status)} ${new Date(record.startedAt).toLocaleString()}`}

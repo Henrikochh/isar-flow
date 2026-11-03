@@ -13,7 +13,12 @@ export const TRANSCRIPT_FIXTURE: TranscriptEntry[] = [
     meta: 'vscode/copilot/gpt-4.1 · 4.3k tokens',
   },
   { role: 'user', text: 'Which file should the expired-voucher test go into?' },
-  { role: 'tool', tool: 'searchText', text: '"applies the voucher once" in src/**/*.test.ts', meta: 'src/checkout.test.ts:88' },
+  {
+    role: 'tool',
+    tool: 'searchText',
+    text: '"applies the voucher once" in src/**/*.test.ts',
+    meta: 'src/checkout.test.ts:88',
+  },
   {
     role: 'agent',
     text: 'Put it in src/checkout.test.ts next to "applies the voucher once". That test already builds a cart with a voucher, so you only need to move the clock past the expiry date.',

@@ -9,10 +9,11 @@ import {
   statusLabel,
   TextInput,
 } from '../../../../components';
-import { formatDuration, formatTokens } from '../../../../hooks';
+import { formatDuration } from '../../../../hooks';
 import { useWorkflowActions, useWorkflowState } from '../../store';
 import { asNumber, asString, isRecord } from '../model';
 import { useNow } from '../useNow';
+import { BlockMetrics } from './BlockMetrics';
 import { DetailBlock } from './DetailBlock';
 import { LogViewer } from './LogViewer';
 
@@ -71,6 +72,7 @@ export function RunOutput({ block, stepId, run }: { block: BlockNode; stepId: st
       {type === 'loop' ? <LoopOutput stepRun={stepRun} output={output} /> : null}
       {type === 'if' ? <IfOutput output={output} /> : null}
       {type === 'approval' ? <ApprovalOutput output={output} /> : null}
+      <BlockMetrics stepId={stepId} stepRun={stepRun} />
     </div>
   );
 }
@@ -168,11 +170,6 @@ function AgentOutput({
     .join('');
   const hasJson = output !== undefined && output.json !== undefined;
   const answer = hasJson ? prettyJson(output.json) : asString(output?.text) || (running ? streamed : '');
-  const usage = isRecord(output?.usage) ? output.usage : undefined;
-  const inputTokens = asNumber(usage?.inputTokens);
-  const outputTokens = asNumber(usage?.outputTokens);
-  const turns = asNumber(output?.turns);
-  const model = asString(output?.model);
 
   return (
     <div className="wf-insp-stack">
@@ -206,32 +203,6 @@ function AgentOutput({
           <p className="wf-insp-note">{running ? 'Waiting for the agent…' : 'No answer.'}</p>
         )}
       </div>
-      {inputTokens !== undefined || turns !== undefined || model ? (
-        <div className="wf-insp-chips">
-          {model ? (
-            <Chip tone="outline" code title="Model that answered">
-              {model}
-            </Chip>
-          ) : null}
-          {inputTokens !== undefined ? (
-            <Chip
-              tone="outline"
-              icon="arrow-up"
-              title="Input tokens"
-            >{`${formatTokens(inputTokens)} in`}</Chip>
-          ) : null}
-          {outputTokens !== undefined ? (
-            <Chip
-              tone="outline"
-              icon="arrow-down"
-              title="Output tokens"
-            >{`${formatTokens(outputTokens)} out`}</Chip>
-          ) : null}
-          {turns !== undefined ? (
-            <Chip tone="outline">{turns === 1 ? '1 turn' : `${turns} turns`}</Chip>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

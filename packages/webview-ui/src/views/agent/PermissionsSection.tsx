@@ -1,5 +1,11 @@
 import { useId } from 'react';
-import type { AgentPermissions, PermissionLevel, ToolName } from '@isar-flow/core';
+import {
+  TOOL_INFO,
+  TOOL_NAMES,
+  type AgentPermissions,
+  type PermissionLevel,
+  type ToolName,
+} from '@isar-flow/core';
 import { SegmentedControl, Section, type SegmentOption } from '../../components';
 import type { AgentForm, FieldIssues, UpdateAgent } from './agentForm';
 
@@ -17,8 +23,8 @@ const GATES: Record<
 > = {
   edits: {
     label: 'Edit files',
-    tools: ['editFile', 'writeFile'],
-    off: 'Turn on Edit files or Write files under Tools to use this.',
+    tools: TOOL_NAMES.filter((tool) => TOOL_INFO[tool].risk === 'edit'),
+    off: 'Turn on Edit files, Apply patches or Write files under Tools to use this.',
     describe: {
       none: 'Every edit is refused.',
       ask: 'VS Code asks you before each change.',
@@ -27,7 +33,7 @@ const GATES: Record<
   },
   commands: {
     label: 'Run commands',
-    tools: ['runCommand'],
+    tools: TOOL_NAMES.filter((tool) => TOOL_INFO[tool].risk === 'command'),
     off: 'Turn on Run commands under Tools to use this.',
     describe: {
       none: 'Every command is refused.',

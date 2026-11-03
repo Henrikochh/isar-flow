@@ -143,4 +143,40 @@ describe('sidebar messages', () => {
       'isarFlow.removeProvider litellm {"confirmed":true}',
     ]);
   });
+
+  it('tests a model, or lets the user pick one of an endpoint', async () => {
+    expect(await run({ type: 'testModel', ref: 'litellm/gpt-4.1' })).toEqual([
+      'isarFlow.testModel litellm/gpt-4.1',
+    ]);
+    expect(await run({ type: 'testModel', providerId: 'litellm' })).toEqual([
+      'isarFlow.testModel {"providerId":"litellm"}',
+    ]);
+    expect(await run({ type: 'testModel', ref: '  ', providerId: 'ollama' })).toEqual([
+      'isarFlow.testModel {"providerId":"ollama"}',
+    ]);
+    const odd = { type: 'testModel', ref: 42, providerId: ['x'] } as unknown as SidebarToHost;
+    expect(await run(odd)).toEqual(['isarFlow.testModel']);
+  });
+
+  it('runs the setup check quietly because the sidebar shows the report', async () => {
+    expect(await run({ type: 'checkSetup' })).toEqual(['isarFlow.checkSetup {"quiet":true}']);
+  });
+
+  it('dismisses the setup report', async () => {
+    const { handle, deps } = setup();
+    const dismiss = vi.fn();
+    await handle({ type: 'dismissSetupCheck' });
+    Object.assign(deps, { setupCheck: { dismiss } });
+    await createSidebarHandler(deps)({ type: 'dismissSetupCheck' });
+    expect(dismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the settings for a query and ignores anything else', async () => {
+    expect(await run({ type: 'openSettings', query: 'isarFlow.vscodeModels' })).toEqual([
+      'workbench.action.openSettings isarFlow.vscodeModels',
+    ]);
+    for (const query of ['', '  ', 42, 'x'.repeat(201)]) {
+      expect(await run({ type: 'openSettings', query } as unknown as SidebarToHost)).toEqual([]);
+    }
+  });
 });

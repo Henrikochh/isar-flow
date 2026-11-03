@@ -66,6 +66,20 @@ describe('agent resolution', () => {
     expect(host.agentCalls[0].agent.model).toBe('ollama/llama3');
   });
 
+  it('passes the tool mode of agent files and inline agents', async () => {
+    const host = new FakeHost();
+    await run(
+      workflow([
+        { id: 'a', type: 'agent', agent: 'texty', prompt: 'p' },
+        { id: 'b', type: 'agent', agent: { model: 'litellm/x', toolMode: 'native' }, prompt: 'q' },
+        { id: 'c', type: 'agent', model: 'litellm/y', prompt: 'r' },
+      ]),
+      { host, agents: { texty: { name: 'Texty', model: 'ollama/llama3', toolMode: 'text' } } },
+    );
+    expect(host.agentCalls.map((call) => call.agent.toolMode)).toEqual(['text', 'native', undefined]);
+    expect(host.agentCalls[2].agent).not.toHaveProperty('toolMode');
+  });
+
   it('accepts inline agents and names them after the block', async () => {
     const host = new FakeHost();
     await run(
@@ -122,13 +136,14 @@ describe('agent resolution', () => {
 });
 
 describe('agent outputs', () => {
-  it('exposes text, json, model, usage, turns and status', async () => {
+  it('exposes text, json, model, usage, turns, tool calls and status', async () => {
     const host = new FakeHost().agent('review', {
       text: '{"approved":true}',
       json: { approved: true },
       model: 'vscode/copilot/gpt-4.1',
       usage: { inputTokens: 100, outputTokens: 20 },
       turns: 3,
+      toolCalls: 4,
     });
     const r = await run(
       workflow([
@@ -147,11 +162,23 @@ describe('agent outputs', () => {
       model: 'vscode/copilot/gpt-4.1',
       usage: { inputTokens: 100, outputTokens: 20 },
       turns: 3,
+      toolCalls: 4,
       status: 'success',
       durationMs: expect.any(Number),
     });
     expect(host.consoleCalls[0].command).toBe('true 100');
     expect(r.summary.usage).toEqual({ inputTokens: 100, outputTokens: 20 });
+  });
+
+  it('reports 0 tool calls when the host does not count them', async () => {
+    const r = await run(
+      workflow([
+        { id: 'a', type: 'agent', model: 'p/m', prompt: 'x' },
+        { id: 'b', type: 'console', run: 'calls ${{ steps.a.toolCalls }}' },
+      ]),
+    );
+    expect(r.output('a')).toMatchObject({ toolCalls: 0, turns: 1 });
+    expect(r.host.consoleCalls[0].command).toBe('calls 0');
   });
 
   it('accumulates usage across agent blocks into run-end and the summary', async () => {

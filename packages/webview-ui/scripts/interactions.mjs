@@ -9,9 +9,14 @@
  *
  * Every flow also fails on page errors and console errors; React reports key collisions and bad updates there.
  * `latency` flows delay host messages (harness ?latency=) to catch edits that a slow host would lose.
+ *
+ * Every scripts/flows/*.mjs adds flows: its default export receives the assertion helpers
+ * ({ check, checkEqual, until, pause, lowContrast, segmentEdges, unnamedControls }) and returns an array of
+ * { name, options, run(h) }, where `h` is the same page helper object the flows below get.
  */
+import { readdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 
@@ -747,10 +752,16 @@ flow('workflow: Runs menu shows a past run', { view: 'workflow' }, async (h) => 
   const { page } = h;
   await page.getByRole('button', { name: /Runs/ }).click();
   const items = page.getByRole('menu', { name: 'Runs' }).getByRole('menuitem');
-  checkEqual(await items.count(), 2, 'two past runs');
-  await items.nth(1).click();
+  checkEqual(await items.count(), 6, 'six past runs');
+  check((await items.nth(0).innerText()).includes('2 to review'), 'the newest run has files to review');
+  check(
+    (await items.nth(1).innerText()).includes('3 kept, 1 reverted'),
+    'the run before says what was decided',
+  );
+  const failed = items.filter({ has: page.locator('[aria-label="Failed"]') });
+  await failed.click();
   await until(async () => (await h.posted('selectRun')).length === 1, 'the run is requested');
-  checkEqual((await h.posted('selectRun'))[0].runId, 'run-3', 'the older run');
+  checkEqual((await h.posted('selectRun'))[0].runId, 'run-3', 'the failed run');
   await until(
     async () => (await page.locator('.wf-runs').innerText()).includes('Failed'),
     'the run button names it',
@@ -761,7 +772,7 @@ flow('workflow: Runs menu shows a past run', { view: 'workflow' }, async (h) => 
     'the summary shows',
   );
   await page.locator('.wf-runs').click();
-  check((await items.nth(1).getAttribute('aria-current')) === 'true', 'the shown run is marked current');
+  check((await failed.getAttribute('aria-current')) === 'true', 'the shown run is marked current');
   await page.keyboard.press('Escape');
   check((await h.focused()).includes('Failed'), 'Escape returns focus to the runs button');
 });
@@ -1298,6 +1309,24 @@ for (const theme of ['dark', 'light', 'hc', 'hcl']) {
     );
   }
 }
+
+/* ---- flows from scripts/flows/*.mjs ---- */
+
+/** Flows of scripts/flows/*.mjs in alphabetical file order; a missing folder adds nothing. */
+async function loadFlowFiles() {
+  const dir = resolve(here, 'flows');
+  const files = await readdir(dir).catch(() => []);
+  const tools = { check, checkEqual, until, pause, lowContrast, segmentEdges, unnamedControls };
+  for (const file of files.filter((f) => f.endsWith('.mjs')).sort()) {
+    const make = (await import(pathToFileURL(resolve(dir, file)).href)).default;
+    if (typeof make !== 'function') throw new Error(`scripts/flows/${file} must export a function`);
+    const added = await make(tools);
+    if (!Array.isArray(added)) throw new Error(`scripts/flows/${file} must return an array of flows`);
+    for (const f of added) flow(f.name, f.options, f.run);
+  }
+}
+
+await loadFlowFiles();
 
 /* ---------------- runner ---------------- */
 

@@ -2,6 +2,8 @@ import {
   type AgentDefinition,
   type AgentPermissions,
   type AgentRequest,
+  type AgentRequestDeps,
+  type AgentResult,
   type ChatMessage,
   type Diagnostic,
   executeAgentRequest,
@@ -35,6 +37,7 @@ const SETTING_KEYS = [
   'maxTokens',
   'maxTurns',
   'tools',
+  'toolMode',
 ] as const;
 
 /** Try it never lets tools act without asking: `auto` becomes `ask`. */
@@ -123,6 +126,10 @@ export interface TryItDeps {
   /** Receives informational lines (e.g. fallback model notes). */
   info?: (text: string) => void;
   now?: () => number;
+  /** Context size for models that report none (setting isarFlow.agentContextTokens), read at each try. */
+  contextTokens?: () => number | undefined;
+  /** Runs the agent; replaced in tests. */
+  execute?: (request: AgentRequest, deps: AgentRequestDeps) => Promise<AgentResult>;
 }
 
 /** Runs Try it conversations for one agent editor, one at a time. */
@@ -160,11 +167,10 @@ export class TryItSession {
       },
     };
     try {
-      const result = await executeAgentRequest(request, {
-        resolver: this.deps.resolver,
-        io,
-        toolHost: this.deps.tools(runId),
-      });
+      const deps: AgentRequestDeps = { resolver: this.deps.resolver, io, toolHost: this.deps.tools(runId) };
+      const contextTokens = this.deps.contextTokens?.();
+      if (contextTokens !== undefined) deps.contextTokens = contextTokens;
+      const result = await (this.deps.execute ?? executeAgentRequest)(request, deps);
       emit({ type: 'done', usage: result.usage, model: result.model });
     } catch (error) {
       const message = controller.signal.aborted

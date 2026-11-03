@@ -76,6 +76,21 @@ describe('tool host factory', () => {
     expect(commands[0]).toMatchObject({ shell: 'auto' });
   });
 
+  it('passes the run journal to the host, which reports writes with the step id', async () => {
+    const { factory } = setup();
+    const journal = { beforeWrite: vi.fn(async (_absPath: string, _stepId: string) => undefined) };
+    const write = (host: ToolHost) =>
+      host.execute({ name: 'writeFile', args: { path: 'out.txt', content: 'x' } }, io, { edits: 'auto' });
+
+    expect((await write(factory('r1', second, { journal }))).isError).toBeFalsy();
+    expect(journal.beforeWrite).toHaveBeenCalledWith(path.join(second, 'out.txt'), 'ask');
+
+    journal.beforeWrite.mockClear();
+    await write(factory('r2', second));
+    await write(factory('r3', second, {}));
+    expect(journal.beforeWrite).not.toHaveBeenCalled();
+  });
+
   it('refuses every tool call when no folder is open', async () => {
     const { factory, deps } = setup(() => undefined);
     const result = await call(factory('r1'), 'readFile', { path: 'notes.txt' });

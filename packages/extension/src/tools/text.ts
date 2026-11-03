@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { splitLines } from '@isar-flow/core';
 import { ToolError, type ToolContext } from './types';
 
@@ -66,6 +67,39 @@ export async function readWorkspaceText(ctx: ToolContext, absPath: string, rel: 
     throw new ToolError(`Could not read ${rel}: ${error instanceof Error ? error.message : String(error)}`);
   }
   if (isBinaryText(text)) throw new ToolError(`${rel} looks like a binary file and cannot be read as text.`);
+  return text;
+}
+
+const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
+
+/** Whether the file's bytes are valid UTF-8; true when it can't be read (the write reports that). */
+async function isUtf8File(absPath: string): Promise<boolean> {
+  let bytes: Buffer;
+  try {
+    bytes = await fs.promises.readFile(absPath);
+  } catch {
+    return true;
+  }
+  try {
+    strictUtf8.decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The text of a file an edit tool changes. A file that is not UTF-8 on disk reads with replacement characters
+ * (U+FFFD); writing them back would destroy the characters they stand for, so such a file is refused.
+ */
+export async function readEditableText(ctx: ToolContext, absPath: string, rel: string): Promise<string> {
+  const text = await readWorkspaceText(ctx, absPath, rel);
+  if (text.includes('�') && !(await isUtf8File(absPath))) {
+    throw new ToolError(
+      `${rel} is not UTF-8 text, so it was not changed: characters that can't be read (shown as "�") ` +
+        'would be lost. Leave it as it is, or ask the user to convert it to UTF-8.',
+    );
+  }
   return text;
 }
 

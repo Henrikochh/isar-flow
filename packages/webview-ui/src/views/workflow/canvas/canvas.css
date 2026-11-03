@@ -677,6 +677,31 @@
   gap: 4px;
 }
 
+/* Time, tokens and cost after the block finished: a quiet footer under a hairline, numbers in even widths. */
+.wf-card__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--if-border);
+  font-size: var(--if-text-xs);
+  line-height: 16px;
+  color: var(--if-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-card__metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.wf-card__metric .codicon {
+  font-size: 12px;
+}
+
 /* Template expressions inside prompts and messages. */
 .wf-expr {
   padding: 0 3px;

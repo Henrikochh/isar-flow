@@ -41,6 +41,11 @@ describe('AgentRunError', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error).toMatchObject({ name: 'AgentRunError', message: 'busy', usage: usage(3, 1) });
     expect(error.cause).toBe(cause);
+    expect(error.toolCalls).toBeUndefined();
+  });
+
+  it('carries the number of tool calls made before the failure', () => {
+    expect(new AgentRunError('busy', usage(3, 1), { toolCalls: 2 }).toolCalls).toBe(2);
   });
 });
 
@@ -52,6 +57,8 @@ describe('runAgentLoop: usage of failed runs', () => {
       message:
         'The agent used all 2 turns without giving a final answer. Increase maxTurns or simplify the task.',
       usage: usage(20, 4),
+      // The second call is not run: the turn limit ends the loop first.
+      toolCalls: 1,
     });
   });
 
@@ -124,7 +131,7 @@ describe('executeAgentRequest: usage of failed runs', () => {
       executeAgentRequest(request(['backup/model']), deps({ 'main/model': main, 'backup/model': backup })),
     );
     expect(error).toBeInstanceOf(AgentRunError);
-    expect(error).toMatchObject({ usage: usage(8, 2) });
+    expect(error).toMatchObject({ usage: usage(8, 2), toolCalls: 2 });
     expect((error as Error).message).toMatch(
       /^No model could answer\. main\/model: Busy\. backup\/model: Down\./,
     );
